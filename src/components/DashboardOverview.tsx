@@ -284,7 +284,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </td>
                     <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
                       {(() => {
-                        const effectiveProxy = acc.proxy || getDedicatedProxyForPhone(acc.phone) || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
+                        const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                         return (
                           <div 
                             className="flex items-center gap-1.5 cursor-pointer group hover:text-emerald-300 transition-colors"

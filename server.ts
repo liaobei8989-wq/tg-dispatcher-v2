@@ -284,21 +284,32 @@ async function startServer() {
 
       const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
 
-      // 5 Brazilian 200.* Dedicated Proxies (All 100% Brazilian Native IP 1:1 mapped to user's 5 accounts)
-      const BRAZIL_DEDICATED_PROXIES: Record<string, string> = {
+      // Load 1:1 dedicated proxies dynamically from account_proxies.json or fallback list of 10 distinct IPs
+      let accountProxiesMap: Record<string, string> = {
         '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
         '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
         '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
         '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-        '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2'
+        '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+        '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+        '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+        '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+        '5586995118207': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+        '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
       };
-      const BRAZIL_BACKUP_PROXIES = [
-        '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-        '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-        '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-        '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-        '200.160.38.29:12323:14aade52b86e6:70dd653fc2'
-      ];
+      const proxyJsonPath = path.join(rootDir, "account_proxies.json");
+      if (fs.existsSync(proxyJsonPath)) {
+        try {
+          const raw = fs.readFileSync(proxyJsonPath, "utf8");
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            accountProxiesMap = { ...accountProxiesMap, ...parsed };
+          }
+        } catch (e) {}
+      }
+
+      const BRAZIL_DEDICATED_PROXIES = accountProxiesMap;
+      const BRAZIL_BACKUP_PROXIES = Object.values(accountProxiesMap);
 
       const formatPhoneDisplay = (rawPhone: string) => {
         if (rawPhone.startsWith('55') && rawPhone.length === 13) {
@@ -777,13 +788,30 @@ async function startServer() {
     const rootFiles = fs.readdirSync(rootDir);
     const sessionFiles = Array.from(new Set([...diskFiles, ...rootFiles])).filter(f => f.endsWith(".session"));
 
-    const BRAZIL_DEDICATED_PROXIES: Record<string, string> = {
+    let accountProxiesMap: Record<string, string> = {
       '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
       '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
       '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
       '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-      '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2'
+      '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+      '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+      '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+      '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+      '5586995118207': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+      '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
     };
+    const proxyJsonPath = path.join(rootDir, "account_proxies.json");
+    if (fs.existsSync(proxyJsonPath)) {
+      try {
+        const raw = fs.readFileSync(proxyJsonPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          accountProxiesMap = { ...accountProxiesMap, ...parsed };
+        }
+      } catch (e) {}
+    }
+
+    const BRAZIL_DEDICATED_PROXIES = accountProxiesMap;
 
     const sessionAccounts = sessionFiles.map((sf, idx) => {
       const rawPhone = sf.replace('.session', '').replace(/[^0-9]/g, '');

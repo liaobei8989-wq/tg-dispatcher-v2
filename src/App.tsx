@@ -44,8 +44,8 @@ export default function App() {
             if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone)) return;
 
             if (!uniqueMap.has(cleanPhone)) {
-              const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
-              const createdAt = acc.createdAt || '2026-08-24';
+              const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
               const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
               uniqueMap.set(cleanPhone, {
                 ...acc,
@@ -53,7 +53,7 @@ export default function App() {
                 createdAt: createdAt,
                 warmupDay: validWarmupDay,
                 avatarUrl: acc.avatarUrl || '',
-                groupTag: acc.groupTag || '主力爆破A组'
+                groupTag: acc.groupTag || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '新进拓展B组' : '主力爆破A组')
               });
             }
           });
@@ -124,14 +124,16 @@ export default function App() {
           if (!cleanPhone || cleanPhone.length < 8) return;
 
           if (!uniqueMap.has(cleanPhone)) {
-            const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
-            const validWarmupDay = acc.warmupDay !== undefined && acc.warmupDay > 0 ? acc.warmupDay : 2;
+            const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+            const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
+            const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
             uniqueMap.set(cleanPhone, {
               ...acc,
               proxy: dedicatedProxy,
-              createdAt: acc.createdAt || '2026-08-24',
+              createdAt: createdAt,
               warmupDay: validWarmupDay,
-              avatarUrl: acc.avatarUrl || ''
+              avatarUrl: acc.avatarUrl || '',
+              groupTag: acc.groupTag || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '新进拓展B组' : '主力爆破A组')
             });
           }
         });
