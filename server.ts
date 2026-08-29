@@ -320,6 +320,24 @@ async function startServer() {
         return `+${rawPhone}`;
       };
 
+      const getAccountMeta = (rawPhone: string, idx: number) => {
+        const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone);
+        if (isOldBatch) {
+          return {
+            createdAt: '2026-08-24',
+            warmupDay: 6,
+            status: 'active' as const,
+            groupTag: '主力爆破A组'
+          };
+        }
+        return {
+          createdAt: '2026-08-29',
+          warmupDay: 1,
+          status: 'warming' as const,
+          groupTag: '新进拓展B组'
+        };
+      };
+
       // 1. Process JSON session configs
       jsonFiles.forEach((jf, idx) => {
         try {
@@ -341,22 +359,24 @@ async function startServer() {
             proxyStr = BRAZIL_BACKUP_PROXIES[idx % BRAZIL_BACKUP_PROXIES.length];
           }
 
+          const meta = getAccountMeta(rawPhone, idx);
+
           accountsList.push({
             id: `acc-tg-${rawPhone}`,
             phone: formattedPhone,
             alias: `TG-BR-${rawPhone} (${defaultNames[idx % defaultNames.length].split(' ')[0]})`,
             platform: 'telegram',
             type: 'tg_userbot',
-            status: 'active',
+            status: meta.status,
             proxy: proxyStr,
             healthScore: 99,
             sentToday: 0,
-            dailyLimit: 120,
-            totalSent: 0,
+            dailyLimit: meta.warmupDay >= 4 ? 120 : 30,
+            totalSent: meta.warmupDay >= 4 ? 120 : 0,
             successRate: 100,
-            createdAt: '2026-08-24',
+            createdAt: meta.createdAt,
             lastActive: '刚刚',
-            warmupDay: 2,
+            warmupDay: meta.warmupDay,
             twoFactorPassword: data.twofa || data.password || '548508',
             avatarUrl: defaultAvatars[idx % defaultAvatars.length],
             tgApiId: String(data.app_id || data.api_id || '2040'),
@@ -365,7 +385,7 @@ async function startServer() {
             sessionValid: true,
             deviceModel: `${data.device_model || data.device || 'PC'} (${data.system_version || 'Win10'})`,
             sessionFile: matchedSessionFile,
-            groupTag: data.groupTag || '新买养号B组'
+            groupTag: data.groupTag || meta.groupTag
           });
         } catch (e) {
           console.error(`Error parsing session json ${jf}:`, e);
@@ -399,22 +419,24 @@ async function startServer() {
           } catch (e) {}
         }
 
+        const meta = getAccountMeta(rawPhone, accountsList.length + idx);
+
         accountsList.push({
           id: `acc-tg-${rawPhone}`,
           phone: formattedPhone,
           alias: `TG-BR-${rawPhone} (${defaultNames[(accountsList.length + idx) % defaultNames.length].split(' ')[0]})`,
           platform: 'telegram',
           type: 'tg_userbot',
-          status: 'active',
+          status: meta.status,
           proxy: assignedProxy,
           healthScore: 99,
           sentToday: 0,
-          dailyLimit: 120,
-          totalSent: 0,
+          dailyLimit: meta.warmupDay >= 4 ? 120 : 30,
+          totalSent: meta.warmupDay >= 4 ? 120 : 0,
           successRate: 100,
-          createdAt: '2026-08-24',
+          createdAt: meta.createdAt,
           lastActive: '刚刚',
-          warmupDay: 2,
+          warmupDay: meta.warmupDay,
           twoFactorPassword: '548508',
           avatarUrl: defaultAvatars[accountsList.length % defaultAvatars.length],
           tgApiId: '2040',
@@ -423,7 +445,7 @@ async function startServer() {
           sessionValid: true,
           deviceModel: 'PC (Win10)',
           sessionFile: sf,
-          groupTag: '新买养号B组'
+          groupTag: meta.groupTag
         });
       });
 

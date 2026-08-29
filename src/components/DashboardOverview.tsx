@@ -225,8 +225,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {accounts.slice(0, 8).map((acc) => {
-                  const currentDay = acc.warmupDay !== undefined && acc.warmupDay > 0 ? acc.warmupDay : (calculateWarmupDays(acc.createdAt, 2) || 2);
+                {accounts.slice(0, 10).map((acc) => {
+                  const cleanPhone = (acc.phone || '').replace(/\D/g, '');
+                  const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(cleanPhone);
+                  const fallbackDay = isOldBatch ? 6 : 1;
+                  const currentDay = acc.warmupDay !== undefined && acc.warmupDay > 0 ? acc.warmupDay : fallbackDay;
+                  const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                   return (
                   <tr key={acc.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-2.5 px-3">
@@ -244,21 +248,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 w-max shadow-sm">
                           <ShieldCheck className="w-3 h-3 text-amber-400" /> 80%预警熔断
                         </span>
-                      ) : acc.status === 'warming' || currentDay <= 3 ? (
-                        <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
-                          <Clock className="w-3 h-3 text-amber-400" /> 养号初期 (第{currentDay}天)
-                        </span>
-                      ) : acc.status === 'active' || currentDay >= 4 ? (
+                      ) : currentDay >= 4 ? (
                         <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
                           <CheckCircle2 className="w-3 h-3" /> 稳定成熟期 (第{currentDay}天)
                         </span>
-                      ) : acc.status === 'risk' ? (
-                        <span className="bg-orange-500/15 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
-                          <AlertTriangle className="w-3 h-3" /> 风控高风险
-                        </span>
                       ) : (
-                        <span className="bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
-                          <XCircle className="w-3 h-3" /> 已封号 (Block)
+                        <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
+                          <Clock className="w-3 h-3 text-amber-400" /> 养号保护期 (第{currentDay}天)
                         </span>
                       )}
                     </td>
@@ -283,24 +279,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                       {acc.sentToday} / {acc.dailyLimit}
                     </td>
                     <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
-                      {(() => {
-                        const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
-                        return (
-                          <div 
-                            className="flex items-center gap-1.5 cursor-pointer group hover:text-emerald-300 transition-colors"
-                            title="点击快速修改该账号的独立代理 IP"
-                            onClick={() => {
-                              const newP = prompt(`请输入账号 [${acc.phone || acc.alias}] 的代理 IP / SOCKS5:`, effectiveProxy);
-                              if (newP !== null && newP.trim() && setAccounts) {
-                                setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: newP.trim() } : a));
-                              }
-                            }}
-                          >
-                            <span className="truncate max-w-[180px]">{effectiveProxy}</span>
-                            <span className="text-[9px] text-emerald-400 font-sans font-bold px-1 bg-emerald-950/80 border border-emerald-600/50 rounded opacity-80 group-hover:opacity-100">改</span>
-                          </div>
-                        );
-                      })()}
+                      <div 
+                        className="flex items-center gap-1.5 cursor-pointer group hover:text-emerald-300 transition-colors"
+                        title="点击快速修改该账号的独立代理 IP"
+                        onClick={() => {
+                          const newP = prompt(`请输入账号 [${acc.phone || acc.alias}] 的代理 IP / SOCKS5:`, effectiveProxy);
+                          if (newP !== null && newP.trim() && setAccounts) {
+                            setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: newP.trim() } : a));
+                          }
+                        }}
+                      >
+                        <span className="truncate max-w-[180px]">{effectiveProxy}</span>
+                        <span className="text-[9px] text-emerald-400 font-sans font-bold px-1 bg-emerald-950/80 border border-emerald-600/50 rounded opacity-80 group-hover:opacity-100">改</span>
+                      </div>
                     </td>
                   </tr>
                   );
