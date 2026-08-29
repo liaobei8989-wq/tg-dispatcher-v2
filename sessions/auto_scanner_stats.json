@@ -1,0 +1,277 @@
+{
+  "status": "ACTIVE",
+  "statusLabel": "🟢 24小时全天候即时巡航补发",
+  "brazilTime": "2026-08-15 15:43:54 BRT",
+  "todayDateBRT": "2026-08-14",
+  "todayCount": 27,
+  "totalCount": 49,
+  "lastScanTime": "2026-08-15T18:43:54.090Z",
+  "lastScanRepliedCount": 0,
+  "nightPauseEnabled": false,
+  "stopHourBRT": 22,
+  "startHourBRT": 7,
+  "accountStats": {
+    "5538991977854": {
+      "name": "Bruno",
+      "todaySent": 0,
+      "totalSent": 7
+    },
+    "5538992304845": {
+      "name": "Bruno",
+      "todaySent": 0,
+      "totalSent": 4
+    },
+    "5538988630899": {
+      "name": "Fernanda Lima",
+      "todaySent": 0,
+      "totalSent": 2
+    },
+    "5541987023810": {
+      "name": "Matheus",
+      "todaySent": 0,
+      "totalSent": 9
+    }
+  },
+  "logs": [
+    {
+      "timestamp": "22:32:34",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Brajmohan",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Brajmohan' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:34",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "sanjiyo",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'sanjiyo' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:34",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Ashok",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Ashok' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Bharat Zatavada",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Bharat Zatavada' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Ratangiri",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Ratangiri' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Rajvir",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Rajvir' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Telegram",
+      "replyText": "Telegram is available in India",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Telegram' 回复: \"Telegram is available in India\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Dhaval",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Dhaval' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:33",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Lcb",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Lcb' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:31",
+      "phone": "5538992304845",
+      "accountName": "Bruno",
+      "target": "Ketan Bhai",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538992304845 (Bruno)】检测到客户 'Ketan Bhai' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:24",
+      "phone": "5538991977854",
+      "accountName": "Bruno",
+      "target": "Cliente",
+      "replyText": "bom dia!",
+      "msg": "✨ 【+5538991977854 (Bruno)】检测到客户 'Cliente' 回复: \"bom dia!\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Somnaath5",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Somnaath5' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Subhoda Kolkata",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Subhoda Kolkata' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Rohan Bhaidi 3 No",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Rohan Bhaidi 3 No' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Telegram",
+      "replyText": "Telegram is available in India",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Telegram' 回复: \"Telegram is available in India\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Borjeshbhaidi",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Borjeshbhaidi' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:22",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Ajaypepsi",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Ajaypepsi' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Munnabhai5",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Munnabhai5' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Kameti1no",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Kameti1no' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "sonudost",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'sonudost' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Biru",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Biru' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Bihari",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Bihari' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:21",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Mukesh Mandal",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Mukesh Mandal' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:20",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Drbu",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Drbu' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:20",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Yogi Bhai",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Yogi Bhai' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:20",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Rajesh Housekeeping",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Rajesh Housekeeping' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "22:32:19",
+      "phone": "5538988630899",
+      "accountName": "Fernanda Lima",
+      "target": "Rajesh Karan Dohri",
+      "replyText": "客户回复",
+      "msg": "✨ 【+5538988630899 (Fernanda Lima)】检测到客户 'Rajesh Karan Dohri' 回复: \"客户回复\"，已即时补发第二阶段彩金文案！"
+    },
+    {
+      "timestamp": "05:43:42",
+      "phone": "5541987023810",
+      "accountName": "Matheus",
+      "target": "Cliente",
+      "replyText": "E aí",
+      "msg": "✨ 【+5541987023810 (Matheus)】成功为 'Cliente' 补发第二阶段彩金文案！(对方回复: 'E aí')"
+    },
+    {
+      "timestamp": "05:43:41",
+      "phone": "5541987023810",
+      "accountName": "Matheus",
+      "target": "Cliente",
+      "replyText": "E aí",
+      "msg": "✨ 【+5541987023810 (Matheus)】成功为 'Cliente' 补发第二阶段彩金文案！(对方回复: 'E aí')"
+    },
+    {
+      "timestamp": "08:10:25",
+      "phone": "5541987023810",
+      "accountName": "Matheus",
+      "target": "Cliente",
+      "replyText": "1",
+      "msg": "✨ 【+5541987023810 (Matheus)】成功为 'Cliente' 补发第二阶段彩金文案！(对方回复: '1')"
+    }
+  ]
+}

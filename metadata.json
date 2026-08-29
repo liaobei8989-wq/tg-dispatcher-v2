@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Matrix Automated Marketing Platform",
+  "description": "Telegram 矩阵极速全自动化营销中台 - 巴西市场 (pt-BR) 专用，支持 .session/.json 批量导入挂载、跨时区三波次定时群发、两阶段防封多号交替轮发、自动改资料与矩阵互聊养号互动。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

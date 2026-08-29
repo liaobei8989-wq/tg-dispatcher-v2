@@ -1,0 +1,26 @@
+{
+    "api_id": 2040,
+    "api_hash": "b18441a1ff607e10a989891a5462e627",
+    "device_model": "ASUS VivoBook Pro",
+    "system_version": "Windows 10",
+    "app_version": "3.4.3 x64",
+    "system_lang_code": "en-US",
+    "lang_pack": "tdesktop",
+    "lang_code": "en",
+    "phone": "5586994687152",
+    "twofa": "548508",
+    "password": "548508",
+    "proxy": {
+        "proxy_type": "http",
+        "addr": "200.160.38.29",
+        "port": 12323,
+        "username": "14aade52b86e6",
+        "password": "70dd653fc2"
+    },
+    "app_id": 2040,
+    "app_hash": "b18441a1ff607e10a989891a5462e627",
+    "session_file": "5586994687152",
+    "device": "ASUS VivoBook Pro",
+    "username": "",
+    "avatar": "img/default.png"
+}
