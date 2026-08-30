@@ -671,7 +671,7 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                     <p className="text-slate-300 font-mono pl-2">· 目标 URL: <span className="text-emerald-300">https://brazilgo888.com/pankou1</span></p>
                   </div>
                 </li>
-                <li><strong className="text-slate-200">流量打散与触发阈值降低：</strong> 系统在替换 <code className="text-slate-300 font-mono">&#123;URL&#125;</code> 时会自动在 10 个子域名间随机/轮换，WhatsApp 风控系统只会看到 10 个不同的链接，大幅降低针对单一字符串的拦截率！</li>
+                <li><strong className="text-slate-200">流量打散与触发阈值降低：</strong> 系统在替换 <code className="text-slate-300 font-mono">&#123;URL&#125;</code> 时会自动在 10 个子域名间随机/轮换，Telegram 防风控系统只会看到 10 个不同的链接，大幅降低针对单一字符串的拦截率！</li>
               </ul>
             </div>
           </div>
@@ -692,7 +692,7 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
               擬真發送特徵 (Typing Simulation & Hash Unicode)
             </div>
             <p className="text-slate-300 leading-relaxed">
-              已全面啟用<strong className="text-emerald-400">「真人擬真打字狀態（Typing...）」</strong>與隨機 Unicode 變體 Hash 簽名，能完全避開 WhatsApp & Telegram 系統對機械化自動腳本行為特徵的特徵碼檢測。
+              已全面啟用<strong className="text-emerald-400">「真人擬真打字狀態（Typing...）」</strong>與隨機 Unicode 變體 Hash 簽名，能完全避開 Telegram 系統對機械化自動腳本行為特徵的特徵碼檢測。
             </p>
           </div>
 

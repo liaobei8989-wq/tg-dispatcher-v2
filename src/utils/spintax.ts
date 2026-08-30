@@ -1,6 +1,6 @@
 /**
  * Advanced Multi-Tier Recursive Spintax & Anti-Fingerprint Mutation Engine
- * Specially optimized for Telegram & WhatsApp Brazil (pt-BR) marketing campaigns.
+ * Specially optimized for Telegram Brazil (pt-BR) marketing campaigns.
  */
 
 import { SpintaxTestResult } from '../types';

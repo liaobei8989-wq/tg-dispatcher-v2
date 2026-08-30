@@ -43,7 +43,7 @@ async function startServer() {
   app.get("/api/health", (req, res) => {
     res.json({
       status: "ok",
-      app: "WhatsApp Mass Sender & Traffic Platform",
+      app: "Telegram Matrix Mass Marketing Platform",
       market: "Brazil (pt-BR)",
       targetDomain: "brazilgo888.com",
       timestamp: new Date().toISOString(),
@@ -1310,7 +1310,7 @@ async function startServer() {
           }
         });
 
-        const prompt = `You are a top-tier Brazilian Portuguese native copywriter and anti-spam optimization specialist for Telegram & WhatsApp gaming marketing.
+        const prompt = `You are a top-tier Brazilian Portuguese native copywriter and anti-spam optimization specialist for Telegram gaming marketing.
 Rewrite the following marketing message into ${count} distinct, highly engaging, natural-sounding variations in Brazilian Portuguese (pt-BR).
 
 Target Style: ${personaGuides[persona] || personaGuides.slang_player}
@@ -1896,149 +1896,6 @@ Return ONLY a JSON array with this schema:
   });
 
 
-  // Default Meta WhatsApp Cloud API Credentials
-  const META_WA_DEFAULT_PHONE_ID = process.env.WA_PHONE_NUMBER_ID || "1288649794326030";
-  const META_WA_DEFAULT_ACCOUNT_ID = process.env.WA_BUSINESS_ACCOUNT_ID || "1043173631431455";
-  const META_WA_DEFAULT_TOKEN = process.env.WA_CLOUD_ACCESS_TOKEN || "EAAPItCZCah3EBSKCxoNOaZAGFEtARE5qpIjXDJXvirSg1QEPz8yQTEoOPawY6uTGELuwe2JNjWu3DbwLlpzttwb4IdEEJoDB26R9YdFVi4bwn6YusHPhoSGaZBNU9Bll2bZBcSo3BNj8GC4FBhtQrWRZAWn0r4MU1S0092euNHLl7wvsZAZC77HVuu6IdOmIzAwNecH8rbQChZBaU5rL9bkHsFl7y7oIg9jW0ZBq7WSjOJZBAuBTmAAsr5sBVY8FIDQjMfIpQRSZAaQ4OVavT5wFQHoOHWM1PSDrZCedakzpiQZDZD";
-
-  // API: Verify Meta WhatsApp Cloud API Credentials
-  app.post("/api/whatsapp/test-cloud-credentials", async (req, res) => {
-    const phoneId = req.body.phoneNumberId || META_WA_DEFAULT_PHONE_ID;
-    const token = req.body.accessToken || META_WA_DEFAULT_TOKEN;
-
-    try {
-      const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}?fields=verified_name,display_phone_number,quality_rating,status`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data: any = await metaRes.json();
-      if (metaRes.ok && data.id) {
-        res.json({
-          success: true,
-          valid: true,
-          phoneNumberId: data.id,
-          displayPhoneNumber: data.display_phone_number || '+55 (WhatsApp Verified)',
-          verifiedName: data.verified_name || 'WhatsApp Business Official',
-          qualityRating: data.quality_rating || 'GREEN'
-        });
-      } else {
-        res.json({
-          success: false,
-          valid: false,
-          error: data.error?.message || `Meta API HTTP ${metaRes.status}`
-        });
-      }
-    } catch (err: any) {
-      res.json({ success: false, valid: false, error: err.message });
-    }
-  });
-
-  // API: Dispatch WhatsApp Cloud Messages via Meta Graph API v20.0
-  app.post("/api/whatsapp/send-cloud", async (req, res) => {
-    const { phoneNumberId, accessToken, targets, sendMode, templateName, languageCode, textBody } = req.body || {};
-    
-    let phoneId = phoneNumberId || process.env.WA_PHONE_NUMBER_ID || META_WA_DEFAULT_PHONE_ID;
-    let token = accessToken || process.env.WA_CLOUD_ACCESS_TOKEN || META_WA_DEFAULT_TOKEN;
-
-    // Check if config.json exists dynamically
-    const configPath = path.join(process.cwd(), "config.json");
-    if (fs.existsSync(configPath)) {
-      try {
-        const cfgData = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        if (!phoneNumberId && cfgData.phone_number_id) {
-          phoneId = cfgData.phone_number_id.trim();
-        }
-        if (!accessToken && cfgData.access_token) {
-          token = cfgData.access_token.trim();
-        }
-      } catch (e) {}
-    }
-
-    const targetList = Array.isArray(targets) && targets.length > 0 ? targets : ["+5511942060830"];
-    const results = [];
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const rawPhone of targetList) {
-      const cleanPhone = rawPhone.replace(/\D/g, '');
-      if (!cleanPhone) continue;
-
-      const payload = sendMode === 'text' ? {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: cleanPhone,
-        type: "text",
-        text: {
-          preview_url: false,
-          body: textBody || "Olá! Bônus VIP ativado no brazilgo888.com!"
-        }
-      } : {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: cleanPhone,
-        type: "template",
-        template: {
-          name: templateName || "hello_world",
-          language: {
-            code: languageCode || "en_US"
-          }
-        }
-      };
-
-      try {
-        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        const data: any = await metaRes.json();
-        if (metaRes.ok && data.messages && data.messages[0]) {
-          successCount++;
-          results.push({
-            phone: rawPhone,
-            cleanPhone,
-            success: true,
-            wamid: data.messages[0].id,
-            status: 'sent'
-          });
-        } else {
-          failCount++;
-          results.push({
-            phone: rawPhone,
-            cleanPhone,
-            success: false,
-            error: data.error?.message || `HTTP ${metaRes.status}`,
-            details: data.error
-          });
-        }
-      } catch (err: any) {
-        failCount++;
-        results.push({
-          phone: rawPhone,
-          cleanPhone,
-          success: false,
-          error: err.message
-        });
-      }
-    }
-
-    res.json({
-      success: true,
-      phoneNumberId: phoneId,
-      totalCount: targetList.length,
-      successCount,
-      failCount,
-      results,
-      timestamp: new Date().toISOString()
-    });
-  });
-
   // API: Spintax parser endpoint
   app.post("/api/spintax/parse", (req, res) => {
     const { template, count = 5 } = req.body;
@@ -2132,39 +1989,14 @@ Return ONLY a JSON array with this schema:
 
   // API: Test Gateway Connectivity
   app.post("/api/gateway/test", async (req, res) => {
-    const { waApiUrl, waApiKey, tgBotToken } = req.body;
+    const { tgBotToken } = req.body;
     const startTime = Date.now();
     const results: Record<string, any> = {
-      wa: { connected: false, message: '未配置網關' },
       tg: { connected: false, message: '未配置 Bot Token' },
       latencyMs: 0
     };
 
     try {
-      if (waApiUrl) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
-          const response = await fetch(`${waApiUrl.replace(/\/$/, '')}/instance/fetchInstances`, {
-            headers: waApiKey ? { 'apikey': waApiKey, 'Authorization': `Bearer ${waApiKey}` } : {},
-            signal: controller.signal
-          }).catch(() => null);
-          clearTimeout(timeoutId);
-
-          if (response && (response.ok || response.status === 401 || response.status === 403)) {
-            results.wa = {
-              connected: true,
-              status: response.status,
-              message: response.ok ? '網關連線成功 (HTTP 200)' : `網關可達 (HTTP ${response.status} 鑑權響應)`
-            };
-          } else {
-            results.wa = { connected: false, message: '無法連接到指定的 WhatsApp API 網關' };
-          }
-        } catch (err: any) {
-          results.wa = { connected: false, message: `網絡異常: ${err.message}` };
-        }
-      }
-
       if (tgBotToken) {
         try {
           const controller = new AbortController();
@@ -2193,60 +2025,6 @@ Return ONLY a JSON array with this schema:
       res.json({ success: true, results });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // API: Real WhatsApp Bulk Number Scrubbing Proxy
-  app.post("/api/scrub/whatsapp", async (req, res) => {
-    const { phones } = req.body;
-    if (!Array.isArray(phones)) {
-      res.status(400).json({ error: "Missing phones array" });
-      return;
-    }
-
-    if (!gatewayConfig.waApiUrl) {
-      // Fallback deterministic status with explicit real API notice
-      const verified = phones.map(phone => {
-        const clean = phone.replace(/\D/g, '');
-        const hash = clean.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-        const exists = hash % 10 < 8; // 80% active
-        return {
-          phone,
-          isWaActive: exists,
-          jid: exists ? `${clean}@s.whatsapp.net` : null,
-          lastSeen: exists ? '線上 (Active)' : '未註冊 WhatsApp',
-          isRealApiGateway: false
-        };
-      });
-      res.json({
-        success: true,
-        mode: 'unconfigured_gateway_simulation',
-        notice: '未檢測到私有 WhatsApp API Gateway，已執行本機雙軌過濾模組',
-        results: verified
-      });
-      return;
-    }
-
-    // Call actual live WhatsApp gateway API endpoint
-    try {
-      const response = await fetch(`${gatewayConfig.waApiUrl.replace(/\/$/, '')}/chat/whatsappNumbers/${gatewayConfig.waInstance}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': gatewayConfig.waApiKey,
-          'Authorization': `Bearer ${gatewayConfig.waApiKey}`
-        },
-        body: JSON.stringify({ numbers: phones })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        res.json({ success: true, mode: 'real_api_gateway', results: data });
-      } else {
-        res.status(502).json({ success: false, message: `WhatsApp 網關響應錯誤 (HTTP ${response.status})` });
-      }
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: `調用實時 WhatsApp 網關失敗: ${err.message}` });
     }
   });
 
@@ -2297,23 +2075,6 @@ Return ONLY a JSON array with this schema:
             });
             const tgData: any = await tgRes.json().catch(() => ({}));
             results.push({ item, success: tgRes.ok && tgData.ok, response: tgData });
-          } catch (e: any) {
-            results.push({ item, success: false, error: e.message });
-          }
-        } else if (item.platform === 'whatsapp' && gatewayConfig.waApiUrl) {
-          try {
-            const endpoint = `${gatewayConfig.waApiUrl.replace(/\/$/, '')}/message/sendText/${gatewayConfig.waInstance}`;
-            const waRes = await fetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': gatewayConfig.waApiKey,
-                'Authorization': `Bearer ${gatewayConfig.waApiKey}`
-              },
-              body: JSON.stringify({ number: (item.to || '').replace(/\D/g, ''), text: item.message })
-            });
-            const waData: any = await waRes.json().catch(() => ({}));
-            results.push({ item, success: waRes.ok, response: waData });
           } catch (e: any) {
             results.push({ item, success: false, error: e.message });
           }
@@ -2374,47 +2135,11 @@ Return ONLY a JSON array with this schema:
       }
     }
 
-    // Real WhatsApp API dispatch attempt if gateway configured
-    if (platform === 'whatsapp' && gatewayConfig.waApiUrl) {
-      try {
-        const endpoint = mediaUrl
-          ? `${gatewayConfig.waApiUrl.replace(/\/$/, '')}/message/sendMedia/${gatewayConfig.waInstance}`
-          : `${gatewayConfig.waApiUrl.replace(/\/$/, '')}/message/sendText/${gatewayConfig.waInstance}`;
-
-        const payload = mediaUrl ? {
-          number: targetPhone.replace(/\D/g, ''),
-          media: mediaUrl,
-          caption: messageText
-        } : {
-          number: targetPhone.replace(/\D/g, ''),
-          text: messageText
-        };
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': gatewayConfig.waApiKey,
-            'Authorization': `Bearer ${gatewayConfig.waApiKey}`
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (response.ok) {
-          const resData = await response.json();
-          res.json({ success: true, platform, dispatchId: resData?.key?.id || `wa_msg_${Date.now()}`, liveGateway: true });
-          return;
-        }
-      } catch (err: any) {
-        console.error("WA Gateway dispatch error:", err);
-      }
-    }
-
     // Default real dispatch response acknowledgment
     res.json({
       success: true,
-      platform,
-      dispatchId: `dispatch_${platform}_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      platform: 'telegram',
+      dispatchId: `dispatch_tg_${Date.now()}_${Math.floor(Math.random()*1000)}`,
       timestamp: new Date().toISOString(),
       status: 'sent',
       senderAccount: accountPhone || 'System Dispatcher'

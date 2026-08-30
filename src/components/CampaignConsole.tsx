@@ -478,17 +478,9 @@ ${data.summary.recommendation}
   const availableAccounts = healthyAccounts.filter(a => !isAccountQuotaWarning(a));
   const warnedAccounts = healthyAccounts.filter(a => isAccountQuotaWarning(a));
 
-  // Dual Track Progress Statistics
-  const waTotalCount = dispatchPlatform === 'telegram' ? 0 : (targets.length > 0 ? targets.filter(t => !t.startsWith('@') && !/[a-zA-Z]/.test(t)).length || Math.round(targets.length * 0.8) : 0);
-  const tgTotalCount = dispatchPlatform === 'whatsapp' ? 0 : (targets.length > 0 ? targets.filter(t => t.startsWith('@') || /[a-zA-Z]/.test(t)).length || Math.round(targets.length * 0.2) : 0);
-
-  const waLogs = logs.filter(l => l.platform === 'whatsapp');
-  const tgLogs = logs.filter(l => l.platform === 'telegram');
-
-  const waSentCount = waLogs.length;
-  const waSuccessCount = waLogs.filter(l => l.status === 'success').length;
-  const waFailCount = waLogs.filter(l => l.status === 'failed').length;
-  const waPercent = Math.min(100, Math.round((waSentCount / (waTotalCount || 1)) * 100));
+  // Telegram Matrix Progress Statistics
+  const tgTotalCount = targets.length;
+  const tgLogs = logs.filter(l => l.platform === 'telegram' || !l.platform);
 
   const tgSentCount = tgLogs.length;
   const tgSuccessCount = tgLogs.filter(l => l.status === 'success').length;
@@ -543,14 +535,10 @@ ${data.summary.recommendation}
   };
 
   // Handler to send user requested test greetings:
-  // 4 Telegram accounts -> +55 71 99698 4203
-  // 2 WhatsApp accounts -> +6282360280605
+  // Telegram accounts -> +55 71 99698 4203
   const handleSendUserRequestedGreetings = async () => {
     const tgAccounts = accounts.filter((a) => a.platform === 'telegram');
-    const wsAccounts = accounts.filter((a) => a.platform === 'whatsapp');
-
     const tgTarget = '+55 71 99698 4203';
-    const wsTarget = '+6282360280605';
 
     const tgGreetings = [
       'Oi, tudo bem? Vi você lá no grupo dos jogos, achei seu perfil tão legal e resolvi chamar. 😊',
@@ -560,15 +548,14 @@ ${data.summary.recommendation}
       'Oie! Tudo joia? Vi você no grupo, eu também jogo naquela plataforma, adorei o bônus de boas-vindas! 🎊'
     ];
 
-    const wsGreetings = [
-      'Halo, apa kabar? Semoga hari Anda menyenangkan! 👋',
-      'Hi! Salam kenal, semoga sehat sempre e bom dia! ✨'
-    ];
+    if (tgAccounts.length === 0) {
+      alert('请先导入或登录 Telegram 协议账号！');
+      return;
+    }
 
     const newLogs: CampaignLog[] = [];
     const updatedAccountIds = new Set<string>();
 
-    // Send from 4 TG accounts to +55 71 99698 4203
     tgAccounts.forEach((acc, idx) => {
       const msg = tgGreetings[idx % tgGreetings.length];
       const logItem: CampaignLog = {
@@ -580,26 +567,6 @@ ${data.summary.recommendation}
         targetPhone: tgTarget,
         tgChatId: acc.tgChatId,
         messageText: `💬 [TG 协议号问候]: ${msg}`,
-        mediaAttached: false,
-        status: 'success',
-        delaySec: Math.floor(Math.random() * 3) + 1,
-        timestamp: new Date().toLocaleTimeString('pt-BR')
-      };
-      newLogs.push(logItem);
-      updatedAccountIds.add(acc.id);
-    });
-
-    // Send from 2 WS accounts to +6282360280605
-    wsAccounts.forEach((acc, idx) => {
-      const msg = wsGreetings[idx % wsGreetings.length];
-      const logItem: CampaignLog = {
-        id: `log-ws-test-${Date.now()}-${idx}`,
-        campaignId: 'camp-user-requested-test',
-        platform: 'whatsapp',
-        accountId: acc.id,
-        accountPhone: acc.phone,
-        targetPhone: wsTarget,
-        messageText: `🟢 [WS Session 问候]: ${msg}`,
         mediaAttached: false,
         status: 'success',
         delaySec: Math.floor(Math.random() * 3) + 1,
@@ -626,29 +593,17 @@ ${data.summary.recommendation}
     );
 
     try {
-      await fetch('/api/telethon/run-direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targets: ['+5571996984203'],
-          message: 'Olá! Tudo bem? Espero que tenha um ótimo dia!'
-        })
-      });
-
       await fetch('/api/campaign/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           batchTest: true,
-          items: [
-            ...tgAccounts.map((a, i) => ({ platform: 'telegram', from: a.phone, to: tgTarget, message: tgGreetings[i % 4] })),
-            ...wsAccounts.map((a, i) => ({ platform: 'whatsapp', from: a.phone, to: wsTarget, message: wsGreetings[i % 2] }))
-          ]
+          items: tgAccounts.map((a, i) => ({ platform: 'telegram', from: a.phone, to: tgTarget, message: tgGreetings[i % tgGreetings.length] }))
         })
       });
     } catch (e) {}
 
-    alert(`✅ 已成功向目标发送测试问候语！\n\n- TG号 -> +55 71 99698 4203 (问候消息已发送)\n- WS号 -> +6282360280605 (问候消息已发送)\n\n请在下方的【矩阵派发实时日志】中查看详细数据。`);
+    alert(`✅ 已成功向目标发送 Telegram 测试问候语！\n\n- TG 矩阵号 -> +55 71 99698 4203 (问候消息已发送)\n\n请在下方的【矩阵派发实时日志】中查看详细数据。`);
   };
 
   const dispatchRef = useRef<NodeJS.Timeout | null>(null);
@@ -759,65 +714,22 @@ ${data.summary.recommendation}
 
     // Pick target & account
     const targetPhone = targets[currentIndex];
-    let platformUsed: 'whatsapp' | 'telegram' = 'telegram';
-    if (dispatchPlatform === 'telegram') {
-      platformUsed = 'telegram';
-    } else if (dispatchPlatform === 'whatsapp') {
-      platformUsed = 'whatsapp';
-    } else {
-      // Auto-detect for hybrid mode
-      if (targetPhone?.trim().startsWith('@') || /[a-zA-Z]/.test(targetPhone || '')) {
-        platformUsed = 'telegram';
-      } else {
-        platformUsed = 'whatsapp';
-      }
-    }
+    const platformUsed: 'telegram' = 'telegram';
 
-    const healthyWsAccounts = healthyAccounts.filter(a => a.platform === 'whatsapp');
     const healthyTgAccounts = healthyAccounts.filter(a => a.platform === 'telegram');
-
-    const activeAvailableWs = healthyWsAccounts.filter(a => !isAccountQuotaWarning(a));
     const activeAvailableTg = healthyTgAccounts.filter(a => !isAccountQuotaWarning(a));
-    const activeAvailableAll = healthyAccounts.filter(a => !isAccountQuotaWarning(a));
 
     let account: AccountSession;
-    if (dispatchPlatform === 'telegram') {
-      if (activeAvailableTg.length === 0) {
-        if (healthyTgAccounts.length > 0) {
-          alert(`⚠️ 【预警熔断已触发】所有 Telegram (TG) 账号均已达到 ${antiBan.warningThresholdPercent ?? 80}% 发送量预警保护线！为防止被平台封号，系统今日已自动暂停派单。请等待次日 (00:00) 自动恢复，或点按上方「🗑️ 一键全平台清0重置」强制解除。`);
-        } else {
-          alert('【TG 独立测试模式】号码池中没有在线的 Telegram (TG) 协议号/Bot 账号！');
-        }
-        setIsCampaignRunning(false);
-        return;
-      }
-      account = activeAvailableTg[currentIndex % activeAvailableTg.length];
-      platformUsed = 'telegram';
-    } else if (dispatchPlatform === 'whatsapp') {
-      if (activeAvailableWs.length === 0) {
-        if (healthyWsAccounts.length > 0) {
-          alert(`⚠️ 【预警熔断已触发】所有 WhatsApp (WS) 账号均已达到 ${antiBan.warningThresholdPercent ?? 80}% 发送量预警保护线！为防止被平台封号，系统今日已自动暂停派单。请等待次日 (00:00) 自动恢复，或点按上方「🗑️ 一键全平台清0重置」强制解除。`);
-        } else {
-          alert('【WS 专用模式】号码池中没有在线的 WhatsApp (WS) Session 账号！');
-        }
-        setIsCampaignRunning(false);
-        return;
-      }
-      account = activeAvailableWs[currentIndex % activeAvailableWs.length];
-      platformUsed = 'whatsapp';
-    } else {
-      if (platformUsed === 'whatsapp' && activeAvailableWs.length > 0) {
-        account = activeAvailableWs[currentIndex % activeAvailableWs.length];
-      } else if (platformUsed === 'telegram' && activeAvailableTg.length > 0) {
-        account = activeAvailableTg[currentIndex % activeAvailableTg.length];
-      } else if (activeAvailableAll.length > 0) {
-        account = activeAvailableAll[currentIndex % activeAvailableAll.length];
+    if (activeAvailableTg.length === 0) {
+      if (healthyTgAccounts.length > 0) {
+        alert(`⚠️ 【预警熔断已触发】所有 Telegram (TG) 账号均已达到 ${antiBan.warningThresholdPercent ?? 80}% 发送量预警保护线！为防止被平台封号，系统今日已自动暂停派单。请等待次日 (00:00) 自动恢复，或点按上方「🗑️ 一键全平台清0重置」强制解除。`);
       } else {
-        alert(`⚠️ 【预警熔断已触发】全局所有可用账号均已达到 ${antiBan.warningThresholdPercent ?? 80}% 发送预警保护红线！已自动暂停群发任务。建议等待次日自动恢复或手动清零。`);
-        setIsCampaignRunning(false);
-        return;
+        alert('【TG 矩阵营销模式】号码池中没有在线可用的 Telegram 协议号/Bot 账号！请先在账号中心挂载账号。');
       }
+      setIsCampaignRunning(false);
+      return;
     }
+    account = activeAvailableTg[currentIndex % activeAvailableTg.length];
 
     // Calculate Gaussian smooth delay
     const jitterSec = antiBan.enableGaussianJitter
@@ -974,20 +886,10 @@ ${data.summary.recommendation}
       return;
     }
 
-    const relevantAccounts = dispatchPlatform === 'telegram'
-      ? healthyAccounts.filter(a => a.platform === 'telegram')
-      : dispatchPlatform === 'whatsapp'
-      ? healthyAccounts.filter(a => a.platform === 'whatsapp')
-      : healthyAccounts;
+    const relevantAccounts = healthyAccounts.filter(a => a.platform === 'telegram');
 
     if (relevantAccounts.length === 0) {
-      if (dispatchPlatform === 'telegram') {
-        alert('【TG 獨立測試模式】號碼池中目前沒有在線的 Telegram (TG) 協議號或 Bot 帳號！請先在【多號 Session 管理】頁面點擊【快速生成測試號】或【批次導入 TG 協議號】。');
-      } else if (dispatchPlatform === 'whatsapp') {
-        alert('【WS 專用模式】號碼池中目前沒有在線的 WhatsApp (WS) Session 帳號！');
-      } else {
-        alert('目前沒有在線正常的 Session 帳號，請先導入或解封帳號');
-      }
+      alert('號碼池中目前沒有在線的 Telegram (TG) 協議號或 Bot 帳號！請先在【多號管理池】導入並在線掛載帳號。');
       return;
     }
     if ((enableDailySchedule || enableScheduleEndTime) && checkIsOutsideWorkingHours(scheduleStartTime, scheduleEndTime, scheduleTimezone)) {
@@ -1006,14 +908,10 @@ ${data.summary.recommendation}
       return;
     }
 
-    const relevantAccounts = dispatchPlatform === 'telegram'
-      ? healthyAccounts.filter(a => a.platform === 'telegram')
-      : dispatchPlatform === 'whatsapp'
-      ? healthyAccounts.filter(a => a.platform === 'whatsapp')
-      : healthyAccounts;
+    const relevantAccounts = healthyAccounts.filter(a => a.platform === 'telegram');
 
     if (relevantAccounts.length === 0) {
-      alert('目前沒有在線正常的 Session 帳號，請先導入或生成測試帳號');
+      alert('目前沒有在線正常的 Telegram 協議號/Bot 帳號，請先導入或生成測試帳號');
       return;
     }
 
@@ -1052,7 +950,7 @@ ${data.summary.recommendation}
               矩陣群發與防封調度中臺
             </h2>
             <p className="text-slate-400 text-xs mt-1 max-w-2xl">
-              當前調度: <strong className="text-cyan-300 font-mono font-bold">{dispatchPlatform === 'telegram' ? '✈️ Telegram (TG) 頻道通道 (獨立測試)' : dispatchPlatform === 'whatsapp' ? '🟢 WhatsApp (WS) 專用通道' : '⚡ TG + WS 雙軌矩陣'}</strong> |
+              當前調度: <strong className="text-cyan-300 font-mono font-bold">✈️ Telegram (TG) 矩阵多号高速调度通道</strong> |
               在線 TG 帳號: <strong className="text-cyan-400">{healthyAccounts.filter(a => a.platform === 'telegram').length} 個</strong> |
               動態代理輪換: <strong className="text-emerald-400">啟用中</strong>
             </p>
@@ -1073,10 +971,10 @@ ${data.summary.recommendation}
 
             <button
               onClick={handleSendUserRequestedGreetings}
-              className="bg-gradient-to-r from-emerald-500/25 via-cyan-500/25 to-blue-500/25 hover:from-emerald-500/35 hover:to-blue-500/35 text-emerald-300 border border-emerald-500/50 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-              title="一键发问候语：TG号 -> +55 71 99698 4203 / WS号 -> +6282360280605"
+              className="bg-gradient-to-r from-cyan-500/25 to-blue-500/25 hover:from-cyan-500/35 hover:to-blue-500/35 text-cyan-300 border border-cyan-500/50 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              title="一键发问候语：TG号 -> +55 71 99698 4203"
             >
-              <Zap className="w-4 h-4 text-emerald-400 animate-pulse" /> ⚡ TG+WS指定号问候测试
+              <Zap className="w-4 h-4 text-cyan-400 animate-pulse" /> ⚡ TG矩阵号问候测试
             </button>
 
             <button
@@ -1091,18 +989,10 @@ ${data.summary.recommendation}
               <>
                 <button
                   onClick={handleStartCampaign}
-                  className={`font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg ${
-                    dispatchPlatform === 'telegram'
-                      ? 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 shadow-cyan-500/25 ring-2 ring-cyan-400/30'
-                      : dispatchPlatform === 'whatsapp'
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-emerald-500/20'
-                      : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-emerald-500/20'
-                  }`}
+                  className="bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/30 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-slate-950" />
-                  {dispatchPlatform === 'telegram' && '✈️ 立即啟動 TG 群發'}
-                  {dispatchPlatform === 'whatsapp' && '🟢 立即啟動 WS 群發'}
-                  {dispatchPlatform === 'dual' && '⚡ 立即啟動雙軌群發'}
+                  ✈️ 立即啟動 Telegram 矩陣群發
                 </button>
 
                 <button
@@ -1483,42 +1373,15 @@ ${data.summary.recommendation}
         </div>
       </div>
 
-      {/* Platform Mode Selector */}
+      {/* Platform Mode & Telegram Matrix Controls */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col space-y-2">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">群發平台調度:</span>
             <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
-              <button
-                onClick={() => setDispatchPlatform('telegram')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                  dispatchPlatform === 'telegram'
-                    ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md font-extrabold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>✈️ Telegram 獨立測試頻道/私訊 (優先)</span>
-              </button>
-              <button
-                onClick={() => setDispatchPlatform('dual')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  dispatchPlatform === 'dual'
-                    ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ⚡ TG + WS 雙平台並行矩陣
-              </button>
-              <button
-                onClick={() => setDispatchPlatform('whatsapp')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  dispatchPlatform === 'whatsapp'
-                    ? 'bg-emerald-500 text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                🟢 WhatsApp Session 多號專用
-              </button>
+              <span className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md font-extrabold flex items-center gap-1.5">
+                <span>✈️ Telegram (TG) 矩阵多号高速调度 (MTProto / tdata / Userbot)</span>
+              </span>
             </div>
           </div>
 
@@ -1530,133 +1393,47 @@ ${data.summary.recommendation}
         </div>
       </div>
 
-      {/* Dedicated Telegram Test Mode Focus Banner */}
-      {dispatchPlatform === 'telegram' && (
-        <div className="bg-gradient-to-r from-cyan-950/90 via-slate-900 to-slate-900 border border-cyan-500/40 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl relative overflow-hidden">
-          <div className="flex items-start md:items-center space-x-3.5 z-10">
-            <div className="p-3 bg-cyan-500/20 text-cyan-300 rounded-xl border border-cyan-500/40 shrink-0">
-              <Send className="w-5 h-5 text-cyan-300 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold text-slate-100 text-sm">
-                  ✈️ Telegram (TG) 群發通道 — 獨立測試模式已開啟
-                </span>
-                <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                  WS 模組暫存背景待命
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                測試優先級已切換至 <strong className="text-cyan-300">TG 頻道/私訊獨立發送迴圈</strong>。系統在此模式下將專注驗證 TG 號碼池 (Pyrogram / Telethon / Bot API Token)、高斯平滑延遲與發送相容性，完全不影響 WS 額度。
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 z-10">
-            <button
-              onClick={() => {
-                setTelethonTargetInput('+5571999149956\n+5571996984203');
-                setIsTelethonModalOpen(true);
-              }}
-              className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 text-slate-950 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5 text-slate-950" />
-              ⚡️ [快捷极速测试] Telethon 协议号直发
-            </button>
-            <button
-              onClick={() => handleLoadTgTestTask(12)}
-              className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 transition-all shadow-md shadow-cyan-500/20"
-              title="載入 12 筆快捷測試名單"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              載入 12 筆測試
-            </button>
-            <button
-              onClick={() => handleLoadTgTestTask(100)}
-              className="bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/50 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 transition-all shadow-md"
-              title="一鍵生成 100 筆測試受眾"
-            >
-              🚀 100筆
-            </button>
-            <button
-              onClick={() => handleLoadTgTestTask(500)}
-              className="bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/50 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 transition-all shadow-md"
-              title="一鍵生成 500 筆大批量測試受眾"
-            >
-              ⚡ 500筆
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Dual-Track Dispatch Progress Bars & Cooling Rest Alert */}
+      {/* Telegram Dispatch Progress Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold text-slate-100 text-sm">雙軌專用群發進度 (WS 優先 + TG 純淨去重分流中臺)</span>
+            <Layers className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold text-slate-100 text-sm">Telegram 矩阵多号任务调度进度 (多号轮询 + 独立代理 IP)</span>
           </div>
           <div className="text-xs font-mono text-slate-400">
             總派發進度: <strong className="text-slate-100">{currentIndex} / {targets.length}</strong> 筆 ({((currentIndex / (targets.length || 1)) * 100).toFixed(0)}%)
           </div>
         </div>
 
-        {/* Two Separate Track Progress Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Track 1: WhatsApp Track */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-emerald-500/30 space-y-2.5 relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                🟢 WhatsApp (WS) 群發軌道
-              </span>
-              <span className="text-emerald-300 font-bold font-mono">
-                {waSentCount} / {waTotalCount.toLocaleString()} 筆 ({waPercent}%)
-              </span>
-            </div>
-            <div className="text-[10px] text-emerald-400/90 font-mono bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
-              通道状态: WhatsApp 手机号批量发送已就绪
-            </div>
-            <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden p-0.5 border border-slate-800">
-              <div
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 shadow-sm"
-                style={{ width: `${waPercent}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-              <span>成功送達: <strong className="text-emerald-400 font-bold">{waSuccessCount}</strong></span>
-              <span>發送失敗: <strong className="text-red-400">{waFailCount}</strong></span>
-            </div>
+        {/* Telegram Track Progress Card */}
+        <div className="bg-slate-950 p-5 rounded-xl border border-cyan-500/30 space-y-3 relative overflow-hidden">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-cyan-400 font-bold flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+              ✈️ Telegram (TG) 矩阵私信/频道群发通道
+            </span>
+            <span className="text-cyan-300 font-bold font-mono text-sm">
+              {tgSentCount} / {tgTotalCount.toLocaleString()} 筆 ({tgPercent}%)
+            </span>
           </div>
-
-          {/* Track 2: Telegram Track */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-cyan-500/30 space-y-2.5 relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-cyan-400 font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                ✈️ Telegram (TG) 群發軌道
-              </span>
-              <span className="text-cyan-300 font-bold font-mono">
-                {tgSentCount} / {tgTotalCount.toLocaleString()} 筆 ({tgPercent}%)
-              </span>
-            </div>
-            <div className="text-[10px] text-cyan-400/90 font-mono bg-cyan-500/10 px-2 py-1 rounded border border-cyan-500/20">
-              純 TG 專屬: 已扣除 4,808 筆重合號，僅向純 TG 活躍戶發送 (精準去重零重複)
-            </div>
-            <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden p-0.5 border border-slate-800">
-              <div
-                className="bg-gradient-to-r from-cyan-500 to-blue-400 h-full rounded-full transition-all duration-300 shadow-sm"
-                style={{ width: `${tgPercent}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-              <span>成功送達: <strong className="text-cyan-400 font-bold">{tgSuccessCount}</strong></span>
-              <span>發送失敗: <strong className="text-red-400">{tgFailCount}</strong></span>
-            </div>
+          <div className="text-xs text-cyan-400/90 font-mono bg-cyan-500/10 px-3 py-1.5 rounded-lg border border-cyan-500/20 flex items-center justify-between">
+            <span>🚀 矩阵调度: 自动在 {healthyAccounts.filter(a => a.platform === 'telegram').length} 个活跃 TG 协议号间负载均衡轮换派发</span>
+            <span>防风控: 独立 Proxy + 高斯抖动</span>
+          </div>
+          <div className="w-full bg-slate-900 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-800">
+            <div
+              className="bg-gradient-to-r from-cyan-500 to-blue-400 h-full rounded-full transition-all duration-300 shadow-sm"
+              style={{ width: `${tgPercent}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs font-mono text-slate-400 pt-1">
+            <span>成功送達: <strong className="text-emerald-400 font-bold text-sm">{tgSuccessCount}</strong></span>
+            <span>發送失敗: <strong className="text-red-400 font-bold text-sm">{tgFailCount}</strong></span>
+            <span>剩餘待派: <strong className="text-slate-200 font-bold text-sm">{Math.max(0, tgTotalCount - tgSentCount)}</strong></span>
           </div>
         </div>
 
-        {/* Early Warning Fuse Protection Alert Banner */}
+      {/* Early Warning Fuse Protection Alert Banner */}
         {warnedAccounts.length > 0 && antiBan.enableEarlyWarningFuse !== false && (
           <div className="bg-gradient-to-r from-amber-950/80 via-orange-950/80 to-slate-900 border border-amber-500/40 rounded-2xl p-4 text-xs text-amber-200 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -1691,7 +1468,7 @@ ${data.summary.recommendation}
               <Coffee className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold block flex items-center gap-2 flex-wrap">
-                  ☕ 触发高斯拟人随机休眠机制 (智能避开 Telegram/WhatsApp 机器人群发检测)
+                  ☕ 触发高斯拟人随机休眠机制 (智能避开 Telegram 机器人群发检测)
                   <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 text-amber-300 font-mono">
                     防封防护中
                   </span>
@@ -2558,7 +2335,7 @@ ${data.summary.recommendation}
               <span className="bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-mono text-[10px]">无需区分标注</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
-              WhatsApp 手机号（如 <code className="text-amber-300 font-mono">5511987654321</code>）与 Telegram 账号/ChatID（如 <code className="text-amber-300 font-mono">@username</code> 或手机号）<strong>可以直接混合粘贴或批量上传</strong>。系统会自动识别渠道协议，无需您手动备注或拆分包！
+              Telegram 用户名（如 <code className="text-amber-300 font-mono">@username</code>）或手机号码（如 <code className="text-amber-300 font-mono">5511987654321</code>）<strong>可以直接粘贴或批量上传</strong>。系统自动分配矩阵协议号派发！
             </p>
           </div>
 

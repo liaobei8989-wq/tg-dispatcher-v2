@@ -60,7 +60,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
       fileSizeKb: 342,
       totalLines: 10000,
       validPhoneCount: 8940,
-      scrubbedWaCount: 7120,
+      
       scrubbedTgCount: 6850,
       uploadedAt: '2026-07-29 10:30'
     },
@@ -70,7 +70,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
       fileSizeKb: 185,
       totalLines: 5000,
       validPhoneCount: 4620,
-      scrubbedWaCount: 3910,
+      
       scrubbedTgCount: 3840,
       uploadedAt: '2026-07-28 16:45'
     }
@@ -140,7 +140,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
           id: `raw-${type}-${i}`,
           phone: rawPhone,
           formattedPhone: formatted,
-          isWaActive: false,
+          
           isTgActive: false,
           status: 'unverified'
         });
@@ -165,7 +165,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
         fileSizeKb: Math.floor(count * 0.024),
         totalLines: count,
         validPhoneCount: validCnt,
-        scrubbedWaCount: 0,
+        
         scrubbedTgCount: 0,
         uploadedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
       };
@@ -316,7 +316,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
           id: `raw-uploaded-${idx}-${Date.now()}`,
           phone: raw,
           formattedPhone: formatted,
-          isWaActive: true,
+          
           isTgActive: true,
           status: 'tg_active'
         });
@@ -351,7 +351,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
       fileSizeKb: Math.round(fileSizeBytes / 1024) || 1,
       totalLines: totalLinesCount,
       validPhoneCount: deduplicated.length,
-      scrubbedWaCount: 0,
+      
       scrubbedTgCount: 0,
       uploadedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
     };
@@ -410,7 +410,7 @@ export const FileImportHub: React.FC<FileImportHubProps> = ({
               已清洗名单导入中心 (直发模式)
             </h2>
             <p className="text-slate-400 text-xs mt-1 max-w-2xl">
-              直接导入已在外部清洗好的 Telegram / WhatsApp 有效名单 (.txt / .csv)，无缝对接【矩阵群发调度】中心，无需二次在线检测，最大程度保护主号风控。
+              直接导入已在外部清洗好的 Telegram 目标受众名单 (.txt / .csv)，无缝对接【矩阵群发调度】中心，无需二次在线检测，最大程度保护主号风控。
             </p>
           </div>
         </div>

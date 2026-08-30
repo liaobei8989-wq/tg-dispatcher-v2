@@ -88,20 +88,11 @@ export const BatchHealthModal: React.FC<BatchHealthModalProps> = ({
 
       let healthScore = isBanned ? 10 : isRestricted ? 65 : isWarming ? 85 : Math.floor(92 + Math.random() * 8);
 
-      let diagLog = '';
-      if (acc.platform === 'telegram') {
-        diagLog = isBanned
-          ? '❌ MTProto Session 密钥失效 / @SpamBot 检索显示永久封禁 (Banned)'
-          : isWarming
-          ? `🛡️ 协议号处于【新号养号保护期】(注册/挂载第${acc.warmupDay}天) | Session 正常 | @SpamBot 干净 | 自动设为低频安全发信`
-          : `🟢 MTProto Session 握手成功 | API_ID (${acc.tgApiId || '39005001'}) 认证有效 | Proxy 延迟 ${pingStr} | @SpamBot 无违规受限记录`;
-      } else {
-        diagLog = isBanned
-          ? '❌ WhatsApp Web 6-Key Session 连通失败 / 号码已被 Meta 封禁'
-          : isWarming
-          ? `🛡️ WhatsApp 协议号处于【养号保护期】(挂载第${acc.warmupDay}天) | Session 正常 | Proxy 延迟 ${pingStr} | 建议每日控量<30条`
-          : `🟢 WhatsApp Protocol Session 挂载通过 | 浏览器 Fingerprint 匹配 | Proxy 延迟 ${pingStr}`;
-      }
+      const diagLog = isBanned
+        ? '❌ MTProto Session 密钥失效 / @SpamBot 检索显示永久封禁 (Banned)'
+        : isWarming
+        ? `🛡️ 协议号处于【新号养号保护期】(注册/挂载第${acc.warmupDay}天) | Session 正常 | @SpamBot 干净 | 自动设为低频安全发信`
+        : `🟢 MTProto Session 握手成功 | API_ID (${acc.tgApiId || '39005001'}) 认证有效 | Proxy 延迟 ${pingStr} | @SpamBot 无违规受限记录`;
 
       setLogs((prev) => [
         ...prev,

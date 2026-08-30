@@ -56,13 +56,12 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
   onNavigateToCampaign,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterPlatform, setFilterPlatform] = useState<'all' | 'whatsapp' | 'telegram'>('all');
+  const [filterPlatform, setFilterPlatform] = useState<'all' | 'telegram'>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
   // Import Modal States & Options
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importPlatform, setImportPlatform] = useState<'whatsapp' | 'telegram'>('whatsapp');
-  const [waSessionType, setWaSessionType] = useState<'wa_web_qr' | 'wa_business_api' | 'wa_cloud_api'>('wa_web_qr');
+  const [importPlatform, setImportPlatform] = useState<'telegram'>('telegram');
   const [tgSessionType, setTgSessionType] = useState<'tg_pyrogram' | 'tg_userbot' | 'tg_bot_api'>('tg_pyrogram');
   const [importText, setImportText] = useState('');
   const [proxyListText, setProxyListText] = useState('');
@@ -94,13 +93,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
   const [showPythonSnippet, setShowPythonSnippet] = useState(true);
   const [copiedPythonSnippet, setCopiedPythonSnippet] = useState(false);
 
-  // WhatsApp QR Code / Pairing Code Modal state
-  const [waQrModalAccount, setWaQrModalAccount] = useState<AccountSession | null>(null);
-  const [waLoginMethod, setWaLoginMethod] = useState<'qr' | 'pairing_code'>('qr');
-  const [waPairingCode, setWaPairingCode] = useState('8F3A-9K2L');
-  const [isWaConnecting, setIsWaConnecting] = useState(false);
-  const [waQrSuccess, setWaQrSuccess] = useState(false);
-  const [copiedPairingCode, setCopiedPairingCode] = useState(false);
+
 
   // 防抢号安全保护弹窗 State
   const [securityModalAccount, setSecurityModalAccount] = useState<AccountSession | null>(null);
@@ -195,10 +188,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         })
       );
       setIsDetectingAge(false);
-      const tgCount = accounts.filter(a => a.platform === 'telegram' || a.platform === 'dual').length;
-      const wsCount = accounts.filter(a => a.platform === 'whatsapp').length;
+      const tgCount = accounts.filter(a => a.platform === 'telegram').length;
       setAgeDetectReport(
-        `🔍 智能检测完成！确认当前 ${tgCount} 个 TG 账号和 ${wsCount} 个 WS 账号。已保留系统实际养号天数，并提升每日安全上限！`
+        `🔍 智能检测完成！确认当前 ${tgCount} 个 TG 协议账号。已保留系统实际养号天数，并提升每日安全上限！`
       );
     }, 800);
   };
@@ -212,17 +204,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
   };
 
   const openAccountLoginModal = (acc: AccountSession) => {
-    if (acc.platform === 'whatsapp') {
-      setWaQrModalAccount(acc);
-      setWaLoginMethod('qr');
-      setIsWaConnecting(false);
-      setWaQrSuccess(false);
-      const p1 = Math.floor(1000 + Math.random() * 9000).toString();
-      const p2 = Math.floor(1000 + Math.random() * 9000).toString();
-      setWaPairingCode(`${p1}-${p2}`);
-    } else {
-      openLoginModal(acc);
-    }
+    openLoginModal(acc);
   };
 
   // File input refs
@@ -620,10 +602,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
   // 2 WS accounts -> +6282360280605
   const handleSendUserRequestedGreetings = async () => {
     const tgAccounts = accounts.filter((a) => a.platform === 'telegram');
-    const wsAccounts = accounts.filter((a) => a.platform === 'whatsapp');
-
     const tgTarget = '+55 71 99698 4203';
-    const wsTarget = '+6282360280605';
 
     const tgGreetings = [
       'Olá! Tudo bem? Espero que tenha um ótimo dia! 💬✨',
@@ -632,14 +611,8 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
       'Opa, tudo bem? Um ótimo dia pra você! 😊'
     ];
 
-    const wsGreetings = [
-      'Halo, apa kabar? Semoga hari Anda menyenangkan! 👋',
-      'Hi! Salam kenal, semoga sehat sempre e bom dia! ✨'
-    ];
-
     const updatedAccountIds = new Set<string>();
     tgAccounts.forEach((acc) => updatedAccountIds.add(acc.id));
-    wsAccounts.forEach((acc) => updatedAccountIds.add(acc.id));
 
     setAccounts((prevAccs) =>
       prevAccs.map((acc) => {
@@ -661,15 +634,12 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           batchTest: true,
-          items: [
-            ...tgAccounts.map((a, i) => ({ platform: 'telegram', from: a.phone, to: tgTarget, message: tgGreetings[i % 4] })),
-            ...wsAccounts.map((a, i) => ({ platform: 'whatsapp', from: a.phone, to: wsTarget, message: wsGreetings[i % 2] }))
-          ]
+          items: tgAccounts.map((a, i) => ({ platform: 'telegram', from: a.phone, to: tgTarget, message: tgGreetings[i % 4] }))
         })
       });
     } catch (e) {}
 
-    alert(`✅ 已成功向指定目标发送问候测试消息！\n\n- ${tgAccounts.length}个 TG 协议号在线 -> ${tgTarget} (已推送问候消息)\n- ${wsAccounts.length}个 WS Session 号在线 -> ${wsTarget} (已推送问候消息)\n\n所有账号已更新发送数与活跃记录。`);
+    alert(`✅ 已成功向指定目标发送问候测试消息！\n\n- ${tgAccounts.length}个 TG 协议号在线 -> ${tgTarget} (已推送问候消息)\n\n所有账号已更新发送数与活跃记录。`);
   };
 
   // Filter accounts
@@ -686,11 +656,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
     return matchesSearch && matchesPlatform && matchesStatus;
   });
 
-  const waActiveCount = accounts.filter((a) => a.platform === 'whatsapp' && a.status === 'active').length;
   const tgActiveCount = accounts.filter((a) => a.platform === 'telegram' && a.status === 'active').length;
 
   // Open import modal pre-focused on a platform
-  const handleOpenImport = (platform: 'whatsapp' | 'telegram') => {
+  const handleOpenImport = (platform: 'telegram') => {
     setImportPlatform(platform);
     setImportText('');
     setShowImportModal(true);
@@ -853,7 +822,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
     setIsTestSending(false);
   };
 
-  // Batch import parser for WhatsApp and Telegram
+  // Batch import parser for Telegram Protocol & tdata
   const handleBatchImport = (overrideText?: string) => {
     const textToUse = typeof overrideText === 'string' ? overrideText : importText;
     if (!textToUse.trim()) return;
@@ -904,56 +873,13 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
 
       const parts = trimmed.split(/[,;\t|]+/);
 
-      if (importPlatform === 'whatsapp' || (parts.length >= 5 && parts[1]?.includes('='))) {
-        // WhatsApp format: Phone, Alias/Key1, Proxy/Key2, DailyLimit/Key3, Key4, Key5 (6-Key Session format support)
-        if (parts.length >= 1 && parts[0].trim()) {
-          const rawPhone = parts[0].trim();
-          const formattedPhone = formatBrazilPhone(rawPhone);
-          const is6KeySession = parts.length >= 5 && parts[1]?.includes('=');
-
-          let alias = `WS-Bot-${Math.floor(1000 + Math.random() * 9000)}`;
-          let inlineProxy: string | undefined = undefined;
-
-          if (is6KeySession) {
-            alias = `WS-BR-6Key-${rawPhone.slice(-4)}`;
-          } else {
-            alias = parts[1] && !parts[1].includes('=') ? parts[1].trim() : `WS-BR-${rawPhone.slice(-4)}`;
-            inlineProxy = parts[2]?.trim();
-          }
-
-          const proxy = getAssignedProxy(inlineProxy, validIndex);
-          const limit = enableWarmupOnImport ? 15 : parseInt(parts[3]?.trim() || '120', 10);
-
-          newAccounts.push({
-            id: `acc-wa-imp-${Date.now()}-${validIndex}`,
-            phone: formattedPhone,
-            alias,
-            platform: 'whatsapp',
-            type: waSessionType,
-            status: 'active',
-            isLoggedIn: true,
-            proxy,
-            healthScore: Math.floor(88 + Math.random() * 12),
-            sentToday: 0,
-            dailyLimit: limit,
-            totalSent: 0,
-            successRate: 100,
-            createdAt: new Date().toISOString().split('T')[0],
-            lastActive: is6KeySession ? '已在线登录 (WA 6-Key Protocol Session 挂载)' : enableWarmupOnImport ? '已登录 (养号保护期中)' : '已登录 (Session 活跃中)',
-            warmupDay: 1,
-            twoFactorPassword: '548508',
-            recoveryEmail: 'liaobei8989@outiook.com'
-          });
-          validIndex++;
-        }
-      } else {
-        // Telegram Protocol Format parser
-        const p1 = parts[0]?.trim() || '';
-        const p2 = parts[1]?.trim() || '';
-        const p3 = parts[2]?.trim() || '';
-        const p4 = parts[3]?.trim() || '';
-        const p5 = parts[4]?.trim() || '';
-        const p6 = parts[5]?.trim() || '';
+      // Telegram Protocol Format parser
+      const p1 = parts[0]?.trim() || '';
+      const p2 = parts[1]?.trim() || '';
+      const p3 = parts[2]?.trim() || '';
+      const p4 = parts[3]?.trim() || '';
+      const p5 = parts[4]?.trim() || '';
+      const p6 = parts[5]?.trim() || '';
 
         const isBotToken = p1.includes(':') && /^\d+:[\w-]+$/.test(p1);
 
@@ -1071,8 +997,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
           });
           validIndex++;
         }
-      }
-    });
+      });
 
     if (newAccounts.length > 0) {
       setAccounts((prev) => {
@@ -1103,53 +1028,18 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
       setProxyListText('');
       setUploadedFileName(null);
       setShowImportModal(false);
-      alert(`🎉 成功导入并激活 ${newAccounts.length} 个 ${importPlatform === 'whatsapp' ? 'WhatsApp Session' : 'Telegram tdata / 协议号'} 账号！所有账号已全自动上线并上架至矩阵列表。`);
+      alert(`🎉 成功导入并激活 ${newAccounts.length} 个 Telegram tdata / 协议号账号！所有账号已全自动上线并上架至矩阵列表。`);
     } else {
       alert('⚠️ 未能解析出有效的账号格式。请尝试点击“选择本地文件”上传账号文件，或检查粘贴内容。');
     }
   };
 
-  // Add mock accounts quick generator (2 WS + 2 TG)
+  // Add mock accounts quick generator (Telegram Protocol Accounts)
   const handleAddQuickPresets = () => {
     const ddds = ['11', '21', '31', '41', '51', '71', '81'];
     const nowStr = new Date().toISOString().split('T')[0];
 
     const newBatch: AccountSession[] = [
-      // 2 WhatsApp Accounts
-      {
-        id: `acc-preset-wa-1-${Date.now()}`,
-        phone: formatBrazilPhone(`551198${Math.floor(100000 + Math.random() * 900000)}`),
-        alias: `WS-SP-Matrix-${Math.floor(10 + Math.random() * 90)}`,
-        platform: 'whatsapp',
-        type: 'wa_web_qr',
-        status: 'active',
-        proxy: 'br-sp-proxy1.nodes.io:8080',
-        healthScore: 96,
-        sentToday: 0,
-        dailyLimit: 120,
-        totalSent: 340,
-        successRate: 98.2,
-        createdAt: nowStr,
-        lastActive: '剛生成',
-        warmupDay: 8
-      },
-      {
-        id: `acc-preset-wa-2-${Date.now()}`,
-        phone: formatBrazilPhone(`552198${Math.floor(100000 + Math.random() * 900000)}`),
-        alias: `WS-RJ-Boost-${Math.floor(10 + Math.random() * 90)}`,
-        platform: 'whatsapp',
-        type: 'wa_business_api',
-        status: 'warming',
-        proxy: 'br-rj-proxy2.nodes.io:8080',
-        healthScore: 84,
-        sentToday: 0,
-        dailyLimit: 35,
-        totalSent: 110,
-        successRate: 94.0,
-        createdAt: nowStr,
-        lastActive: '剛生成',
-        warmupDay: 3
-      },
       // 2 Telegram Protocol Accounts
       {
         id: `acc-preset-tg-1-${Date.now()}`,
@@ -1298,12 +1188,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-slate-100">双生态矩阵多号管理池 (WS Session + TG 协议号)</h2>
+            <h2 className="text-lg font-bold text-slate-100">Telegram 矩阵多号管理池 (MTProto / tdata / Bot API)</h2>
           </div>
           <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
-            <span>支持双平台各自独立导入：</span>
-            <span className="text-emerald-400 font-mono font-semibold">🟢 WhatsApp Session 凭证 ({accounts.filter(a => a.platform === 'whatsapp').length} 个)</span>
-            <span>与</span>
+            <span>支持批量导入与独立代理 IP 绑定：</span>
             <span className="text-cyan-400 font-mono font-semibold">✈️ Telegram 协议号/API/Bot ({accounts.filter(a => a.platform === 'telegram').length} 个)</span>
           </p>
         </div>
@@ -1414,9 +1302,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
           <button
             onClick={handleSendUserRequestedGreetings}
             className="bg-gradient-to-r from-emerald-500/25 via-cyan-500/25 to-blue-500/25 hover:from-emerald-500/35 hover:to-blue-500/35 text-emerald-300 border border-emerald-500/50 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-            title="一键测试：TG号发给+55 71 99698 4203 / WS号发给+6282360280605"
+            title="一键测试：TG协议号发给+55 71 99698 4203"
           >
-            <Zap className="w-4 h-4 text-emerald-400 animate-pulse" /> ⚡ TG+WS指定号问候测试
+            <Zap className="w-4 h-4 text-emerald-400 animate-pulse" /> ⚡ TG指定号问候测试
           </button>
 
           {/* Smart Account Age Detection Button */}
@@ -1450,18 +1338,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
             <span>❓ 为什么主号搜不到协议号？</span>
           </button>
 
-          {/* Import Button 1: WhatsApp */}
-          <button
-            onClick={() => handleOpenImport('whatsapp')}
-            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20"
-          >
-            <Plus className="w-4 h-4" /> 批量导入 WS Session (配代理IP)
-          </button>
-
-          {/* Import Button 2: Telegram */}
+          {/* Import Button: Telegram */}
           <button
             onClick={() => handleOpenImport('telegram')}
-            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20"
+            className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
           >
             <Send className="w-4 h-4" /> 批量导入 TG 协议号 (配代理IP)
           </button>
@@ -1477,49 +1357,35 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
             placeholder="搜尋手機號、TG Username、API ID 或 Proxy..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
           />
         </div>
 
         {/* Platform & Status Filter Pills */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          {/* Platform Selector */}
-          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setFilterPlatform('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                filterPlatform === 'all'
-                  ? 'bg-slate-800 text-slate-100 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              全部生態 ({accounts.length})
-            </button>
-            <button
-              onClick={() => setFilterPlatform('whatsapp')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
-                filterPlatform === 'whatsapp'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-emerald-300'
-              }`}
-            >
-              🟢 WhatsApp ({accounts.filter(a=>a.platform === 'whatsapp').length})
-            </button>
-            <button
-              onClick={() => setFilterPlatform('telegram')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
-                filterPlatform === 'telegram'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                  : 'text-slate-400 hover:text-cyan-300'
-              }`}
-            >
-              ✈️ Telegram ({accounts.filter(a=>a.platform === 'telegram').length})
-            </button>
-          </div>
-
           {/* Status Selector & Global Warmup Actions */}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center space-x-1 overflow-x-auto">
+              {['all', 'active', 'warming', 'risk', 'banned'].map((statusKey) => (
+                <button
+                  key={statusKey}
+                  onClick={() => setFilterStatus(statusKey)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all capitalize whitespace-nowrap ${
+                    filterStatus === statusKey
+                      ? 'bg-slate-800 text-slate-100 border border-slate-700'
+                      : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {statusKey === 'all' && `全部狀態 (${accounts.length})`}
+                  {statusKey === 'active' && `在線 (${accounts.filter((a) => a.status === 'active').length})`}
+                  {statusKey === 'warming' && `養號中 (${accounts.filter((a) => a.status === 'warming').length})`}
+                  {statusKey === 'risk' && `風控警告 (${accounts.filter((a) => a.status === 'risk').length})`}
+                  {statusKey === 'banned' && `已封號 (${accounts.filter((a) => a.status === 'banned').length})`}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center space-x-1.5 text-xs">
               {['all', 'active', 'warming', 'risk', 'banned'].map((statusKey) => (
                 <button
                   key={statusKey}
@@ -1661,15 +1527,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          acc.platform === 'whatsapp' ? (
-                            <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0">
-                              🟢 WS
-                            </span>
-                          ) : (
-                            <span className="bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0">
-                              ✈️ TG
-                            </span>
-                          )
+                          <span className="bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0">
+                            ✈️ TG
+                          </span>
                         )}
                         <span className="font-bold text-slate-200">{acc.alias}</span>
                       </div>
@@ -1677,9 +1537,6 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
 
                     {/* Column 2: Protocol Session Type */}
                     <td className="py-3 px-4 font-mono text-[11px]">
-                      {acc.type === 'wa_web_qr' && <span className="text-emerald-400">WA Web QR</span>}
-                      {acc.type === 'wa_business_api' && <span className="text-teal-400">WA Business API</span>}
-                      {acc.type === 'wa_cloud_api' && <span className="text-emerald-300">WA Cloud API</span>}
                       {acc.type === 'tg_pyrogram' && <span className="text-cyan-400 font-bold">TG Pyrogram (.session)</span>}
                       {acc.type === 'tg_userbot' && <span className="text-blue-400">TG Telethon Userbot</span>}
                       {acc.type === 'tg_bot_api' && <span className="text-purple-400 font-bold">TG Bot API</span>}
@@ -1699,7 +1556,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                         )}
                         {acc.twoFactorPassword && (
                           <span className="text-[10px] bg-cyan-500/10 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/25 font-mono w-max flex items-center gap-1 mt-0.5">
-                            🔒 {acc.platform === 'whatsapp' ? 'PIN锁' : '2FA密码'}: <strong className="text-amber-300">{acc.twoFactorPassword}</strong>
+                            🔒 2FA密码: <strong className="text-amber-300">{acc.twoFactorPassword}</strong>
                           </span>
                         )}
                         <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/25 font-mono w-max flex items-center gap-1 mt-0.5" title="防号商回找救援邮箱">
@@ -1720,19 +1577,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                           </span>
                           <button
                             onClick={() => openAccountLoginModal(acc)}
-                            className="text-[11px] bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 w-max shadow-md transition-all active:scale-95 cursor-pointer"
+                            className="text-[11px] bg-gradient-to-r from-cyan-400 to-blue-400 hover:from-cyan-300 hover:to-blue-300 text-slate-950 font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 w-max shadow-md transition-all active:scale-95 cursor-pointer"
                           >
-                            {acc.platform === 'whatsapp' ? (
-                              <>
-                                <QrCode className="w-3.5 h-3.5" />
-                                <span>📷 扫码/8位码登录 WA</span>
-                              </>
-                            ) : (
-                              <>
-                                <Key className="w-3.5 h-3.5" />
-                                <span>🔑 点击登录收验证码</span>
-                              </>
-                            )}
+                            <Key className="w-3.5 h-3.5" />
+                            <span>🔑 点击登录收验证码</span>
                           </button>
                         </div>
                       ) : (
@@ -1741,7 +1589,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 已在线登录
                           </span>
                           <span className="text-[10px] text-cyan-300/80 font-mono">
-                            {acc.platform === 'whatsapp' ? '⚡ WA Web Session 挂载' : '⚡ MTProto Session 挂载'}
+                            ⚡ MTProto Session 挂载
                           </span>
                         </div>
                       )}
@@ -1916,7 +1764,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                           <span className="text-[9px] text-emerald-400 font-sans font-bold px-1 bg-emerald-950/80 border border-emerald-600/50 rounded opacity-80 group-hover:opacity-100">改</span>
                         </div>
                         <span className="text-[10px] text-emerald-400/80 font-mono flex items-center gap-1">
-                          {acc.platform === 'whatsapp' ? '🇧🇷 巴西静态住宅 IP' : '🇧🇷 巴西原生代理 IP'}
+                          🇧🇷 巴西原生代理 IP
                         </span>
                         {acc.otpUrl && (
                           <a
@@ -1942,15 +1790,15 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                         <button
                           onClick={() => openAccountLoginModal(acc)}
                           className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md inline-flex items-center gap-1 cursor-pointer"
-                          title={acc.platform === 'whatsapp' ? '点击启动 WhatsApp Web 扫码/配对码登录' : '点击启动 Telegram 登录流程 (请求验证码 + 2FA密码)'}
+                          title="点击启动 Telegram 登录流程 (请求验证码 + 2FA密码)"
                         >
-                          {acc.platform === 'whatsapp' ? <QrCode className="w-3.5 h-3.5" /> : <Key className="w-3.5 h-3.5" />}
-                          {acc.platform === 'whatsapp' ? '扫码登录 WA' : '登录账号'}
+                          <Key className="w-3.5 h-3.5" />
+                          登录账号
                         </button>
                       ) : (
                         <button
                           onClick={() => handleSingleHealthCheck(acc.id)}
-                          title={acc.platform === 'whatsapp' ? '测试 WhatsApp Web Socket 连通性与 Session 状态' : '测试 Session MTProto 协议连通性'}
+                          title="测试 Session MTProto 协议连通性"
                           className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs rounded-lg transition-all border border-slate-700 inline-flex items-center gap-1 font-mono font-semibold cursor-pointer"
                         >
                           <Activity className="w-3.5 h-3.5 text-emerald-400" /> 在线诊断
@@ -2032,97 +1880,39 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
 
             {/* Modal Body with Scroll */}
             <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-              {/* Platform Tab Switcher inside Modal */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setImportPlatform('whatsapp')}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    importPlatform === 'whatsapp'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span>🟢 WhatsApp Session 憑證導入</span>
-                </button>
-                <button
-                  onClick={() => setImportPlatform('telegram')}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    importPlatform === 'telegram'
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-md'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>✈️ Telegram 協議號 (Session / API) 導入</span>
-                </button>
-              </div>
-
-              {/* Sub-type Selectors */}
-              {importPlatform === 'whatsapp' ? (
-                <div className="space-y-2">
-                  <label className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-emerald-400" /> WhatsApp Session 類型:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'wa_web_qr', label: 'WA Web QR Session' },
-                      { id: 'wa_business_api', label: 'WA Business API Key' },
-                      { id: 'wa_cloud_api', label: 'WA Multi-Device Key' }
-                    ].map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setWaSessionType(t.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border text-center transition cursor-pointer ${
-                          waSessionType === t.id
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
-                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-mono">
-                    格式說明：每行一個帳號，支援逗號或分號分隔。<br />
-                    <code className="text-emerald-400 bg-slate-950 px-2 py-0.5 rounded font-mono block mt-1 border border-slate-800">
-                      手機號碼, 帳號標籤, 代理IP (選填), 每日上限 (選填)
-                    </code>
+                            {/* Sub-type Selectors */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5 text-cyan-400" /> Telegram 協議 / 憑證格式:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'tg_pyrogram', label: 'Pyrogram (.session)' },
+                    { id: 'tg_userbot', label: 'Telethon / Userbot' },
+                    { id: 'tg_bot_api', label: 'Bot API Token' }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTgSessionType(t.id as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border text-center transition cursor-pointer ${
+                        tgSessionType === t.id
+                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[11px] text-slate-400 space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono">
+                  <p className="text-cyan-300 font-bold flex items-center gap-1">
+                    <span>⚡ 支援 TG 號商交付憑證 (未解壓/解壓好的文件夹 / ZIP包 / tdata 數據包 / 2FA 密碼文件)：</span>
                   </p>
+                  <p>1️⃣ <strong>未解压文件夹 / ZIP 压缩包:</strong> 直接把 <code className="text-cyan-400">解压好的文件夹</code> 或 <code className="text-cyan-400">.zip 包</code> 拖入即可，系统自动提取 <code className="text-cyan-400">tdata/key_datas/maps</code> 及 <code className="text-cyan-400">2FA.txt</code></p>
+                  <p>2️⃣ <strong>Pyrogram/Telethon API:</strong> <code className="text-cyan-400">API_ID, API_HASH, 手機號, Username/別名, Proxy, 上限</code></p>
+                  <p>3️⃣ <strong>Bot API Token:</strong> <code className="text-cyan-400">123456789:AAEfgh..., @BotUsername, Proxy, 上限</code></p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
-                    <Bot className="w-3.5 h-3.5 text-cyan-400" /> Telegram 協議 / 憑證格式:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'tg_pyrogram', label: 'Pyrogram (.session)' },
-                      { id: 'tg_userbot', label: 'Telethon / Userbot' },
-                      { id: 'tg_bot_api', label: 'Bot API Token' }
-                    ].map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setTgSessionType(t.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border text-center transition cursor-pointer ${
-                          tgSessionType === t.id
-                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="text-[11px] text-slate-400 space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono">
-                    <p className="text-cyan-300 font-bold flex items-center gap-1">
-                      <span>⚡ 支援 TG 號商交付憑證 (未解壓/解壓好的文件夹 / ZIP包 / tdata 數據包 / 2FA 密碼文件)：</span>
-                    </p>
-                    <p>1️⃣ <strong>未解压文件夹 / ZIP 压缩包:</strong> 直接把 <code className="text-cyan-400">解压好的文件夹</code> 或 <code className="text-cyan-400">.zip 包</code> 拖入即可，系统自动提取 <code className="text-cyan-400">tdata/key_datas/maps</code> 及 <code className="text-cyan-400">2FA.txt</code></p>
-                    <p>2️⃣ <strong>Pyrogram/Telethon API:</strong> <code className="text-cyan-400">API_ID, API_HASH, 手機號, Username/別名, Proxy, 上限</code></p>
-                    <p>3️⃣ <strong>Bot API Token:</strong> <code className="text-cyan-400">123456789:AAEfgh..., @BotUsername, Proxy, 上限</code></p>
-                  </div>
-                </div>
-              )}
+              </div>
 
               {/* File Upload Trigger Area with Drag & Drop */}
               <div
@@ -2167,11 +1957,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                 rows={3}
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
-                placeholder={
-                  importPlatform === 'whatsapp'
-                    ? `5511987654321, WS-SP-Matrix-01, 200.160.36.222:12323:14aade52b86e6:70dd653fc2, 120\n5521988776655, WS-RJ-Matrix-02, 200.160.43.132:12323:14aade52b86e6:70dd653fc2, 100`
-                    : `2891029, a3f89e27c10283b90123ef56789abcde, +5511977228001, @BrazilGo888VIP_Bot, 200.160.36.222:12323:14aade52b86e6:70dd653fc2, 500\n728192019:AAEfghij_klmNOPqrst, @BrazilGo888_PromoBot, 200.239.213.26:12323:14aade52b86e6:70dd653fc2, 1000\n5521981129002, TG-Userbot-Rio, 200.239.237.124:12323:14aade52b86e6:70dd653fc2, 300`
-                }
+                placeholder={`2891029, a3f89e27c10283b90123ef56789abcde, +5511977228001, @BrazilGo888VIP_Bot, 200.160.36.222:12323:14aade52b86e6:70dd653fc2, 500\n728192019:AAEfghij_klmNOPqrst, @BrazilGo888_PromoBot, 200.239.213.26:12323:14aade52b86e6:70dd653fc2, 1000\n5521981129002, TG-Userbot-Rio, 200.239.237.124:12323:14aade52b86e6:70dd653fc2, 300`}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 min-h-[80px]"
               />
 
@@ -2235,13 +2021,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                 </button>
                 <button
                   onClick={handleBatchImport}
-                  className={`px-5 py-2 rounded-xl text-xs font-bold text-slate-950 shadow-lg cursor-pointer ${
-                    importPlatform === 'whatsapp'
-                      ? 'bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20'
-                      : 'bg-gradient-to-r from-cyan-400 to-blue-400 hover:from-cyan-300 hover:to-blue-300 shadow-cyan-500/20'
-                  }`}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-slate-950 shadow-lg cursor-pointer bg-gradient-to-r from-cyan-400 to-blue-400 hover:from-cyan-300 hover:to-blue-300 shadow-cyan-500/20"
                 >
-                  {importPlatform === 'whatsapp' ? '確認導入 WS Session' : '確認導入 TG 協議號'}
+                  確認導入 TG 協議號
                 </button>
               </div>
             </div>
@@ -2535,262 +2317,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         </div>
       )}
 
-      {/* WhatsApp Web Multi-device QR / Pairing Code Login Modal */}
-      {waQrModalAccount && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 p-4 shrink-0 bg-slate-900/90 backdrop-blur">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setWaQrModalAccount(null)}
-                  className="mr-1 px-2.5 py-1 text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
-                  title="关闭/返回"
-                >
-                  ← 返回
-                </button>
-                <h3 className="font-bold text-slate-100 flex items-center gap-2 text-sm sm:text-base">
-                  <QrCode className="w-5 h-5 text-emerald-400" /> WhatsApp Multi-device Web Session 授权向导
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWaQrModalAccount(null)}
-                className="text-slate-400 hover:text-slate-200 font-bold p-1 text-lg leading-none cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-              {/* Target Account Overview */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-                <div className="text-xs text-slate-400">登录账号 / 绑定号码：</div>
-                <div className="text-sm font-bold text-emerald-300 font-mono flex items-center justify-between">
-                  <span>{waQrModalAccount.phone}</span>
-                  <span className="text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/25">
-                    {waQrModalAccount.alias}
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  🇧🇷 静态住宅 IP: {waQrModalAccount.proxy || '200.160.36.222:12323'}
-                </div>
-              </div>
-
-              {/* Step Mode Switcher */}
-              <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl text-center text-xs font-bold border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setWaLoginMethod('qr')}
-                  className={`py-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold ${
-                    waLoginMethod === 'qr'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4" /> 📷 扫码登录 (QR Scan)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWaLoginMethod('pairing_code')}
-                  className={`py-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold ${
-                    waLoginMethod === 'pairing_code'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" /> 🔢 8位码配对 (Pairing Code)
-                </button>
-              </div>
-
-              {/* Connecting loading state */}
-              {isWaConnecting ? (
-                <div className="py-10 text-center space-y-3">
-                  <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-                  <div className="text-sm font-bold text-emerald-300">正在与 WhatsApp Web Socket (Baileys v6.5) 建立 Web-Crypto 握手...</div>
-                  <div className="text-xs text-slate-400 font-mono">
-                    [WA-Web.js] Injecting Session Token & Pairing Encryption Payload...
-                  </div>
-                </div>
-              ) : waQrSuccess ? (
-                /* Success State */
-                <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-2xl space-y-3 text-center my-2">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-                  <div className="text-base font-bold text-emerald-300">
-                    🎉 WhatsApp Web Session 挂载成功！
-                  </div>
-                  <div className="text-xs text-slate-300 leading-relaxed font-mono">
-                    账号 <span className="text-emerald-300 font-bold">{waQrModalAccount.phone}</span> 已成功完成 Web-Socket 通道授权，Session 凭证令牌与通讯密匙已保存至专属 Session 池，保持 24 小时在线就绪！
-                  </div>
-                  <button
-                    onClick={() => setWaQrModalAccount(null)}
-                    className="mt-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs shadow-lg cursor-pointer"
-                  >
-                    完成并关闭
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Mode 1: QR Code Scan */}
-                  {waLoginMethod === 'qr' && (
-                    <div className="space-y-4 text-center">
-                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 inline-block relative shadow-2xl mx-auto">
-                        {/* Dynamic Rendered QR Graphic with WhatsApp Logo in center */}
-                        <div className="w-48 h-48 bg-white p-3 rounded-xl flex items-center justify-center relative overflow-hidden mx-auto shadow-inner">
-                          {/* Simulated QR Pattern Background */}
-                          <div className="grid grid-cols-7 gap-1 w-full h-full opacity-90">
-                            {Array.from({ length: 49 }).map((_, i) => (
-                              <div
-                                key={i}
-                                className={`rounded-xs ${
-                                  (i % 2 === 0 || i % 7 === 0 || i % 3 === 0) ? 'bg-slate-950' : 'bg-transparent'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          {/* Center WhatsApp Icon Badge */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-10 h-10 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                              <Smartphone className="w-5 h-5 fill-white" />
-                            </div>
-                          </div>
-                          {/* Laser Scanning Line Animation */}
-                          <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent top-0 animate-[bounce_2s_infinite]" />
-                        </div>
-
-                        <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                            WA Web Token 实时有效
-                          </span>
-                          <span className="text-amber-400 font-bold">⏱️ 30s 动态刷新</span>
-                        </div>
-                      </div>
-
-                      {/* Instructions */}
-                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-left text-xs text-slate-300 space-y-1.5 leading-relaxed">
-                        <div className="font-bold text-emerald-300 flex items-center gap-1">
-                          📱 扫码连接 3 步指引：
-                        </div>
-                        <ol className="list-decimal list-inside text-slate-300 space-y-1 text-[11px]">
-                          <li>在手机上打开 <strong>WhatsApp App</strong></li>
-                          <li>进入 <strong>设置 (Settings) / 菜单 ➔ 已连接的设备 (Linked Devices)</strong></li>
-                          <li>点击 <strong>关联设备 (Link a Device)</strong>，对准上方二维码进行扫描</li>
-                        </ol>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center justify-between gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const p1 = Math.floor(1000 + Math.random() * 9000).toString();
-                            const p2 = Math.floor(1000 + Math.random() * 9000).toString();
-                            setWaPairingCode(`${p1}-${p2}`);
-                          }}
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" /> 刷新二维码
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsWaConnecting(true);
-                            setTimeout(() => {
-                              setIsWaConnecting(false);
-                              setWaQrSuccess(true);
-                              setAccounts(prev => prev.map(a => a.id === waQrModalAccount.id ? {
-                                ...a,
-                                isLoggedIn: true,
-                                status: 'active',
-                                lastActive: '刚刚 (WA Web Session在线)'
-                              } : a));
-                            }, 1500);
-                          }}
-                          className="px-5 py-2 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5 active:scale-95"
-                        >
-                          <CheckCircle2 className="w-4 h-4" /> 📱 模拟手机扫码授权成功
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mode 2: Pairing Code */}
-                  {waLoginMethod === 'pairing_code' && (
-                    <div className="space-y-4">
-                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center space-y-3">
-                        <div className="text-xs text-slate-400 font-medium">
-                          手机 WhatsApp 专属 8 位配对验证码：
-                        </div>
-                        <div className="text-2xl sm:text-3xl font-black font-mono tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 py-3 rounded-xl shadow-inner select-all">
-                          {waPairingCode}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(waPairingCode);
-                            setCopiedPairingCode(true);
-                            setTimeout(() => setCopiedPairingCode(false), 2000);
-                          }}
-                          className="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          {copiedPairingCode ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-400" /> 已复制 8 位配对码
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" /> 复制 8 位配对码
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Instructions for Pairing Code */}
-                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-2 leading-relaxed">
-                        <div className="font-bold text-emerald-300 flex items-center gap-1">
-                          🔢 免扫码！手机填写 8 位配对码步骤：
-                        </div>
-                        <ol className="list-decimal list-inside text-slate-300 space-y-1.5 text-[11px]">
-                          <li>打开手机 <strong>WhatsApp App</strong> ➔ 菜单 ➔ <strong>已连接的设备 (Linked Devices)</strong></li>
-                          <li>点击 <strong>关联设备 (Link a Device)</strong></li>
-                          <li>点击屏幕底部的 <strong className="text-cyan-300">"用电话号码关联 (Link with phone number instead)"</strong></li>
-                          <li>输入上面的 8 位配对码：<strong className="text-emerald-300 font-mono text-xs">{waPairingCode}</strong> 确认关联</li>
-                        </ol>
-                      </div>
-
-                      <div className="flex justify-end pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsWaConnecting(true);
-                            setTimeout(() => {
-                              setIsWaConnecting(false);
-                              setWaQrSuccess(true);
-                              setAccounts(prev => prev.map(a => a.id === waQrModalAccount.id ? {
-                                ...a,
-                                isLoggedIn: true,
-                                status: 'active',
-                                lastActive: '刚刚 (WA Web Session在线)'
-                              } : a));
-                            }, 1500);
-                          }}
-                          className="px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5 active:scale-95"
-                        >
-                          <Zap className="w-4 h-4" /> 🚀 确认手机已完成 8 位码关联
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* WhatsApp 防抢号 / 防止号商登回安全增强向导 */}
+      {/* Telegram 防抢号 / 防止号商登回安全增强向导 */}
       {securityModalAccount && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden animate-fadeIn">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -2806,7 +2333,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                   ← 返回
                 </button>
                 <h3 className="font-bold text-slate-100 flex items-center gap-2 text-sm sm:text-base">
-                  <ShieldCheck className="w-5 h-5 text-amber-400" /> {securityModalAccount.platform === 'whatsapp' ? 'WhatsApp' : 'Telegram'} 防抢号与二次切号保护向导
+                  <ShieldCheck className="w-5 h-5 text-amber-400" /> Telegram 防抢号与二次切号保护向导
                 </h3>
               </div>
               <button
@@ -2823,7 +2350,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
                 <div className="text-xs text-slate-400">防护目标账号：</div>
                 <div className="text-sm font-bold text-amber-300 font-mono flex items-center justify-between">
-                  <span>{securityModalAccount.phone} ({securityModalAccount.platform === 'whatsapp' ? 'WhatsApp' : 'Telegram'})</span>
+                  <span>{securityModalAccount.phone} (Telegram)</span>
                   <span className="text-[11px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/25">
                     {securityModalAccount.alias}
                   </span>
@@ -2848,7 +2375,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                     <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">必做防抢</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-normal">
-                    防止号商在后台再次接收手机短信验证码完成切号。{securityModalAccount.platform === 'whatsapp' ? 'WS PIN 码设定为 548508' : 'TG 2FA 密码设定为 548508'}！
+                    防止号商在后台再次接收手机短信验证码完成切号。TG 2FA 密码设定为 548508！
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <input
@@ -3377,7 +2904,7 @@ if __name__ == "__main__":
               <div className="flex items-center gap-2">
                 <Smile className="w-5 h-5 text-pink-400" />
                 <h3 className="font-bold text-slate-100 text-sm sm:text-base">
-                  修改与包装账号资料 ({editProfileModalAccount.platform === 'whatsapp' ? 'WhatsApp' : 'Telegram'})
+                  修改与包装账号资料 (Telegram)
                 </h3>
               </div>
               <button

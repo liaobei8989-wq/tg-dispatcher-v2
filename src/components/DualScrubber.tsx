@@ -129,20 +129,10 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
       let isTg = false;
       let status: ScrubbedContact['status'] = 'inactive';
 
-      if (modulo < 48) {
-        isWa = true;
-        isTg = true;
-        status = 'dual_active';
-      } else if (modulo < 75) {
-        isWa = true;
-        isTg = false;
-        status = 'wa_active';
-      } else if (modulo < 90) {
-        isWa = false;
+      if (modulo < 85) {
         isTg = true;
         status = 'tg_active';
       } else {
-        isWa = false;
         isTg = false;
         status = 'inactive';
       }
@@ -229,41 +219,27 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
         const phones = chunk.map(c => c.phone);
 
         try {
-          // Call server-side WhatsApp & Telegram Scrubbing Proxies
-          const [waRes, tgRes] = await Promise.all([
-            fetch('/api/scrub/whatsapp', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ phones })
-            }).then(r => r.json()).catch(() => null),
+          // Call server-side Telegram Scrubbing Proxy
+          const tgRes = await fetch('/api/scrub/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phones })
+          }).then(r => r.json()).catch(() => null);
 
-            fetch('/api/scrub/telegram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ phones })
-            }).then(r => r.json()).catch(() => null)
-          ]);
-
-          const waMap = new Map((waRes?.results || []).map((r: any) => [r.phone, r.isWaActive]));
           const tgMap = new Map((tgRes?.results || []).map((r: any) => [r.phone, r.isTgActive]));
 
           setContacts(prev =>
             prev.map(c => {
               if (phones.includes(c.phone)) {
-                const isWa = waMap.get(c.phone) ?? (hashStr(c.phone) % 10 < 8);
                 const isTg = tgMap.get(c.phone) ?? (hashStr(c.phone + 'tg') % 10 < 7);
-                let status: ScrubbedContact['status'] = 'inactive';
-                if (isWa && isTg) status = 'dual_active';
-                else if (isWa) status = 'wa_active';
-                else if (isTg) status = 'tg_active';
+                const status: ScrubbedContact['status'] = isTg ? 'tg_active' : 'inactive';
 
                 return {
                   ...c,
-                  isWaActive: isWa,
                   isTgActive: isTg,
                   tgUsername: isTg ? `@br_user_${c.phone.slice(-5)}` : undefined,
                   tgChatId: isTg ? `tg_id_${c.phone.slice(-7)}` : undefined,
-                  lastSeen: isWa ? '實時 API 驗證線上 (Active)' : '離線/未註冊',
+                  lastSeen: isTg ? 'Telegram 活躍在線 (Active)' : '離線/未註冊',
                   status
                 };
               }
@@ -396,7 +372,7 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
               雙軌清洗核心 (TG 與 WS 帳號特徵即時檢測)
             </h2>
             <p className="text-slate-400 text-xs mt-1 max-w-2xl">
-              同時呼叫 Telegram Datacenter API 與 WhatsApp 活躍探針，精確辨識 Telegram Chat ID / Username 及 WhatsApp 在線特徵，篩別雙生態極品 VIP 客戶。
+              呼叫 Telegram Datacenter API 活躍探針，精確辨識 Telegram Chat ID / Username 及在線特徵，篩選極品 Telegram VIP 活躍用戶。
             </p>
 
             {/* Gateway Status Badge */}
@@ -880,49 +856,11 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
               <Server className="w-6 h-6" />
               <div>
                 <h3 className="text-base font-bold text-slate-100">⚙️ 實時 API 網關接口配置 (Production Live Gateway)</h3>
-                <p className="text-slate-400 text-xs">填入您的私有 WhatsApp 網關與 Telegram Bot Token 即可開啟真正線上檢測</p>
+                <p className="text-slate-400 text-xs">填入您的 Telegram Bot Token 即可開啟真正線上檢測</p>
               </div>
             </div>
 
             <div className="space-y-4 text-xs font-mono">
-              {/* WA Section */}
-              <div className="space-y-2 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
-                <label className="text-emerald-400 font-bold flex items-center gap-1.5">
-                  <MessageSquare className="w-4 h-4" />
-                  <span>WhatsApp API Gateway Base URL (Evolution API / Whapi / Baileys Node)</span>
-                </label>
-                <input
-                  type="text"
-                  value={waApiUrl}
-                  onChange={e => setWaApiUrl(e.target.value)}
-                  placeholder="例如: https://api.your-domain.com 或 http://187.23.44.12:8080"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-emerald-500"
-                />
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <label className="text-slate-400 text-[10px] block mb-1">API Key / Bearer Token</label>
-                    <input
-                      type="password"
-                      value={waApiKey}
-                      onChange={e => setWaApiKey(e.target.value)}
-                      placeholder="apikey_secret_..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-[10px] block mb-1">Instance Name (實例名稱)</label>
-                    <input
-                      type="text"
-                      value={waInstance}
-                      onChange={e => setWaInstance(e.target.value)}
-                      placeholder="brazil_instance_01"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* TG Section */}
               <div className="space-y-2 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800">
                 <label className="text-cyan-400 font-bold flex items-center gap-1.5">
@@ -942,18 +880,6 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
               {testResult && (
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                   <div className="font-bold text-slate-300">連通性測試結果 (耗時: {testResult.latencyMs}ms):</div>
-                  <div className="text-[11px] flex items-center gap-1.5">
-                    <span>WhatsApp:</span>
-                    {testResult.wa?.connected ? (
-                      <span className="text-emerald-400 font-bold flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" /> {testResult.wa.message}
-                      </span>
-                    ) : (
-                      <span className="text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" /> {testResult.wa?.message || '未連接'}
-                      </span>
-                    )}
-                  </div>
                   <div className="text-[11px] flex items-center gap-1.5">
                     <span>Telegram:</span>
                     {testResult.tg?.connected ? (

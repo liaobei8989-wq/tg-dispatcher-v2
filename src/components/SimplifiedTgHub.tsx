@@ -166,7 +166,7 @@ const BRAZILIAN_FEMALE_NAMES = [
 const BRAZILIAN_BIOS = [
   'Seja bem-vindo! 🇧🇷 | Fortune Tiger VIP',
   'Oi amor! Vem jogar com o melhor bot 🐯🔥',
-  'Atendimento 24h WhatsApp & TG | Link na bio',
+  'Atendimento 24h Suporte TG | Link na bio',
   'Bônus exclusivo R$ 50,00 cadastro rápido! 🚀',
   'Sinais 98.4% de assertividade ao vivo 📊',
   'Plataforma oficial 100% pagando via PIX 💚'
@@ -1232,7 +1232,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setAccounts(prev => {
       const map = new Map<string, AccountSession>();
       prev.forEach(acc => {
-        if (acc.platform === 'whatsapp' || acc.type?.startsWith('wa_')) return;
+        // Telegram account validation
         const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
         if (clean && clean.length >= 8 && !obsoletePhones.has(clean)) {
           if (!map.has(clean)) {

@@ -1,11 +1,8 @@
 export type AccountStatus = 'active' | 'warming' | 'risk' | 'banned' | 'offline';
 
-export type PlatformType = 'whatsapp' | 'telegram' | 'dual';
+export type PlatformType = 'telegram';
 
 export type SessionType = 
-  | 'wa_web_qr' 
-  | 'wa_business_api' 
-  | 'wa_cloud_api' 
   | 'tg_userbot' 
   | 'tg_bot_api' 
   | 'tg_pyrogram';
@@ -31,7 +28,6 @@ export interface AccountSession {
   tgApiId?: string;
   tgApiHash?: string;
   tgSessionString?: string;
-  waChannelString?: string; // 6-Key WhatsApp Mobile Channel string
   otpUrl?: string; // e.g. https://tgbotchecker.com/GetHTML?uuid=...
   twoFactorPassword?: string; // e.g. qq1122
   recoveryEmail?: string; // e.g. liaobei8989@outiook.com
@@ -68,7 +64,6 @@ export interface AntiBanSettings {
   enableUrlRotator: boolean;
   urls: string[];
   tgDispatchRateLimit: number; // max per minute
-  waDispatchRateLimit: number; // max per minute
   // Early warning fuse protection settings
   enableEarlyWarningFuse: boolean; // default true
   warningThresholdPercent: number; // default 80 (e.g., at 80% of daily limit, auto pause account for today)
@@ -101,7 +96,7 @@ export type LogStatus = 'success' | 'failed' | 'banned' | 'rate_limited' | 'queu
 export interface CampaignLog {
   id: string;
   campaignId: string;
-  platform: 'whatsapp' | 'telegram';
+  platform: 'telegram';
   accountId: string;
   accountPhone: string;
   targetPhone: string;
@@ -119,12 +114,11 @@ export interface ScrubbedContact {
   id: string;
   phone: string;
   formattedPhone: string;
-  isWaActive: boolean;
   isTgActive: boolean;
   tgUsername?: string;
   tgChatId?: string;
   lastSeen?: string;
-  status: 'unverified' | 'scrubbing' | 'wa_active' | 'tg_active' | 'dual_active' | 'inactive';
+  status: 'unverified' | 'scrubbing' | 'tg_active' | 'inactive';
   avatarUrl?: string;
 }
 
@@ -134,7 +128,6 @@ export interface ImportedBatchFile {
   fileSizeKb: number;
   totalLines: number;
   validPhoneCount: number;
-  scrubbedWaCount: number;
   scrubbedTgCount: number;
   uploadedAt: string;
 }

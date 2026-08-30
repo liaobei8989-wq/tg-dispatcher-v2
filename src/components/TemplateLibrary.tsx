@@ -379,7 +379,7 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         >
                           <option value="dual">⚡ 雙軌</option>
                           <option value="telegram">✈️ TG 限定</option>
-                          <option value="whatsapp">🟢 WS 限定</option>
+                          
                         </select>
                       </div>
 
@@ -449,14 +449,8 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         {tpl.name}
                       </span>
                       <div className="flex items-center space-x-1.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
-                          tpl.platformTarget === 'telegram'
-                            ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                            : tpl.platformTarget === 'whatsapp'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                        }`}>
-                          {tpl.platformTarget === 'telegram' ? 'TG' : tpl.platformTarget === 'whatsapp' ? 'WS' : '雙軌'}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-mono border bg-cyan-500/10 text-cyan-400 border-cyan-500/30">
+                          ✈️ TG 矩阵专用
                         </span>
 
                         {/* Inline Edit Button */}
@@ -638,7 +632,7 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                 >
                   <option value="dual">⚡ TG 與 WS 雙生態同時矩陣群發</option>
                   <option value="telegram">✈️ Telegram 頻道 / ChatID 獨家</option>
-                  <option value="whatsapp">🟢 WhatsApp 多號 Session 獨家</option>
+                  
                 </select>
               </div>
             </div>
@@ -726,7 +720,7 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                   <div className="text-xs text-slate-300 flex-1">
                     <span className="font-semibold block text-slate-100">已綁定宣傳媒體附件</span>
                     <span className="text-slate-400 text-[11px] block mt-0.5">
-                      類型: {editingMediaType.toUpperCase()} | 將在 Telegram 與 WhatsApp 派發時作為頂部圖文卡片
+                      類型: {editingMediaType.toUpperCase()} | 將在 Telegram 矩陣派發時作為頂部圖文卡片
                     </span>
                   </div>
                   <button
@@ -847,7 +841,7 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                   >
                     <option value="dual">⚡ TG + WS 雙軌</option>
                     <option value="telegram">✈️ Telegram 限定</option>
-                    <option value="whatsapp">🟢 WhatsApp 限定</option>
+                    
                   </select>
                 </div>
               </div>

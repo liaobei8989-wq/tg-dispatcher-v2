@@ -10,7 +10,6 @@ import { CampaignConsole } from './components/CampaignConsole';
 import { LogViewer } from './components/LogViewer';
 import { PythonCodeHub } from './components/PythonCodeHub';
 import { CodexTgSimulator } from './components/CodexTgSimulator';
-import { WhatsAppCloudConsole } from './components/WhatsAppCloudConsole';
 import { BatchHealthModal } from './components/BatchHealthModal';
 import { SimplifiedTgHub } from './components/SimplifiedTgHub';
 import { LeadScraperHub } from './components/LeadScraperHub';
@@ -39,7 +38,7 @@ export default function App() {
           const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
 
           parsed.forEach((acc: AccountSession, idx: number) => {
-            if (acc.platform === 'whatsapp' || acc.type?.startsWith('wa_')) return;
+            // Telegram only verification
             const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
             if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone)) return;
 
@@ -131,7 +130,7 @@ export default function App() {
       if (idbAccounts && idbAccounts.length > 0) {
         const uniqueMap = new Map<string, AccountSession>();
         idbAccounts.forEach((acc: AccountSession, idx: number) => {
-          if (acc.platform === 'whatsapp' || acc.type?.startsWith('wa_')) return;
+          // Telegram only verification
           const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
           if (!cleanPhone || cleanPhone.length < 8) return;
 
@@ -191,7 +190,6 @@ export default function App() {
     enableUrlRotator: true,
     enableGaussianJitter: true,
     tgDispatchRateLimit: 12,
-    waDispatchRateLimit: 15,
     enableEarlyWarningFuse: true,
     warningThresholdPercent: 80,
     autoResumeNextDay: true,
@@ -422,28 +420,6 @@ export default function App() {
             isCampaignRunning={isCampaignRunning}
             setIsCampaignRunning={setIsCampaignRunning}
             scrubbedContacts={scrubbedContacts}
-          />
-        )}
-
-        {activeTab === 'whatsapp_cloud' && (
-          <WhatsAppCloudConsole
-            scrubbedContacts={scrubbedContacts}
-            onSentMessage={(count) => {
-              const currentLogCount = logs.length;
-              const newLog: CampaignLog = {
-                id: (currentLogCount + 1).toString(),
-                campaignId: 'cmp-cloud-api',
-                accountId: 'acc-wa-cloud',
-                accountPhone: '1288649794326030 (Meta Official)',
-                targetPhone: '+55 71 99914-9956',
-                platform: 'whatsapp',
-                messageText: 'Meta WhatsApp Official Message Dispatched via Graph API v20.0',
-                status: 'success',
-                delaySec: 0,
-                timestamp: new Date().toLocaleTimeString()
-              };
-              setLogs(prev => [newLog, ...prev]);
-            }}
           />
         )}
 

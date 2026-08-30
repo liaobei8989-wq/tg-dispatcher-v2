@@ -46,7 +46,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, setLogs, setActiveTa
 
     const headers = ['Platform', 'TargetPhone', 'SenderAccount', 'ErrorReason', 'Timestamp'];
     const rows = failedLogs.map((l) => [
-      l.platform || 'whatsapp',
+      l.platform || 'telegram',
       l.targetPhone,
       l.accountPhone,
       l.errorMessage || 'Unknown Error',
@@ -65,7 +65,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, setLogs, setActiveTa
 
     const headers = ['Platform', 'TargetPhone', 'SenderAccount', 'Status', 'DelaySec', 'MessageText', 'Timestamp'];
     const rows = logs.map((l) => [
-      l.platform || 'whatsapp',
+      l.platform || 'telegram',
       l.targetPhone,
       l.accountPhone,
       l.status,
@@ -196,7 +196,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, setLogs, setActiveTa
                           ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
                           : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       }`}>
-                        {log.platform === 'telegram' ? '✈️ Telegram' : '🟢 WhatsApp'}
+                        '✈️ Telegram'
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-100">

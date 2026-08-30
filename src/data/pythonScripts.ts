@@ -2,424 +2,6 @@ import { PythonScriptFile } from '../types';
 
 export const PYTHON_SCRIPTS: PythonScriptFile[] = [
   {
-    filename: 'wa_mobile_channel_runner.py',
-    title: '📱 WhatsApp 原生 Mobile Channel 6 项协议号免扫码直发引擎 (Python)',
-    description: '专门支持号商 6 项 Mobile Channel 协议号（安卓原生 Socket 协议通道）。已集成 5 组巴西独享 SOCKS5/HTTP 代理，保障终端与后台 100% 同 IP 登录防封！',
-    language: 'python',
-    code: `import os
-import sys
-import json
-import base64
-import socket
-import ssl
-import time
-
-# ==============================================================================
-# 🇧🇷 5 组巴西独享代理 IP 绑定制（支持 SOCKS5 / HTTP 格式: IP:Port:User:Pass）
-# ==============================================================================
-BRAZIL_PROXIES = [
-    {"ip": "200.160.36.222",  "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西独享-代理1号 (200.160.36.222)"},
-    {"ip": "200.239.237.124", "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西独享-代理2号 (200.239.237.124)"},
-    {"ip": "200.160.43.132",  "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西独享-代理3号 (200.160.43.132)"},
-    {"ip": "200.160.38.29",   "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西独享-代理4号 (200.160.38.29)"},
-    {"ip": "200.239.213.26",  "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西独享-代理5号 (200.239.213.26)"},
-    {"ip": "144.225.30.86",   "port": 12323, "user": "14aade52b86e6", "pass": "70dd653fc2", "tag": "巴西备用-代理6号 (144.225.30.86)"}
-]
-
-# ==============================================================================
-# 📱 WhatsApp 6 项 Mobile Channel 协议号专有直连配置
-# 格式：[手机号, Noise公钥, Noise私钥, Identity公钥, Identity私钥, AdvSecretKey]
-# ==============================================================================
-RAW_CHANNELS = [
-    "558191659254,F3/nSvSxiQCnSjNfjo8rlBY4dTZj1qC954STALVnPzc=,UMwbxlnNd0UvLJuXNRay151CDpiw46DNfHV2a+cO20c=,dIBDCmyhlAMCSBAz9/MP7KwWo2nhUMyvB/unb5eVPEw=,eCU4mFLcUwNX1tj2thSI6Snjk6gt2XWIdGUwi3V4AUA=,NTU4MTkxNjU5MjU0I6YZy5AoIffk/cnZDOZoFKx0Ghis",
-    "558193814920,9SdRm9HiLq32bHfbcyqOKXbox87ecBbTzUbpuTPVSZV2c=,INHxuyQfHpNWBI+MCeqLVjwzeBmykAxDUVSa5ICIOU8=,BRg7xxRNPwsXLjz+Yff3JqVboy5Y7/C+eZJVwKTd1hM=,UGUsG/VjCsSzFCkr2fziKEdygv6shM5zL/6GFXhSGHU=,NTU4MTkzODE0OTIwI7nRT0VuPSddL2kneOeUhilpEyAz"
-]
-
-def parse_channel_string(raw_str):
-    parts = [p.strip() for p in raw_str.split(',')]
-    if len(parts) < 6:
-        return None
-    return {
-        "phone": parts[0],
-        "noise_pub": parts[1],
-        "noise_priv": parts[2],
-        "identity_pub": parts[3],
-        "identity_priv": parts[4],
-        "adv_secret": parts[5]
-    }
-
-def export_for_channel_tools():
-    """导出为常见 Mobile Channel 云控/控制台软件 (如 WhatsBox / Protocol Box) 兼容的 .channel / JSON 格式"""
-    os.makedirs("channels_output", exist_ok=True)
-    for idx, raw in enumerate(RAW_CHANNELS, 1):
-        ch = parse_channel_string(raw)
-        if not ch:
-            continue
-        
-        proxy_info = BRAZIL_PROXIES[(idx - 1) % len(BRAZIL_PROXIES)]
-        
-        channel_data = {
-            "version": "v2.24.1.75",
-            "platform": "ANDROID",
-            "phone_number": ch["phone"],
-            "bound_proxy": f"http://{proxy_info['user']}:{proxy_info['pass']}@{proxy_info['ip']}:{proxy_info['port']}",
-            "noise_keys": {
-                "public": ch["noise_pub"],
-                "private": ch["noise_priv"]
-            },
-            "identity_keys": {
-                "public": ch["identity_pub"],
-                "private": ch["identity_priv"]
-            },
-            "adv_secret_key": ch["adv_secret"],
-            "registered": True,
-            "status": "ACTIVE_SESSION"
-        }
-        
-        file_path = os.path.join("channels_output", f"{ch['phone']}.channel")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(channel_data, f, indent=2)
-        print(f"✅ [成功生成 Mobile Channel 导出会话] {file_path} (已绑定独享 IP {proxy_info['ip']})")
-
-def run_mobile_channel_session(account_index):
-    if account_index > len(RAW_CHANNELS):
-        print(f"❌ 账号序号 {account_index} 超出范围 (当前共有 {len(RAW_CHANNELS)} 个账号)", flush=True)
-        return
-        
-    raw = RAW_CHANNELS[account_index - 1]
-    ch = parse_channel_string(raw)
-    proxy = BRAZIL_PROXIES[(account_index - 1) % len(BRAZIL_PROXIES)]
-    
-    print("\n" + "="*75, flush=True)
-    print(f"🚀 启动 WhatsApp 安卓 Mobile Channel 协议号直连通道 [{ch['phone']}]", flush=True)
-    print("="*75, flush=True)
-    print(f"📱 目标手机号: +{ch['phone']}", flush=True)
-    print(f"🇧🇷 绑定的独享代理 IP: {proxy['ip']}:{proxy['port']} ({proxy['tag']})", flush=True)
-    print(f"🔑 Noise 握手公钥: {ch['noise_pub'][:15]}...", flush=True)
-    print(f"🔐 Identity 凭证: {ch['identity_pub'][:15]}...", flush=True)
-    print(f"🛡️  AdvSecret 加密管道: {ch['adv_secret'][:15]}...", flush=True)
-    print("----------------------------------------------------------------------", flush=True)
-    print(f"🌐 正在通过代理 IP [{proxy['ip']}] 连接 g.whatsapp.net:443 / 5222 端口...", flush=True)
-    time.sleep(1)
-    print(f"⚡ [TCP Noise Handshake via Proxy] 代理通道建立成功！出口 IP: {proxy['ip']}", flush=True)
-    print(f"✅ STATUS: ONLINE (免扫码直连成功！终端与后台出口 IP 已保持一致 200.x.x.x)", flush=True)
-    print("----------------------------------------------------------------------", flush=True)
-    print("💡 当前账号已通过巴西独享 IP 成功连通，可在云控/群发系统安全直发。", flush=True)
-
-if __name__ == "__main__":
-    print("==========================================================================", flush=True)
-    print("📱 WhatsApp 6 项 Mobile Channel 协议号 - Python 专有引擎 (巴西代理强化版)", flush=True)
-    print("==========================================================================", flush=True)
-    export_for_channel_tools()
-    
-    acc_id = 1
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        acc_id = int(sys.argv[1])
-        
-    run_mobile_channel_session(acc_id)
-`,
-  },
-  {
-    filename: 'import_6field_channels.js',
-    title: '🔑 号商 6 项协议号 (6-Field Channel Session) 一键无扫码导入脚本',
-    description: '无需手机接码与扫码！直接将号商导出的 6 项 Channel 协议号数据转存为 Baileys Session 目录 (auth_info_account_1 / account_2)，直接开起免扫码极速群发。',
-    language: 'javascript',
-    code: `/**
- * ==================================================================================
- * 🔑 WhatsApp 号商 6 项 Channel 协议号凭证 -> Baileys 免扫码 Session 自动转换脚本
- * ==================================================================================
- * 适用对象：从号商买到的 WhatsApp 协议号（通常为 6 项 CSV 导出格式，含手机号、Noise密钥、Identity密钥等）。
- * 使用方法：
- *   1. 将号商给你的 6 项字符串粘贴到下方的 RAW_CHANNELS 数组中
- *   2. 在命令行运行：node import_6field_channels.js
- *   3. 转换成功后，直接运行：node wa_baileys_protocol_mass_dm.js 1 (运行账号1) 或 2 (运行账号2)
- * ==================================================================================
- */
-
-const fs = require('fs');
-const path = require('path');
-
-// 📋 粘贴号商给你的 6 项协议号凭证 (每行一个账号)
-const RAW_CHANNELS = [
-  "558191659254,F3/nSvSxiQCnSjNfjo8rlBY4dTZj1qC954STALVnPzc=,UMwbxlnNd0UvLJuXNRay151CDpiw46DNfHV2a+cO20c=,dIBDCmyhlAMCSBAz9/MP7KwWo2nhUMyvB/unb5eVPEw=,eCU4mFLcUwNX1tj2thSI6Snjk6gt2XWIdGUwi3V4AUA=,NTU4MTkxNjU5MjU0I6YZy5AoIffk/cnZDOZoFKx0Ghis",
-  "558193814920,9SdRm9HiLq32bHfbcyqOKXbox87ecBbTzUbpuTPVSZV2c=,INHxuyQfHpNWBI+MCeqLVjwzeBmykAxDUVSa5ICIOU8=,BRg7xxRNPwsXLjz+Yff3JqVboy5Y7/C+eZJVwKTd1hM=,UGUsG/VjCsSzFCkr2fziKEdygv6shM5zL/6GFXhSGHU=,NTU4MTkzODE0OTIwI7nRT0VuPSddL2kneOeUhilpEyAz"
-];
-
-function convert6FieldToBaileysCreds(line, index) {
-  const parts = line.split(',').map(s => s.trim());
-  if (parts.length < 6) {
-    console.log(\`⚠️ 第 \${index + 1} 行凭证格式不规范，需包含 6 项由逗号分隔的数据\`);
-    return null;
-  }
-
-  const [phone, noisePub, noisePriv, identityPub, identityPriv, advSecret] = parts;
-  const cleanPhone = phone.replace(/\\D/g, '');
-  const accountId = \`account_\${index + 1}\`;
-  const targetDir = path.join(process.cwd(), \`auth_info_\${accountId}\`);
-
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
-
-  // 构建 Baileys 规范标准的 creds.json (必须包含 registered: true)
-  const creds = {
-    registered: true,
-    noiseKey: {
-      private: { type: 'Buffer', data: Array.from(Buffer.from(noisePriv, 'base64')) },
-      public: { type: 'Buffer', data: Array.from(Buffer.from(noisePub, 'base64')) }
-    },
-    pairingEphemeralKeyPair: {
-      private: { type: 'Buffer', data: Array.from(Buffer.from(noisePriv, 'base64')) },
-      public: { type: 'Buffer', data: Array.from(Buffer.from(noisePub, 'base64')) }
-    },
-    signedIdentityKey: {
-      private: { type: 'Buffer', data: Array.from(Buffer.from(identityPriv, 'base64')) },
-      public: { type: 'Buffer', data: Array.from(Buffer.from(identityPub, 'base64')) }
-    },
-    signedPreKey: {
-      keyPair: {
-        private: { type: 'Buffer', data: Array.from(Buffer.from(identityPriv, 'base64')) },
-        public: { type: 'Buffer', data: Array.from(Buffer.from(identityPub, 'base64')) }
-      },
-      keyId: 1,
-      signature: { type: 'Buffer', data: Array.from(Buffer.from(noisePub, 'base64')) }
-    },
-    registrationId: Math.floor(Math.random() * 20000) + 1000,
-    advSecretKey: advSecret,
-    processedHistoryMessages: [],
-    nextPreKeyId: 2,
-    firstUnuploadedPreKeyId: 2,
-    accountSyncCounter: 0,
-    accountSettings: { unarchiveChats: false },
-    deviceId: 'BAILEYS_DEVICE_' + cleanPhone.slice(-4),
-    phoneSignature: '',
-    me: {
-      id: \`\${cleanPhone}@s.whatsapp.net\`,
-      name: \`WA_\${cleanPhone}\`
-    },
-    account: null,
-    signalIdentities: [],
-    platform: 'smba',
-    lastAccountSyncTimestamp: 0,
-    myAppStateKeyId: 'AAAAAA=='
-  };
-
-  const filePath = path.join(targetDir, 'creds.json');
-  fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf-8');
-
-  console.log(\`✅ [导入成功] 账号 \${accountId} (手机号: +\${cleanPhone}) 已转存至 ./\${path.basename(targetDir)}/creds.json\`);
-  return { accountId, phone: cleanPhone, targetDir };
-}
-
-console.log("==========================================================================");
-console.log("⚡ WhatsApp 号商 6 项 Channel 协议号 -> 免扫码 Session 转换引擎");
-console.log("==========================================================================\\n");
-
-const results = [];
-RAW_CHANNELS.forEach((line, i) => {
-  const res = convert6FieldToBaileysCreds(line, i);
-  if (res) results.push(res);
-});
-
-console.log("\\n🎉 转换全部完成！直接在 PowerShell 中运行以下命令启动强发引擎：");
-results.forEach(r => {
-  console.log(\`   👉 启动账号 +\${r.phone}:  node wa_baileys_protocol_mass_dm.js \${r.accountId.replace('account_', '')}\`);
-});
-console.log("==========================================================================\\n");`
-  },
-  {
-    filename: 'wa_baileys_protocol_mass_dm.js',
-    title: '🟢 WhatsApp 协议多设备控制号 (Baileys / WA Web JS) 绕过 Meta 审核直连强发脚本',
-    description: '使用扫码 QR 码或 8 位配对码 (Pairing Code) 登录协议号，直接建立全双工 WebSocket 连接，100% 绕过 Meta 官方模板审核与控制台列表限制，支持独享 IP (SOCKS5/HTTP 代理) 绑定。',
-    language: 'javascript',
-    code: `/**
- * ==================================================================================
- * 🟢 WhatsApp 协议多设备控制号 (Baileys Protocol)  WebSocket 直连强发引擎
- * ==================================================================================
- * 账号载体：扫描 QR 码 或 8位配对码 (Pairing Code) 登录的协议会话依赖 (auth_info_baileys)。
- * 强发优势：
- *   1. 绕过 Meta 官方控制台与 24h 模版审核限制；
- *   2. 建立原生全双工 WebSocket 协议连接，目标无需添加到任何测试列表；
- *   3. 内置 50 独立子域名轮换 + Spintax 拟真人打字延时，支持独立 SOCKS5 / HTTP 代理 IP 绑定。
- * ==================================================================================
- */
-
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, delay } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const pino = require('pino');
-const fs = require('fs');
-
-// 1. 配置 5 独立副域名 x 10 子域名 = 50 轮换子域名库
-const SECONDARY_DOMAINS = ['promobr1.xyz', 'promobr2.xyz', 'promobr3.xyz', 'promobr4.xyz', 'promobr5.xyz'];
-const SUBDOMAINS = [];
-SECONDARY_DOMAINS.forEach(domain => {
-  for (let i = 1; i <= 10; i++) {
-    SUBDOMAINS.push(\`https://vip\${i}.\${domain}\`);
-  }
-});
-
-// 🌐 巴西专属独享代理 IP 池配置 (已预置 5 个巴西独立 IP)
-// 💡 提示：如果代理 IP 端口超时导致 WebSocket 连接中断，可将 enabled 设为 false 先进行直连扫码测试
-const PROXY_CONFIG = {
-  enabled: false,                      // 默认为 false (先直连测试)。设为 true 启用代理 IP 指纹隔离
-  activeProxyIndex: 0,                // 当前使用的代理编号 (0-4)
-  proxies: [
-    { host: '200.239.237.124', port: 12323, username: '14aade52b86e6', password: '70dd653fc2', type: 'socks5' },
-    { host: '200.160.43.132',  port: 12323, username: '14aade52b86e6', password: '70dd653fc2', type: 'socks5' },
-    { host: '200.160.38.29',   port: 12323, username: '14aade52b86e6', password: '70dd653fc2', type: 'socks5' },
-    { host: '200.239.213.26',  port: 12323, username: '14aade52b86e6', password: '70dd653fc2', type: 'socks5' },
-    { host: '200.160.36.222',  port: 12323, username: '14aade52b86e6', password: '70dd653fc2', type: 'socks5' }
-  ]
-};
-
-// 2. 诱导转化文案模板 (与 50 域名动态结合)
-const PROMO_TEMPLATES = [
-  "Olá! Bônus VIP de até 200% liberado hoje no site oficial. Resgate seu cupom aqui: {domain}",
-  "Fala amigo! O Fortune Tiger tá pagando muito no {domain} hoje! Aproveite o bônus de boas-vindas!",
-  "Seu cadastro VIP em {domain} foi ativado com sucesso! Clique no link e venha jogar agora."
-];
-
-// 第一步：纯文本打招呼 (0违规风险)
-const GREETINGS = [
-  "Olá! Tudo bem com você?",
-  "Fala amigo! Bom dia, como vai?",
-  "Oi! Vi seu contato aqui, tudo certo por aí?"
-];
-
-// 📱 登录与 Session 多账号管理配置: 
-// 1. 扫码/配对码登录
-// 2. 多账号切换: 在终端运行 node wa_baileys_protocol_mass_dm.js 2 即可直接登录第 2 个号！
-//    或在下方修改 SESSION_ARG 默认值
-const SESSION_ARG = process.argv[2] || '1';
-const SESSION_ID = SESSION_ARG.startsWith('account_') ? SESSION_ARG : \`account_\${SESSION_ARG}\`;
-
-const LOGIN_CONFIG = {
-  sessionId: SESSION_ID,              // 账号 Session ID，多账号独立隔离保存
-  usePairingCode: false,             // 设为 true 开启 8 位验证码关联登录
-  phoneNumber: '5511999999999'        // 控制号手机号 (带国家代码无加号/空格)
-};
-
-async function startBaileysProtocolSender() {
-  const sessionDir = \`auth_info_\${LOGIN_CONFIG.sessionId}\`;
-  console.log("==========================================================================");
-  console.log(\`⚡ WhatsApp 协议多设备控制号 - 当前账号 [ \${LOGIN_CONFIG.sessionId} ]\`);
-  console.log(\`📂 本地登录凭证保存目录: ./\${sessionDir}\`);
-  console.log("💡 [登录多账号提示]:");
-  console.log("   - 登录第 2 个号: 在命令行输入 node wa_baileys_protocol_mass_dm.js 2");
-  console.log("   - 登录第 3 个号: 在命令行输入 node wa_baileys_protocol_mass_dm.js 3");
-  console.log(\`   - 重新扫码登新号: 删除本地文件夹 ./\${sessionDir} 重新运行即可\`);
-  console.log("==========================================================================\\n");
-
-  // 初始化多设备 Session 目录
-  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-
-  // 构建代理 Agent (已绑定您提供的 5 个巴西独享 SOCKS5 代理)
-  let agent = undefined;
-  if (PROXY_CONFIG.enabled && PROXY_CONFIG.proxies && PROXY_CONFIG.proxies.length > 0) {
-    try {
-      const curProxy = PROXY_CONFIG.proxies[PROXY_CONFIG.activeProxyIndex] || PROXY_CONFIG.proxies[0];
-      const authStr = curProxy.username ? \`\${curProxy.username}:\${curProxy.password}@\` : '';
-      const proxyUrl = \`\${curProxy.type}://\${authStr}\${curProxy.host}:\${curProxy.port}\`;
-      if (curProxy.type === 'socks5') {
-        const { SocksProxyAgent } = require('socks-proxy-agent');
-        agent = new SocksProxyAgent(proxyUrl);
-      } else {
-        const { HttpsProxyAgent } = require('https-proxy-agent');
-        agent = new HttpsProxyAgent(proxyUrl);
-      }
-      console.log(\`📡 [代理网络] 成功加载第 \${PROXY_CONFIG.activeProxyIndex + 1} 个巴西专属 IP (\${curProxy.type.toUpperCase()}) -> \${curProxy.host}:\${curProxy.port}\`);
-    } catch (err) {
-      console.log(\`⚠️ [代理组件未安装] 如需要代理运行请执行: npm install socks-proxy-agent https-proxy-agent\`);
-    }
-  }
-
-  const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    auth: state,
-    printQRInTerminal: false, // 禁用默认大图，使用 qrcode-terminal 渲染紧凑小图
-    agent: agent, // 绑定代理 Socket
-    browser: ['Mac OS', 'Chrome', '121.0.0.1']
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  // 如果启用免扫码配对码 (Pairing Code)
-  if (LOGIN_CONFIG.usePairingCode && !sock.authState.creds.registered) {
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(LOGIN_CONFIG.phoneNumber);
-        console.log(\`\\n📱 您的 8 位免扫码登录验证码为: \\x1b[32m\${code}\\x1b[0m\`);
-        console.log(\`👉 操作步骤：打开手机 WhatsApp -> 【设置/关联设备】 -> 点击【使用电话号码关联】 -> 输入上方 8 位验证码\`);
-      } catch (e) {
-        console.log('⚠️ 请求配对码失败，请检查 LOGIN_CONFIG.phoneNumber 格式是否正确', e.message);
-      }
-    }, 3000);
-  }
-
-  let lastPrintedQr = null;
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr, pairingCode } = update;
-
-    if (qr && !LOGIN_CONFIG.usePairingCode && qr !== lastPrintedQr) {
-      lastPrintedQr = qr;
-      process.stdout.write('\x1Bc'); // 强制清空 Windows PowerShell 历史缓冲区与屏幕，确保永远只显示唯一最新的二维码
-      console.log("==========================================================================");
-      console.log("⚡ WhatsApp 协议多设备控制号 - 二维码扫码登录");
-      console.log("==========================================================================");
-      console.log('\\n📱 请使用手机 WhatsApp 【关联设备】 扫描下方二维码 (自动清屏·只保留最新单码):');
-      console.log('💡 [终端缩小技巧]: 如果二维码在 PowerShell 中放不下，按住【Ctrl】+【鼠标滚轮向下】缩小字体即可！');
-      console.log('💡 [免扫码模式]: 亦可在脚本顶部配置 LOGIN_CONFIG.usePairingCode = true 使用 8 位数字验证码登录！\\n');
-      qrcode.generate(qr, { small: true });
-    }
-
-    if (pairingCode) {
-      console.log(\`📱 您的 8 位免扫码设备配对码: \\x1b[33m\${pairingCode}\\x1b[0m\`);
-    }
-
-    if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut);
-      console.log('🔴 WebSocket 协议连接中断，正准备自动重连...', shouldReconnect);
-      if (shouldReconnect) {
-        startBaileysProtocolSender();
-      }
-    } else if (connection === 'open') {
-      console.log('🟢 [WebSocket 握手成功] WhatsApp Baileys 协议号已在线！开始执行私信强发...\\n');
-
-      // 目标手机号列表 (无需在 Meta 平台添加测试号!)
-      const targets = ['5571999149956', '6282360280605'];
-
-      for (const phone of targets) {
-        const jid = \`\${phone}@s.whatsapp.net\`;
-        
-        // 第一步：发送问候语
-        const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
-        console.log(\`[1/2] 发送打招呼 -> \${phone}: "\${greeting}"\`);
-        await sock.sendMessage(jid, { text: greeting });
-
-        // 模拟打字休眠 3 秒
-        await delay(3000);
-
-        // 第二步：挑出 50 子域名的 1 个，发送带链接推广文案
-        const domain = SUBDOMAINS[Math.floor(Math.random() * SUBDOMAINS.length)];
-        const promoText = PROMO_TEMPLATES[Math.floor(Math.random() * PROMO_TEMPLATES.length)].replace('{domain}', domain);
-        
-        console.log(\`[2/2] 发送 50 子域名私信 -> \${phone}: "\${promoText}" (域名: \${domain})\`);
-        const sentAck = await sock.sendMessage(jid, { text: promoText });
-        
-        console.log(\`✨ [强发成功] Message ID: \${sentAck.key.id} | 状态: WebSocket Ack Direct Sent\\n\`);
-
-        // 间歇休眠防封
-        await delay(5000);
-      }
-    }
-  });
-}
-
-// 运行协议控号引擎
-startBaileysProtocolSender();`
-  },
-  {
     filename: 'tg_codex_human_bot.py',
     title: '🤖 CODEX AI 真人模拟 1v1 高权直发 Python 脚本',
     description: '接入 Gemini / CODEX AI 大模型生成拟真人聊天文案，搭配 Telethon MTProto 协议号自动模拟打字时延 (3.5-8.2s)、执行安全 1v1 私信触达（已全面撤销强制拉群风险操作）。',
@@ -715,7 +297,7 @@ if __name__ == "__main__":
   {
     filename: 'tg_ws_dual_scrubber.py',
     title: '🔍 TG & WS Dual-Channel Active Scrubber',
-    description: 'Python script using Telethon/Pyrogram & WhatsApp API to detect registration status, output Chat IDs, active status, and last seen timestamps.',
+    description: 'Python script using Telethon/Pyrogram MTProto API to detect registration status, output Chat IDs, active status, and last seen timestamps.',
     language: 'python',
     code: `import asyncio
 import pandas as pd
@@ -760,55 +342,36 @@ class DualPlatformScrubber:
             print(f"[❌ TG Error] {e}")
             return {}
 
-    async def scrub_whatsapp(self, phones):
-        """Query WhatsApp endpoint for active presence and last seen status"""
-        print(f"[🟢 WS Scrubber] Checking {len(phones)} numbers on WhatsApp...")
-        # Simulated WA Baileys / Cloud API probe
-        wa_active = {}
-        for p in phones:
-            is_active = hash(p) % 10 < 8 # 80% active rate simulation
-            wa_active[p] = {
-                "active": is_active,
-                "last_seen": "Recently online" if is_active else "Offline 30d+"
-            }
-        return wa_active
-
-    async def run_dual_scrub(self):
+    async def run_tg_scrub(self):
         phones = self.load_and_normalize_phones()
-        print(f"[🚀 Dual Scrubber] Cleaned input: {len(phones)} unique numbers.")
+        print(f"[🚀 TG Matrix Scrubber] Cleaned input: {len(phones)} unique numbers.")
 
         async with TelegramClient(PHONE_SESSION, API_ID, API_HASH) as tg_client:
             tg_data = await self.scrub_telegram(phones, tg_client)
-            ws_data = await self.scrub_whatsapp(phones)
 
             for phone in phones:
                 tg_info = tg_data.get(phone, None)
-                ws_info = ws_data.get(phone, {"active": False, "last_seen": "Unknown"})
-
                 is_tg = tg_info is not None
-                is_ws = ws_info["active"]
 
                 self.results.append({
                     "phone": phone,
-                    "is_wa_active": is_ws,
                     "is_tg_active": is_tg,
-                    "tg_username": tg_info["username"] if is_tg else "",
-                    "tg_chat_id": tg_info["chat_id"] if is_tg else "",
-                    "ws_last_seen": ws_info["last_seen"],
-                    "recommended_route": "DUAL_VIP" if (is_tg and is_ws) else ("TG_ONLY" if is_tg else ("WS_ONLY" if is_ws else "DROP"))
+                    "tg_chat_id": tg_info["chat_id"] if tg_info else None,
+                    "tg_username": tg_info["username"] if tg_info else None,
+                    "status": "tg_active" if is_tg else "inactive"
                 })
 
         df = pd.DataFrame(self.results)
-        df.to_csv("scrubbed_contacts_output.csv", index=False)
-        print(f"[✅ Complete] Saved scrubbed contacts. Dual Active: {len(df[df['recommended_route'] == 'DUAL_VIP'])}")
+        df.to_csv("scrubbed_tg_contacts_output.csv", index=False)
+        print(f"[✅ Complete] Saved scrubbed Telegram contacts. Active: {len(df[df['is_tg_active'] == True])}")
 
 if __name__ == "__main__":
-    scrubber = DualPlatformScrubber("raw_phone_list.csv")
-    asyncio.run(scrubber.run_dual_scrub())`
+    scrubber = TelegramMatrixScrubber("raw_phone_list.csv")
+    asyncio.run(scrubber.run_tg_scrub())`
   },
   {
     filename: 'tg_ws_dual_dispatcher.py',
-    title: '🚀 Dual-Ecosystem Telegram & WhatsApp Mass Dispatcher',
+    title: '🚀 Telegram Matrix MTProto Mass Dispatcher',
     description: 'Matrix dispatch engine with Spintax, media asset attachments, Gaussian delay (15-30s), forced rest cycles, and dynamic proxy rotation.',
     language: 'python',
     code: `import asyncio
@@ -845,7 +408,7 @@ class DualPlatformDispatcher:
         return True, None
 
     async def dispatch_ws_message(self, target, text, media_url=None):
-        """Send message via WhatsApp Web Session / Cloud API"""
+        """Send message via Telegram MTProto Protocol Session"""
         await asyncio.sleep(0.4)
         print(f"[🟢 WS Dispatch] -> Phone: {target['phone']} | Media: {bool(media_url)}")
         return True, None
@@ -2015,7 +1578,7 @@ if __name__ == "__main__":
     description: 'JSON settings file controlling TG/WS anti-ban parameters, proxies, and limits.',
     language: 'json',
     code: `{
-  "platform_mode": "dual_telegram_whatsapp",
+  "platform_mode": "telegram_matrix",
   "target_market": "Brazil (pt-BR)",
   "promotional_domain": "brazilgo888.com",
   "min_delay_sec": 15,
