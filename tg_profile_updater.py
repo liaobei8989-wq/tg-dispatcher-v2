@@ -74,14 +74,6 @@ BRAZILIAN_BIOS = [
     "Apaixonada por slots e apostas online 🎲✨"
 ]
 
-FEMALE_AVATAR_FALLBACK_URLS = [
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=400&auto=format&fit=crop&q=80"
-]
-
 def load_account_proxies_map():
     map_file = os.path.join(os.getcwd(), "sessions", "account_proxies.json")
     if os.path.exists(map_file):
@@ -208,34 +200,29 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
         except Exception:
             pass
 
-        # 3. Upload Real Avatar Photo (supports base64, data-url, HTTP URL, or fallback)
+        # 3. Upload User Avatar Photo (STRICT: ONLY if user explicitly uploaded a local image/base64; NEVER use network URLs or automatic fallbacks)
         avatar_src = avatar_base64 or item_data.get("avatarUrl")
-        if not avatar_src:
-            avatar_src = FEMALE_AVATAR_FALLBACK_URLS[random.randint(0, len(FEMALE_AVATAR_FALLBACK_URLS) - 1)]
-
-        if avatar_src:
+        
+        # Strictly reject any network HTTP/HTTPS URLs - only process local base64 images or local files
+        if avatar_src and isinstance(avatar_src, str) and not avatar_src.startswith("http"):
             try:
                 img_data = None
-                if avatar_src.startswith("data:image") or (len(avatar_src) > 500 and not avatar_src.startswith("http")):
+                if avatar_src.startswith("data:image") or len(avatar_src) > 500:
                     clean_b64 = re.sub(r'^data:image/\w+;base64,', '', avatar_src)
                     img_data = base64.b64decode(clean_b64)
-                elif avatar_src.startswith("http"):
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-                    req = urllib.request.Request(avatar_src, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                    with urllib.request.urlopen(req, context=ctx, timeout=10.0) as resp:
-                        img_data = resp.read()
+                elif os.path.exists(avatar_src):
+                    with open(avatar_src, "rb") as f_img:
+                        img_data = f_img.read()
 
                 if img_data and len(img_data) > 200:
                     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
                         tf.write(img_data)
                         tmp_img_path = tf.name
 
-                    logs.append(f"🖼️ [{session_basename}] 正在向 Telegram 官方 CDN 上传巴西女性真实头像 ({(len(img_data)/1024):.1f} KB)...")
+                    logs.append(f"🖼️ [{session_basename}] 正在向 Telegram 官方 CDN 上传您上传的自定义头像 ({(len(img_data)/1024):.1f} KB)...")
                     uploaded_file = await client.upload_file(tmp_img_path)
                     await client(UploadProfilePhotoRequest(file=uploaded_file))
-                    logs.append(f"🎉 [{session_basename}] 真实头像已成功写入 Telegram 官方服务器！")
+                    logs.append(f"🎉 [{session_basename}] 自定义头像已成功写入 Telegram 官方服务器！")
                     try:
                         os.unlink(tmp_img_path)
                     except Exception:

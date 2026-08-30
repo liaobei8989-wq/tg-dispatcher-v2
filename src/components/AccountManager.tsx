@@ -710,23 +710,13 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
     alert('✅ 成功激活！所有账号已全量完成 Session 握手并标记为【已在线登录】！');
   };
 
-  // Add one-click AI/Auto decorate accounts profile (Username, Alias, Avatar)
+  // Add one-click AI/Auto decorate accounts profile (Username, Alias)
   const handleAutoDecorateAccounts = () => {
-    const avatarPool = [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80',
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80',
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
-      'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=200&q=80',
-      'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=200&q=80'
-    ];
-
     const usernameSuffixes = ['vip', 'suporte', 'atendimento', 'br', 'top', 'official', 'pro'];
     const firstNames = ['carlos', 'mateus', 'lucas', 'camila', 'rafael', 'bruna', 'fernando', 'beatriz'];
 
     setAccounts((prev) =>
       prev.map((acc, index) => {
-        const randAvatar = avatarPool[index % avatarPool.length];
         const fn = firstNames[index % firstNames.length];
         const suf = usernameSuffixes[index % usernameSuffixes.length];
         const num = Math.floor(10 + Math.random() * 89);
@@ -737,11 +727,11 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
           ...acc,
           alias: autoAlias,
           tgUsername: autoUsername,
-          avatarUrl: acc.avatarUrl || randAvatar
+          avatarUrl: acc.avatarUrl || ''
         };
       })
     );
-    alert('✨ 【AI 自动配置完成】所有账号已成功自动设定精致拉丁风美观头像、高清 Telegram 用户名(@Username)及系统规范别名！');
+    alert('✨ 【AI 自动配置完成】所有账号已成功自动设定高清 Telegram 用户名(@Username)及系统规范别名！(头像请在右侧上传本地图片设置)');
   };
 
   // One-click bind user provided 5 Brazil proxies

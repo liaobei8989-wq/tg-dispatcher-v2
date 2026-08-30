@@ -243,6 +243,27 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             if replied:
                 if logs is not None:
                     logs.append(f"🎉 [捕获到客户主动回复]: \"{last_reply_text}\" ➔ 秒级激活补发第二阶段彩金文案！")
+                
+                # 记录持久化防重，避免后台扫描器或常驻守护进程二次重复补发
+                try:
+                    me_obj = await client.get_me()
+                    my_phone = re.sub(r'[^0-9]', '', str(getattr(me_obj, 'phone', '')))
+                    peer_id = getattr(peer, 'id', str(peer))
+                    replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
+                    os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
+                    replied_data = {}
+                    if os.path.exists(replied_chats_file):
+                        try:
+                            with open(replied_chats_file, "r", encoding="utf-8") as rf:
+                                replied_data = json.load(rf)
+                        except Exception:
+                            pass
+                    replied_data[f"{my_phone}_{peer_id}"] = 999999999
+                    with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                        json.dump(replied_data, wf, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
                 # 补发第二条彩金文案
                 if second_msg:
                     await asyncio.sleep(1.2)

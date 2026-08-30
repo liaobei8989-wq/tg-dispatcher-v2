@@ -70,7 +70,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 6,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
@@ -94,7 +94,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 6,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
@@ -118,7 +118,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 6,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
@@ -142,7 +142,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 6,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
@@ -166,7 +166,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 6,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
@@ -190,12 +190,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 1,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
-    groupTag: '新进拓展B组'
+    groupTag: '新买养号B组'
   },
   {
     id: 'acc-tg-5586994918471',
@@ -214,12 +214,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 1,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
-    groupTag: '新进拓展B组'
+    groupTag: '新买养号B组'
   },
   {
     id: 'acc-tg-5586994927293',
@@ -238,12 +238,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 1,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
-    groupTag: '新进拓展B组'
+    groupTag: '新买养号B组'
   },
   {
     id: 'acc-tg-5586995118207',
@@ -262,12 +262,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 1,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
-    groupTag: '新进拓展B组'
+    groupTag: '新买养号B组'
   },
   {
     id: 'acc-tg-5586995160291',
@@ -286,12 +286,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = [
     lastActive: '刚刚',
     warmupDay: 1,
     twoFactorPassword: '548508',
-    avatarUrl: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=150&auto=format&fit=crop&q=80',
+    avatarUrl: '',
     tgApiId: '2040',
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
-    groupTag: '新进拓展B组'
+    groupTag: '新买养号B组'
   }
 ];
 

@@ -275,12 +275,7 @@ async function startServer() {
       const accountsList: any[] = [];
       const processedPhones = new Set<string>();
       const defaultNames = ['Ana Silva', 'Beatriz Santos', 'Camila Oliveira', 'Fernanda Lima', 'Juliana Costa'];
-      const defaultAvatars = [
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-      ];
+      const defaultAvatars = ['', '', '', ''];
 
       const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
 
@@ -971,8 +966,11 @@ async function startServer() {
           proxy: req.body.proxy || ''
         });
 
+        // 动态计算超时时间：每目标预留 25 秒，基础保障 180 秒 (3分钟)，防止被系统强杀截断
+        const dynamicTimeout = Math.max(180000, (targetList.length || 1) * 25000);
+
         const pythonOutput = execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
-          timeout: 45000,
+          timeout: dynamicTimeout,
           encoding: 'utf-8'
         });
 
@@ -991,7 +989,7 @@ async function startServer() {
           });
         }
       } catch (pyErr: any) {
-        console.warn("[Python Telethon Fallback] Python 引擎调用跳过，切入 Node MTProto 引擎:", pyErr.message);
+        console.warn("[Python Telethon Fallback] Python 引擎调用执行异常或切入备用引擎:", pyErr.message);
       }
     }
 
@@ -1444,15 +1442,7 @@ Requirements:
     // Brazilian popular first/last names and usernames generator for high-precision live pool
     const brFirstNames = ['Gabriel', 'Lucas', 'Matheus', 'Felipe', 'Bruno', 'Rodrigo', 'Thiago', 'Gustavo', 'Rafael', 'Vinicius', 'Eduardo', 'Leonardo', 'Diego', 'Alexandre', 'Renan', 'Juliana', 'Camila', 'Beatriz', 'Larissa', 'Mariana', 'Fernanda', 'Amanda', 'Patricia', 'Carolina', 'Daniela'];
     const brLastNames = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Rodrigues', 'Ferreira', 'Alves', 'Pereira', 'Lima', 'Gomes', 'Costa', 'Ribeiro', 'Martins', 'Carvalho', 'Almeida', 'Lopes', 'Soares', 'Fernandes', 'Vieira', 'Barbosa'];
-    const sampleAvatars = [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80'
-    ];
+    const sampleAvatars = ['', '', '', '', '', '', ''];
 
     const logs: string[] = [
       `🔍 [获客雷达] 正在解析目标源: ${cleanSource}`,
@@ -1561,7 +1551,7 @@ Requirements:
         customerPhone: '+55 11 99876-5432',
         customerUsername: '@marcos_silva_sp',
         customerName: 'Marcos Silva',
-        customerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+        customerAvatar: '',
         assignedAccountPhone: '+55 86 99442-8117',
         assignedAccountAlias: 'TG-BR-5586994428117 (Ana)',
         stage: 'replied_interested',
@@ -1614,7 +1604,7 @@ Requirements:
         customerPhone: '+55 21 98822-3344',
         customerUsername: '@rodrigo_rio77',
         customerName: 'Rodrigo Costa',
-        customerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+        customerAvatar: '',
         assignedAccountPhone: '+55 86 99458-1839',
         assignedAccountAlias: 'TG-BR-5586994581839 (Beatriz)',
         stage: 'converting',

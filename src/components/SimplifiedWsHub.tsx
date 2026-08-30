@@ -94,14 +94,6 @@ const BRAZILIAN_WS_BIOS = [
   'Entre em contato para ativação imediata 🚀'
 ];
 
-// Default female avatar fallbacks if operator hasn't uploaded any custom photos
-const DEFAULT_FEMALE_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-];
-
 // 50 Authentic High-Converting Local Brazilian Greetings (50条巴西本土热情防封问候语)
 export const BRAZILIAN_50_GREETINGS: string[] = [
   "Fala jogador! Beleza?",
@@ -265,7 +257,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
       text: 'Oi Camila! Tudo bem por aí? Conseguiu conferir a plataforma hoje?',
       time: '10:12:05',
       status: 'read',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+      avatar: ''
     },
     {
       id: 'ic-2',
@@ -276,7 +268,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
       text: 'Oi Bia! Tudo ótimo! Sim, recebi o sinal do grupo VIP do brazilgo888, tá pagando muito!',
       time: '10:12:18',
       status: 'read',
-      avatar: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150&auto=format&fit=crop&q=80'
+      avatar: ''
     },
     {
       id: 'ic-3',
@@ -287,7 +279,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
       text: 'Que maravilha! Vamos programar os disparos de convite pras novidades de amanhã.',
       time: '10:13:02',
       status: 'read',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+      avatar: ''
     }
   ]);
 
@@ -304,7 +296,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
       text: 'Com certeza! A IA de atrito zero já rodou a simulação de aquecimento no IP 200.160.36.222.',
       time: timeNow,
       status: 'read' as const,
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+      avatar: ''
     } : {
       id: `ic-${Date.now()}`,
       senderPhone: '+55 81 93814-920',
@@ -314,7 +306,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
       text: 'Show de bola! Notificação e relatório gravados no servidor de sessões com sucesso 🚀',
       time: timeNow,
       status: 'read' as const,
-      avatar: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150&auto=format&fit=crop&q=80'
+      avatar: ''
     };
 
     setInterChatLogs(prev => [...prev, newMsg]);
@@ -370,7 +362,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
         createdAt: new Date().toISOString().split('T')[0],
         lastActive: '刚刚',
         warmupDay: 1,
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+        avatarUrl: ''
       };
 
       setAccounts(prev => [newAccObj, ...prev]);
@@ -755,13 +747,13 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
     }
 
     let updatedCount = 0;
-    const imagePool = uploadedImages.length > 0 ? uploadedImages : DEFAULT_FEMALE_AVATARS;
+    const imagePool = uploadedImages;
 
     const updatedAccounts = accounts.map((acc, index) => {
       if (acc.platform === 'whatsapp') {
         const femaleName = BRAZILIAN_FEMALE_NAMES[index % BRAZILIAN_FEMALE_NAMES.length];
         const bio = BRAZILIAN_WS_BIOS[index % BRAZILIAN_WS_BIOS.length];
-        const avatarUrl = imagePool[index % imagePool.length];
+        const avatarUrl = imagePool.length > 0 ? imagePool[index % imagePool.length] : acc.avatarUrl;
         updatedCount++;
 
         return {
@@ -769,7 +761,7 @@ export const SimplifiedWsHub: React.FC<SimplifiedWsHubProps> = ({
           alias: `${femaleName} (${acc.phone.slice(-4)})`,
           avatarUrl: avatarUrl,
           lastActive: '资料已更新 (WhatsApp 巴西女性商务形象)',
-          healthDiagnosticLog: `改资料完成: 姓名 [${femaleName}] | Profile Bio [${bio}] | 头像压缩同步合格`
+          healthDiagnosticLog: `改资料完成: 姓名 [${femaleName}] | Profile Bio [${bio}]`
         };
       }
       return acc;
@@ -1410,8 +1402,8 @@ if __name__ == "__main__":
             {(accounts.filter(a => a.platform === 'whatsapp').length > 0
               ? accounts.filter(a => a.platform === 'whatsapp')
               : [
-                  { phone: '+55 81 91659-254', id: 'acc-wa-br-8191', alias: 'WS-BR-Node-8191 (Beatriz)', proxy: '200.160.36.222:12323', avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80' },
-                  { phone: '+55 81 93814-920', id: 'acc-wa-br-8193', alias: 'WS-BR-Node-8193 (Camila)', proxy: '200.239.237.124:12323', avatarUrl: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150&auto=format&fit=crop&q=80' }
+                  { phone: '+55 81 91659-254', id: 'acc-wa-br-8191', alias: 'WS-BR-Node-8191 (Beatriz)', proxy: '200.160.36.222:12323', avatarUrl: '' },
+                  { phone: '+55 81 93814-920', id: 'acc-wa-br-8193', alias: 'WS-BR-Node-8193 (Camila)', proxy: '200.239.237.124:12323', avatarUrl: '' }
                 ]
             ).map((acc) => {
               const cleanPhone = acc.phone.replace(/\D/g, '');

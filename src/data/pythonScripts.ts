@@ -1250,21 +1250,13 @@ def find_session_files():
     sessions = glob.glob("*.session")
     return [s for s in sessions if not s.startswith("anon")]
 
-FEMALE_AVATAR_CDN_URLS = [
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80"
-]
-
 def get_gender_matched_avatar(gender):
     """
     智能性别人像匹配逻辑：
     1. 优先从 avatars/female/ 或 avatars/male/ 深度子文件夹查找
     2. 其次查找包含 female_/woman_ 或 male_/man_ 关键字的图片文件
     3. 如果没有分性别文件夹，则退回通用头像列表
-    4. 若本地无图片，则自动从 CDN 节点下发高清真人头像文件
+    4. 若本地无图片，则不设置头像（绝不下载网络图片）
     """
     # 查找子文件夹
     sub_folder = f"avatars/{gender}/*.jpg"
@@ -1280,24 +1272,12 @@ def get_gender_matched_avatar(gender):
     # 降级：如果完全没分性别图片，就拿当前文件夹所有有效图片
     if not gender_photos:
         all_imgs = glob.glob("avatars/*.jpg") + glob.glob("avatars/*.png") + glob.glob("*.jpg") + glob.glob("*.png")
-        gender_photos = [f for f in all_imgs if not f.endswith(".session") and not f.endswith(".py")]
+        gender_photos = [f for f in all_imgs if not f.endswith(".session") and not f.endswith(".py") and not f.endswith(".json")]
 
     if gender_photos:
         return random.choice(gender_photos)
 
-    # 自动网络下发高清头像 (无本地图片时的强保障)
-    try:
-        import urllib.request
-        cdn_url = random.choice(FEMALE_AVATAR_CDN_URLS)
-        auto_file = f"avatar_auto_{random.randint(1000, 9999)}.jpg"
-        req = urllib.request.Request(cdn_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as resp, open(auto_file, 'wb') as f:
-            f.write(resp.read())
-        print(f"  ├─ 🌐 [CDN自动匹配] 本地无图片，已自动下发高清女性人像: {auto_file}")
-        return auto_file
-    except Exception as e:
-        print(f"  ├─ ⚠️ 自动下载头像失败: {e}")
-        return None
+    return None
 
 async def setup_profile_and_privacy(session_file):
     session_name = os.path.basename(session_file).replace(".session", "")

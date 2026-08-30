@@ -323,77 +323,127 @@ async def scan_and_reply_for_account(phone, stats):
 
             msgs = list(reversed(msgs))
 
-            latest_greeting_idx = -1
+            # 智能精准状态判定：
+            # 1. 寻找客户最新发来的消息 (m.out == False)
+            latest_incoming_msg = None
+            latest_incoming_idx = -1
             for idx_m, m in enumerate(msgs):
+                if not m.out:
+                    latest_incoming_msg = m
+                    latest_incoming_idx = idx_m
+
+            # 2. 如果客户从未发言，说明仅是我们单向破冰，无需补发
+            if latest_incoming_msg is None:
+                continue
+
+            latest_incoming_id = getattr(latest_incoming_msg, 'id', 0)
+            latest_incoming_text = getattr(latest_incoming_msg, 'text', '') or "[客户互动/回复]"
+            target_name = dialog.name or getattr(dialog.entity, 'phone', str(dialog.id))
+
+            # 3. 检查在客户最新回复之后，我们是否已经发出过消息 (m.out == True 且在 latest_incoming_idx 之后)
+            has_replied_after_incoming = False
+            for idx_m in range(latest_incoming_idx + 1, len(msgs)):
+                m = msgs[idx_m]
                 if m.out:
-                    text = m.text or ""
-                    is_promo = any(kw in text.lower() for kw in ['http', 'promoção', 'bônus', 'vip0', 'promobr', 'cadastre-se', 'mostbet'])
-                    if not is_promo:
-                        latest_greeting_idx = idx_m
+                    has_replied_after_incoming = True
+                    break
 
-            if latest_greeting_idx != -1:
-                has_sent_promo_after_greeting = False
-                customer_replied_after_greeting = False
-                latest_incoming_text = ""
+            # 4. 检查持久化去重记录 (sessions/replied_chats.json)
+            replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
+            replied_history = {}
+            if os.path.exists(replied_chats_file):
+                try:
+                    with open(replied_chats_file, "r", encoding="utf-8") as rf:
+                        replied_history = json.load(rf)
+                except Exception:
+                    replied_history = {}
 
-                for idx_m in range(latest_greeting_idx + 1, len(msgs)):
-                    m = msgs[idx_m]
-                    if m.out:
-                        text = m.text or ""
-                        if any(kw in text.lower() for kw in ['http', 'promoção', 'bônus', 'vip0', 'promobr', 'cadastre-se', 'mostbet']):
-                            has_sent_promo_after_greeting = True
-                    else:
-                        customer_replied_after_greeting = True
-                        latest_incoming_text = m.text or "[客户互动/回复]"
+            track_key = f"{phone}_{dialog.id}"
+            last_recorded_id = replied_history.get(track_key, 0)
 
-                target_name = dialog.name or getattr(dialog.entity, 'phone', str(dialog.id))
+            # 如果我们在客户发言后已经发出了消息，或者持久化记录已记录此消息ID，则判定为【已圆满完成闭环】，严禁二次轰炸
+            if has_replied_after_incoming or (latest_incoming_id > 0 and latest_incoming_id <= last_recorded_id):
+                total_completed_count += 1
+                continue
 
-                if customer_replied_after_greeting and has_sent_promo_after_greeting:
-                    total_completed_count += 1
-                elif customer_replied_after_greeting and not has_sent_promo_after_greeting:
-                    print(f"🎯 【捕捉到最新轮次客户回复!】 目标: {target_name} | 对方回复: '{latest_incoming_text}'")
-                    
-                    second_msg = parse_spintax(SECOND_MESSAGE_TEMPLATE)
-                    print(f"🚀 正在为目标 {target_name} 补发第二阶段彩金文案...")
-                    
+            # 5. 到此处说明：客户刚才发来了消息，且我们尚未对其进行回复！立即触发第2阶段彩金 + 拟人打字第3阶段寄语！
+            print(f"🎯 【捕捉到客户主动回复!】 目标: {target_name} | 对方回复: '{latest_incoming_text}' (Msg ID: {latest_incoming_id})")
+            
+            # 立即记录防重，防止并发扫描二次触发
+            replied_history[track_key] = latest_incoming_id
+            try:
+                os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
+                with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                    json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
+            second_msg = parse_spintax(SECOND_MESSAGE_TEMPLATE)
+            print(f"🚀 正在为目标 {target_name} 补发第2阶段彩金文案: {second_msg[:30]}...")
+            
+            try:
+                sent_m = None
+                for s_retry in range(3):
                     try:
-                        sent_m = None
-                        for s_retry in range(3):
-                            try:
-                                sent_m = await client.send_message(dialog.entity, second_msg, parse_mode='html')
-                                break
-                            except (MsgidDecreaseRetryError, RPCError, ServerError, Exception) as s_err:
-                                err_s = str(s_err)
-                                if ("MsgidDecreaseRetryError" in err_s or "message ID" in err_s.lower()) and s_retry < 2:
-                                    await asyncio.sleep(1.0)
-                                    continue
-                                if s_retry < 2:
-                                    await asyncio.sleep(1.2)
-                                else:
-                                    raise s_err
+                        sent_m = await client.send_message(dialog.entity, second_msg, parse_mode='html')
+                        break
+                    except (MsgidDecreaseRetryError, RPCError, ServerError, Exception) as s_err:
+                        err_s = str(s_err)
+                        if ("MsgidDecreaseRetryError" in err_s or "message ID" in err_s.lower()) and s_retry < 2:
+                            await asyncio.sleep(1.0)
+                            continue
+                        if s_retry < 2:
+                            await asyncio.sleep(1.2)
+                        else:
+                            raise s_err
 
-                        if sent_m:
-                            print(f"✨ 【第二阶段彩金文案补发成功!】 Message ID: {sent_m.id}")
-                            newly_sent_count += 1
-                            total_completed_count += 1
+                if sent_m:
+                    print(f"✨ 【第2阶段彩金文案补发成功!】 Message ID: {sent_m.id}")
+                    newly_sent_count += 1
+                    total_completed_count += 1
 
-                            now_str = get_brazil_time().strftime("%H:%M:%S")
-                            log_entry = {
-                                "timestamp": now_str,
-                                "phone": phone,
-                                "accountName": first_name,
-                                "target": target_name,
-                                "replyText": latest_incoming_text[:30],
-                                "msg": f"✨ 【+{phone} ({first_name})】成功为 '{target_name}' 补发第二阶段彩金文案！(对方回复: '{latest_incoming_text[:20]}')"
-                            }
-                            if "logs" not in stats:
-                                stats["logs"] = []
-                            stats["logs"].insert(0, log_entry)
-                            stats["logs"] = stats["logs"][:30]
+                    # 拟人风控延时 3.5 ~ 6 秒，模拟真人打字追发第3阶段祝福语
+                    blessing_delay = round(random.uniform(3.5, 6.0), 1)
+                    print(f"⏳ 【拟人打字模拟】 等待 {blessing_delay}s (防封黄金区间)，准备追发专属中奖寄语...")
+                    try:
+                        from telethon.tl.functions.messages import SetTypingRequest
+                        from telethon.tl.types import SendMessageTypingAction
+                        await client(SetTypingRequest(peer=dialog.entity, action=SendMessageTypingAction()))
+                    except Exception:
+                        pass
+                    await asyncio.sleep(blessing_delay)
 
-                            await asyncio.sleep(1.5)
-                    except Exception as send_err:
-                        print(f"❌ 补发失败 ({target_name}): {send_err}")
+                    third_blessings = [
+                        "🚀 Arrebenta lá amigo! Hoje a forra é certa! 🎰💵 Qualquer dúvida estou por aqui! 😉",
+                        "🍀 Boa sorte nas jogadas! Que venha o grande jackpot hoje! 💰🔥",
+                        "👑 Vai com tudo, que hoje o PIX cai em dobro na sua conta! 🤑✨",
+                        "🎯 Torcendo pelo seu forro hoje! Se precisar de dicas de slots é só chamar! 🎲💎",
+                        "🔥 Sucesso meu amigo! Que venha muitos ganhos hoje! 🎰💵 Tamo junto! 😉"
+                    ]
+                    third_msg = parse_spintax(random.choice(third_blessings))
+                    try:
+                        await client.send_message(dialog.entity, third_msg)
+                        print(f"🍀 【第3阶段中奖祝福语已送达】 ➔ \"{third_msg[:30]}...\"")
+                    except Exception as e_third:
+                        print(f"⚠️ 第3阶段祝福语发送提示: {e_third}")
+
+                    now_str = get_brazil_time().strftime("%H:%M:%S")
+                    log_entry = {
+                        "timestamp": now_str,
+                        "phone": phone,
+                        "accountName": first_name,
+                        "target": target_name,
+                        "replyText": latest_incoming_text[:30],
+                        "msg": f"✨ 【+{phone} ({first_name})】成功为 '{target_name}' 补发第2阶段彩金文案并拟人追发寄语！(对方回复: '{latest_incoming_text[:20]}')"
+                    }
+                    if "logs" not in stats:
+                        stats["logs"] = []
+                    stats["logs"].insert(0, log_entry)
+                    stats["logs"] = stats["logs"][:30]
+
+                    await asyncio.sleep(1.5)
+            except Exception as send_err:
+                print(f"❌ 补发失败 ({target_name}): {send_err}")
 
         acc_stats = stats.setdefault("accountStats", {}).setdefault(phone, {
             "name": first_name if 'first_name' in locals() else phone,

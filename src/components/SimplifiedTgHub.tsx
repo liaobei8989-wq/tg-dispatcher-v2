@@ -172,14 +172,6 @@ const BRAZILIAN_BIOS = [
   'Plataforma oficial 100% pagando via PIX 💚'
 ];
 
-// Default female avatar fallbacks if operator hasn't uploaded any custom photos
-const DEFAULT_FEMALE_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-];
-
 // 100 Authentic High-Converting Local Brazilian Greetings (100条4大防封策略高转化第一阶段问候语库)
 export const STRATEGY_FRIENDLY_GREETINGS = [
   "Oi, tudo bem? Vi você lá no grupo dos jogos, achei seu perfil tão legal e resolvi chamar. 😊",
@@ -433,6 +425,94 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   // 🏷️ 账号分组与标签分流调度 State
   const PRESET_GROUPS = ['主力爆破A组', '新买养号B组', '备用储备C组', '测试组'];
+  const normalizeGroupTag = (tag?: string): string => {
+    if (!tag) return '主力爆破A组';
+    const t = tag.trim();
+    if (t === '新进拓展B组' || t === '新进养号B组' || t === '养号B组' || t === 'B组' || t.includes('B组') || t.includes('养号')) {
+      return '新买养号B组';
+    }
+    if (t === '爆破A组' || t === 'A组' || t.includes('A组') || t.includes('爆破')) {
+      return '主力爆破A组';
+    }
+    if (t === '储备C组' || t === 'C组' || t.includes('C组') || t.includes('储备')) {
+      return '备用储备C组';
+    }
+    if (t.includes('测试')) {
+      return '测试组';
+    }
+    return t;
+  };
+
+  const getGroupColor = (grp?: string) => {
+    const norm = normalizeGroupTag(grp);
+    if (norm === '主力爆破A组') {
+      return {
+        name: '主力爆破A组',
+        shortName: '爆破A组',
+        icon: '🚀',
+        textColor: 'text-rose-400',
+        textBright: 'text-rose-300',
+        bgSubtle: 'bg-rose-950/50',
+        borderColor: 'border-rose-500/60',
+        selectClass: 'bg-rose-950/80 border-rose-500/70 text-rose-300 font-bold focus:border-rose-400 shadow-sm shadow-rose-950/50',
+        tabActive: 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-black shadow-md shadow-rose-600/30 border border-rose-400',
+        tabInactive: 'bg-rose-950/30 text-rose-400/90 hover:text-rose-200 hover:bg-rose-950/60 border border-rose-800/40',
+        badgeClass: 'bg-rose-950/80 text-rose-300 border border-rose-500/60',
+        quickBtn: 'bg-rose-950/40 hover:bg-rose-950/70 border border-rose-500/50 text-rose-300',
+        optionText: 'text-rose-400'
+      };
+    }
+    if (norm === '新买养号B组') {
+      return {
+        name: '新买养号B组',
+        shortName: '养号B组',
+        icon: '🛡️',
+        textColor: 'text-sky-400',
+        textBright: 'text-sky-300',
+        bgSubtle: 'bg-sky-950/50',
+        borderColor: 'border-sky-500/60',
+        selectClass: 'bg-sky-950/80 border-sky-500/70 text-sky-300 font-bold focus:border-sky-400 shadow-sm shadow-sky-950/50',
+        tabActive: 'bg-gradient-to-r from-sky-600 to-blue-600 text-white font-black shadow-md shadow-sky-600/30 border border-sky-400',
+        tabInactive: 'bg-sky-950/30 text-sky-400/90 hover:text-sky-200 hover:bg-sky-950/60 border border-sky-800/40',
+        badgeClass: 'bg-sky-950/80 text-sky-300 border border-sky-500/60',
+        quickBtn: 'bg-sky-950/40 hover:bg-sky-950/70 border border-sky-500/50 text-sky-300',
+        optionText: 'text-sky-400'
+      };
+    }
+    if (norm === '备用储备C组') {
+      return {
+        name: '备用储备C组',
+        shortName: '储备C组',
+        icon: '📦',
+        textColor: 'text-amber-400',
+        textBright: 'text-amber-300',
+        bgSubtle: 'bg-amber-950/50',
+        borderColor: 'border-amber-500/60',
+        selectClass: 'bg-amber-950/80 border-amber-500/70 text-amber-300 font-bold focus:border-amber-400 shadow-sm shadow-amber-950/50',
+        tabActive: 'bg-gradient-to-r from-amber-600 to-yellow-600 text-slate-950 font-black shadow-md shadow-amber-600/30 border border-amber-400',
+        tabInactive: 'bg-amber-950/30 text-amber-400/90 hover:text-amber-200 hover:bg-amber-950/60 border border-amber-800/40',
+        badgeClass: 'bg-amber-950/80 text-amber-300 border border-amber-500/60',
+        quickBtn: 'bg-amber-950/40 hover:bg-amber-950/70 border border-amber-500/50 text-amber-300',
+        optionText: 'text-amber-400'
+      };
+    }
+    // 测试组
+    return {
+      name: '测试组',
+      shortName: '测试组',
+      icon: '⚙️',
+      textColor: 'text-purple-400',
+      textBright: 'text-purple-300',
+      bgSubtle: 'bg-purple-950/50',
+      borderColor: 'border-purple-500/60',
+      selectClass: 'bg-purple-950/80 border-purple-500/70 text-purple-300 font-bold focus:border-purple-400 shadow-sm shadow-purple-950/50',
+      tabActive: 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black shadow-md shadow-purple-600/30 border border-purple-400',
+      tabInactive: 'bg-purple-950/30 text-purple-400/90 hover:text-purple-200 hover:bg-purple-950/60 border border-purple-800/40',
+      badgeClass: 'bg-purple-950/80 text-purple-300 border border-purple-500/60',
+      quickBtn: 'bg-purple-950/40 hover:bg-purple-950/70 border border-purple-500/50 text-purple-300',
+      optionText: 'text-purple-400'
+    };
+  };
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('ALL');
   const [massSendGroupFilter, setMassSendGroupFilter] = useState<string>('ALL');
 
@@ -1172,9 +1252,15 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
       if (clean && clean.length >= 8 && !obsoletePhones.has(clean)) {
         if (!map.has(clean)) {
+          const isBGroup = clean.startsWith('55869948') || clean.startsWith('55869949') || clean.startsWith('55869951') || (acc.warmupDay && acc.warmupDay <= 3);
+          const rawGroup = acc.groupTag;
+          const assignedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+            ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+            : normalizeGroupTag(rawGroup);
+
           map.set(clean, {
             ...acc,
-            groupTag: acc.groupTag || '新买养号B组'
+            groupTag: assignedGroup
           });
         }
       }
@@ -1186,7 +1272,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const filteredTgAccounts = React.useMemo(() => {
     let result = distinctTgAccounts;
     if (selectedGroupFilter !== 'ALL') {
-      result = result.filter(a => (a.groupTag || '新买养号B组') === selectedGroupFilter);
+      result = result.filter(a => normalizeGroupTag(a.groupTag) === selectedGroupFilter);
     }
     if (accountSearchQuery.trim()) {
       const q = accountSearchQuery.trim().toLowerCase();
@@ -1195,7 +1281,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         const alias = (a.alias || '').toLowerCase();
         const proxy = (a.proxy || '').toLowerCase();
         const pass = (a.twoFactorPassword || '').toLowerCase();
-        const grp = (a.groupTag || '').toLowerCase();
+        const grp = normalizeGroupTag(a.groupTag).toLowerCase();
         return phone.includes(q) || alias.includes(q) || proxy.includes(q) || pass.includes(q) || grp.includes(q);
       });
     }
@@ -1764,7 +1850,8 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   };
 
   const handleSelectGroupAccounts = (group: string) => {
-    const groupAccs = distinctTgAccounts.filter(a => (a.groupTag || '新买养号B组') === group);
+    const targetGroup = normalizeGroupTag(group);
+    const groupAccs = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === targetGroup);
     setSelectedAccountIds(groupAccs.map(a => a.id));
   };
 
@@ -1826,7 +1913,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     } else if (profileTargetScope === 'selected') {
       targetAccounts = distinctTgAccounts.filter(a => selectedAccountIds.includes(a.id));
     } else if (profileTargetScope === 'group') {
-      targetAccounts = distinctTgAccounts.filter(a => (a.groupTag || '新买养号B组') === profileTargetGroup);
+      targetAccounts = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === normalizeGroupTag(profileTargetGroup));
     } else if (profileTargetScope === 'unconfigured') {
       targetAccounts = distinctTgAccounts.filter(a => {
         const hasRealAvatar = a.avatarUrl && !a.avatarUrl.includes('placeholder') && !a.avatarUrl.includes('dicebear');
@@ -1847,10 +1934,15 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       return;
     }
 
+    if (profileUpdateAvatar && uploadedImages.length === 0 && !profileSingleAvatarUrl) {
+      alert('⚠️ 您勾选了【更换真人头像】，但当前尚未上传任何本地图片素材！\n\n请在弹窗下方的【头像素材库】中点击【上传本地头像素材】选择您电脑中的真实图片，或取消勾选【更换头像】选项。系统绝不会使用任何网络图片。');
+      return;
+    }
+
     const targetAccountIds = new Set(targetAccounts.map(a => a.id));
     const targetPhones = new Set(targetAccounts.map(a => (a.phone || '').replace(/\D/g, '')));
 
-    const imagePool = uploadedImages.length > 0 ? uploadedImages : DEFAULT_FEMALE_AVATARS;
+    const imagePool = uploadedImages;
     const clean2Fa = twoFaPassword.trim();
 
     // Calculate avatars already in use by non-target accounts to prevent duplicate collision
@@ -1887,19 +1979,21 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         const bio = BRAZILIAN_BIOS[index % BRAZILIAN_BIOS.length];
         const randomId = `@${femaleName.toLowerCase().replace(/\s+/g, '')}_${Math.floor(10 + Math.random() * 89)}`;
 
-        // Avatar logic
+        // Avatar logic (STRICT: only if user uploaded images)
         let finalAvatar = acc.avatarUrl;
         if (profileUpdateAvatar) {
           if (profileAvatarStrategy === 'first_selected' && profileSingleAvatarUrl) {
             finalAvatar = profileSingleAvatarUrl;
-          } else if (profileAvatarStrategy === 'random') {
-            finalAvatar = imagePool[Math.floor(Math.random() * imagePool.length)];
-          } else {
-            // 'rotate_unused'
-            if (unusedIdx < unusedImages.length) {
-              finalAvatar = unusedImages[unusedIdx++];
+          } else if (imagePool.length > 0) {
+            if (profileAvatarStrategy === 'random') {
+              finalAvatar = imagePool[Math.floor(Math.random() * imagePool.length)];
             } else {
-              finalAvatar = imagePool[index % imagePool.length];
+              // 'rotate_unused'
+              if (unusedIdx < unusedImages.length) {
+                finalAvatar = unusedImages[unusedIdx++];
+              } else {
+                finalAvatar = imagePool[index % imagePool.length];
+              }
             }
           }
         }
@@ -1921,7 +2015,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         updatedCount++;
 
         const updatedFields: string[] = [];
-        if (profileUpdateAvatar) updatedFields.push('🖼️ 头像');
+        if (profileUpdateAvatar && finalAvatar) updatedFields.push('🖼️ 本地头像');
         if (profileUpdateName) updatedFields.push(`👤 姓名[${femaleName}]`);
         if (profileUpdateBioAndId) updatedFields.push(`📝 ID[${finalUsername}]`);
         if (profileUpdate2FaField) updatedFields.push(`🔐 2FA[${final2Fa}]`);
@@ -1947,7 +2041,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     saveAccountsToStorage(updatedAccounts);
 
     const changedItemNames: string[] = [];
-    if (profileUpdateAvatar) changedItemNames.push('真人头像');
+    if (profileUpdateAvatar && (uploadedImages.length > 0 || profileSingleAvatarUrl)) changedItemNames.push('本地头像');
     if (profileUpdateName) changedItemNames.push('巴西女性姓名');
     if (profileUpdateBioAndId) changedItemNames.push('高转化签名与ID');
     if (profileUpdate2FaField) changedItemNames.push(`2FA密码[${clean2Fa || '默认'}]`);
@@ -1969,19 +2063,20 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       `[MTProto 真实同步] 正在向 Telegram 官方云端服务器异步上传所选账号的新资料...`
     ]);
 
-    // 异步触发后端 MTProto 物理上传头像与修改资料 (仅对目标账号)
+    // 异步触发后端 MTProto 物理上传头像与修改资料 (仅对目标账号，头像仅允许上传本地 base64)
     const mtprotoPayload = updatedAccounts
       .filter(a => targetAccountIds.has(a.id) && a.platform === 'telegram')
       .map((a, idx) => {
         const femaleName = a.alias.replace(/\s*\(\d+\)$/, '').trim() || BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length];
         const bio = BRAZILIAN_BIOS[idx % BRAZILIAN_BIOS.length];
+        const isLocalAvatar = a.avatarUrl && (a.avatarUrl.startsWith('data:image') || (!a.avatarUrl.startsWith('http') && a.avatarUrl.length > 200));
         return {
           phone: a.phone,
           firstName: profileUpdateName ? (femaleName.split(' ')[0] || femaleName) : undefined,
           lastName: profileUpdateName ? (femaleName.split(' ').slice(1).join(' ') || '') : undefined,
           about: profileUpdateBioAndId ? bio : undefined,
           username: profileUpdateBioAndId ? a.tgUsername : undefined,
-          avatarBase64: profileUpdateAvatar ? a.avatarUrl : undefined
+          avatarBase64: (profileUpdateAvatar && isLocalAvatar) ? a.avatarUrl : undefined
         };
       });
 
@@ -3320,7 +3415,8 @@ if __name__ == "__main__":
                   全部 ({distinctTgAccounts.length})
                 </button>
                 {PRESET_GROUPS.map(grp => {
-                  const cnt = distinctTgAccounts.filter(a => (a.groupTag || '新买养号B组') === grp).length;
+                  const cnt = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === grp).length;
+                  const grpColor = getGroupColor(grp);
                   return (
                     <button
                       key={grp}
@@ -3330,15 +3426,13 @@ if __name__ == "__main__":
                       }}
                       className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                         selectedGroupFilter === grp
-                          ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                          : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                          ? grpColor.tabActive
+                          : grpColor.tabInactive
                       }`}
                     >
-                      {grp === '主力爆破A组' && '🚀 '}
-                      {grp === '新买养号B组' && '🛡️ '}
-                      {grp === '备用储备C组' && '📦 '}
-                      {grp === '测试组' && '⚙️ '}
-                      {grp} ({cnt})
+                      <span>{grpColor.icon}</span>
+                      <span>{grp}</span>
+                      <span className="opacity-90 font-mono">({cnt})</span>
                     </button>
                   );
                 })}
@@ -3493,8 +3587,15 @@ if __name__ == "__main__":
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleSelectGroupAccounts('主力爆破A组')}
+                  className="px-2 py-0.5 rounded bg-rose-950/40 hover:bg-rose-950/70 border border-rose-500/50 text-rose-300 text-[10px] font-bold cursor-pointer transition-colors"
+                >
+                  🚀 仅选爆破A组
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleSelectGroupAccounts('新买养号B组')}
-                  className="px-2 py-0.5 rounded bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold cursor-pointer transition-colors"
+                  className="px-2 py-0.5 rounded bg-sky-950/40 hover:bg-sky-950/70 border border-sky-500/50 text-sky-300 text-[10px] font-bold cursor-pointer transition-colors"
                 >
                   🛡️ 仅选养号B组
                 </button>
@@ -3667,7 +3768,7 @@ if __name__ == "__main__":
                       const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
                       const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
                       const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
-                      const effectiveGroup = acc.groupTag || '新买养号B组';
+                      const effectiveGroup = normalizeGroupTag(acc.groupTag);
                       const currentDay = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
                       const rowIdx = (accountPageSize > 0 ? (accountCurrentPage - 1) * accountPageSize : 0) + idx + 1;
                       const isSelected = selectedAccountIds.includes(acc.id);
@@ -3712,12 +3813,12 @@ if __name__ == "__main__":
                                 const targetKey = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
                                 handleSetAccountGroup(targetKey, e.target.value);
                               }}
-                              className="bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-400 cursor-pointer"
+                              className={`text-[10px] rounded px-1.5 py-0.5 focus:outline-none cursor-pointer ${getGroupColor(effectiveGroup).selectClass}`}
                             >
-                              <option value="新买养号B组">🛡️ 新买养号B组</option>
-                              <option value="主力爆破A组">🚀 主力爆破A组</option>
-                              <option value="备用储备C组">📦 备用储备C组</option>
-                              <option value="测试组">⚙️ 测试组</option>
+                              <option value="主力爆破A组" className="bg-slate-900 text-rose-400">🚀 主力爆破A组</option>
+                              <option value="新买养号B组" className="bg-slate-900 text-sky-400">🛡️ 新买养号B组</option>
+                              <option value="备用储备C组" className="bg-slate-900 text-amber-400">📦 备用储备C组</option>
+                              <option value="测试组" className="bg-slate-900 text-purple-400">⚙️ 测试组</option>
                             </select>
                           </td>
                           <td className="py-1.5 px-2.5 text-center">
@@ -3831,7 +3932,7 @@ if __name__ == "__main__":
                 const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
                 const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
                 const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
-                const effectiveGroup = acc.groupTag || '新买养号B组';
+                const effectiveGroup = normalizeGroupTag(acc.groupTag);
                 const currentDay = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
                 const isSelected = selectedAccountIds.includes(acc.id);
 
@@ -3903,13 +4004,13 @@ if __name__ == "__main__":
                           const targetKey = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
                           handleSetAccountGroup(targetKey, e.target.value);
                         }}
-                        className="bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-[9px] rounded px-1 py-0.5 focus:outline-none focus:border-cyan-400 cursor-pointer truncate"
+                        className={`text-[9px] rounded px-1 py-0.5 focus:outline-none cursor-pointer truncate ${getGroupColor(effectiveGroup).selectClass}`}
                         title="点击更换此账号分组"
                       >
-                        <option value="新买养号B组">🛡️ 养号B组</option>
-                        <option value="主力爆破A组">🚀 爆破A组</option>
-                        <option value="备用储备C组">📦 储备C组</option>
-                        <option value="测试组">⚙️ 测试组</option>
+                        <option value="主力爆破A组" className="bg-slate-900 text-rose-400">🚀 爆破A组</option>
+                        <option value="新买养号B组" className="bg-slate-900 text-sky-400">🛡️ 养号B组</option>
+                        <option value="备用储备C组" className="bg-slate-900 text-amber-400">📦 储备C组</option>
+                        <option value="测试组" className="bg-slate-900 text-purple-400">⚙️ 测试组</option>
                       </select>
 
                       {/* Warmup Day Counter */}
@@ -4110,7 +4211,7 @@ if __name__ == "__main__":
                 <option value="AUTO_ROTATE">⚡ 全局自动轮询 (全部 {distinctTgAccounts.length} 个协议号)</option>
                 <optgroup label="🏷️ 按分组标签轮流发件">
                   {PRESET_GROUPS.map(grp => {
-                    const count = distinctTgAccounts.filter(a => (a.groupTag || '主力爆破A组') === grp).length;
+                    const count = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === grp).length;
                     return (
                       <option key={`GROUP_${grp}`} value={`GROUP_${grp}`}>
                         {grp === '主力爆破A组' && '🚀 '}
@@ -5501,7 +5602,7 @@ if __name__ == "__main__":
                         >
                           <option value="ALL">⚡ 全局全部协议号 ({distinctTgAccounts.length} 个)</option>
                           {PRESET_GROUPS.map(grp => {
-                            const cnt = distinctTgAccounts.filter(a => (a.groupTag || '主力爆破A组') === grp).length;
+                            const cnt = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === grp).length;
                             return (
                               <option key={grp} value={grp}>
                                 {grp === '主力爆破A组' && '🚀 '}

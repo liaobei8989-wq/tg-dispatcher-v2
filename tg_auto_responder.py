@@ -366,9 +366,56 @@ async def start_account_listener(session_path: str):
 
                     track_key = f"{session_basename}_{sender_id}"
 
+                    # 检查持久化去重记录 (sessions/replied_chats.json)
+                    replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
+                    replied_history = {}
+                    if os.path.exists(replied_chats_file):
+                        try:
+                            with open(replied_chats_file, "r", encoding="utf-8") as rf:
+                                replied_history = json.load(rf)
+                        except Exception:
+                            replied_history = {}
+
+                    incoming_msg_id = getattr(event.message, 'id', 0)
+                    last_recorded_id = replied_history.get(track_key, 0)
+
+                    # 如果此消息ID已被记录过，直接跳过，防止并发轰炸
+                    if incoming_msg_id > 0 and incoming_msg_id <= last_recorded_id:
+                        return
+
+                    # 检查该会话最新消息是否我们已经回复过 (例如 tg_dispatcher.py 刚才已秒级发出过彩金和祝福)
+                    try:
+                        recent_msgs = await client.get_messages(event.chat_id, limit=6)
+                        has_replied_already = False
+                        if recent_msgs:
+                            for rm in recent_msgs:
+                                if rm.out and rm.id > incoming_msg_id:
+                                    has_replied_already = True
+                                    break
+                        if has_replied_already:
+                            # 记录防重
+                            replied_history[track_key] = incoming_msg_id
+                            try:
+                                with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                                    json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+                            except Exception:
+                                pass
+                            return
+                    except Exception:
+                        pass
+
                     # 20秒防抖：防止客户连发两句话重复轰炸，但间隔20秒以上或后续说话时必定正常推送引流
                     if not check_and_mark_reply(track_key, cooldown_seconds=20):
                         return
+
+                    # 标记此 incoming_msg_id 已被接管处理
+                    replied_history[track_key] = incoming_msg_id
+                    try:
+                        os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
+                        with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                            json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
 
                     sender_name = ""
                     try:

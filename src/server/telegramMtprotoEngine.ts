@@ -573,71 +573,90 @@ export async function executeTelegramReplyScanner(
 
       log(`🔎 [${curPhone}] 成功获取 ${privateDialogs.length} 个私聊联系人会话，逐一核对互动历史...`);
 
+      // 读取持久化去重缓存
+      const repliedChatsFile = path.join(process.cwd(), 'sessions', 'replied_chats.json');
+      let repliedHistory: Record<string, number> = {};
+      try {
+        if (fs.existsSync(repliedChatsFile)) {
+          repliedHistory = JSON.parse(fs.readFileSync(repliedChatsFile, 'utf8'));
+        }
+      } catch (e) {}
+
       for (const d of privateDialogs) {
         try {
           const messages = await withTimeout(client.getMessages(d.inputEntity, { limit: 15 }), 5000, '获取消息超时');
           if (!messages || messages.length === 0) continue;
 
-          // 寻找对方最新回复
-          const lastMsg = messages[0];
-          
-          // 如果客户最新发来了私聊消息（!lastMsg.out）
-          if (!lastMsg.out) {
-            // 找到我们在该对话中最后一条发出的消息
-            const lastOutMsg = messages.find(m => m && m.out);
-            
-            // 判断我们最后一次发出的消息是否已经是彩金营销文案
-            const isLastOutPromo = lastOutMsg && (
-              lastOutMsg.message?.includes('http') || 
-              lastOutMsg.message?.includes('PROMOÇÃO') || 
-              lastOutMsg.message?.includes('Bônus') ||
-              lastOutMsg.message?.includes('Cadastre-se') ||
-              lastOutMsg.message?.includes('promobr')
-            );
+          // 1. 寻找客户最新发来的消息 (!m.out)
+          const latestIncomingMsg = messages.find((m: any) => m && !m.out);
+          if (!latestIncomingMsg) continue; // 客户从未发言，仅是单向破冰，跳过
 
-            // 如果我们最后一条发出的不是彩金文案（例如是第一步的问候语，或者对方发起了新一轮回复），则立即追发第二阶段彩金文案！
-            if (!isLastOutPromo) {
-              const promoText = parseSpintax(secondTemplate);
-              await withTimeout(client.sendMessage(d.inputEntity, { message: promoText, parseMode: 'html' }), 6000, '发送补发消息超时');
-              newlySent++;
-              totalCompleted++;
+          const latestIncomingId = Number(latestIncomingMsg.id || 0);
+          const latestIncomingDate = Number(latestIncomingMsg.date || 0);
+          const targetEntityId = String((d.entity as any)?.id || (d as any).id || '');
+          const cleanPhone = curPhone.replace(/[^0-9]/g, '');
+          const trackKey = `${cleanPhone}_${targetEntityId}`;
+          const lastRecordedId = Number(repliedHistory[trackKey] || 0);
 
-              const targetName = (d.entity as any)?.firstName || (d.entity as any)?.phone || 'Cliente';
-              const replySnippet = String(lastMsg.message || lastMsg.text || '客户回复').slice(0, 30);
-              
-              // 官方推荐 3~6 秒拟人风控延时 + 模拟正在输入状态 (typing)
-              const blessingDelay = Math.round((Math.random() * 2.5 + 3.5) * 10) / 10;
-              log(`⏳ [拟人拟真延时] 针对 '${targetName}' 等待 ${blessingDelay}s (官方推荐 3~6s 防封黄金区间)，并发送 typing 状态，准备追发中奖祝福语...`);
-              
-              try {
-                await client.invoke(new Api.messages.SetTyping({
-                  peer: d.inputEntity,
-                  action: new Api.SendMessageTypingAction()
-                }));
-              } catch (tErr) {}
+          // 2. 检查在客户最新回复之后，我们是否已经发出过消息 (m.out === true)
+          const hasRepliedAfterIncoming = messages.some((m: any) => 
+            m && m.out && (
+              Number(m.id || 0) > latestIncomingId || 
+              (latestIncomingDate > 0 && Number(m.date || 0) > latestIncomingDate)
+            )
+          );
 
-              await sleep(blessingDelay * 1000);
-
-              const blessingText = parseSpintax(thirdTemplate);
-              await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText }), 6000, '发送祝福语超时');
-
-              const logEntry = {
-                timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
-                phone: curPhone.replace(/[^0-9]/g, ''),
-                accountName: accName,
-                target: targetName,
-                replyText: replySnippet,
-                msg: `✨ 【${curPhone} (${accName})】检测到客户 '${targetName}' 回复: "${replySnippet}"，已即时补发第二阶段彩金文案并在 ${blessingDelay}s 拟人延时后追发专属中奖寄语: "${blessingText.slice(0, 35)}..."！`
-              };
-
-              log(logEntry.msg);
-              if (!statsData.logs) statsData.logs = [];
-              statsData.logs.unshift(logEntry);
-              if (statsData.logs.length > 50) statsData.logs = statsData.logs.slice(0, 50);
-            } else {
-              totalCompleted++;
-            }
+          // 3. 如果我们已回复过，或者该消息 ID 已被持久化记录，判定为已闭环，严禁二次轰炸
+          if (hasRepliedAfterIncoming || (latestIncomingId > 0 && latestIncomingId <= lastRecordedId)) {
+            totalCompleted++;
+            continue;
           }
+
+          // 4. 客户发来了新消息且我们尚未回复 -> 立即触发第2阶段彩金 + 拟人打字第3阶段寄语！
+          // 立即更新防重记录
+          repliedHistory[trackKey] = latestIncomingId;
+          try {
+            fs.mkdirSync(path.dirname(repliedChatsFile), { recursive: true });
+            fs.writeFileSync(repliedChatsFile, JSON.stringify(repliedHistory, null, 2), 'utf8');
+          } catch (e) {}
+
+          const promoText = parseSpintax(secondTemplate);
+          await withTimeout(client.sendMessage(d.inputEntity, { message: promoText, parseMode: 'html' }), 6000, '发送补发消息超时');
+          newlySent++;
+          totalCompleted++;
+
+          const targetName = (d.entity as any)?.firstName || (d.entity as any)?.phone || 'Cliente';
+          const replySnippet = String(latestIncomingMsg.message || latestIncomingMsg.text || '客户回复').slice(0, 30);
+          
+          // 官方推荐 3~6 秒拟人风控延时 + 模拟正在输入状态 (typing)
+          const blessingDelay = Math.round((Math.random() * 2.5 + 3.5) * 10) / 10;
+          log(`⏳ [拟人拟真延时] 针对 '${targetName}' 等待 ${blessingDelay}s (官方推荐 3~6s 防封黄金区间)，并发送 typing 状态，准备追发中奖祝福语...`);
+          
+          try {
+            await client.invoke(new Api.messages.SetTyping({
+              peer: d.inputEntity,
+              action: new Api.SendMessageTypingAction()
+            }));
+          } catch (tErr) {}
+
+          await sleep(blessingDelay * 1000);
+
+          const blessingText = parseSpintax(thirdTemplate);
+          await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText }), 6000, '发送祝福语超时');
+
+          const logEntry = {
+            timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
+            phone: cleanPhone,
+            accountName: accName,
+            target: targetName,
+            replyText: replySnippet,
+            msg: `✨ 【${curPhone} (${accName})】检测到客户 '${targetName}' 回复: "${replySnippet}"，已即时补发第2阶段彩金文案并在 ${blessingDelay}s 拟人延时后追发专属中奖寄语: "${blessingText.slice(0, 35)}..."！`
+          };
+
+          log(logEntry.msg);
+          if (!statsData.logs) statsData.logs = [];
+          statsData.logs.unshift(logEntry);
+          if (statsData.logs.length > 50) statsData.logs = statsData.logs.slice(0, 50);
         } catch (dErr) {}
       }
     } catch (err: any) {

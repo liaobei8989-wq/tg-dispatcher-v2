@@ -47,13 +47,19 @@ export default function App() {
               const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
               const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
               const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
+              const isBGroup = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') || validWarmupDay <= 3;
+              const rawGroup = acc.groupTag;
+              const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+                ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+                : rawGroup;
+
               uniqueMap.set(cleanPhone, {
                 ...acc,
                 proxy: dedicatedProxy,
                 createdAt: createdAt,
                 warmupDay: validWarmupDay,
                 avatarUrl: acc.avatarUrl || '',
-                groupTag: acc.groupTag || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '新进拓展B组' : '主力爆破A组')
+                groupTag: normalizedGroup
               });
             }
           });
@@ -94,13 +100,19 @@ export default function App() {
               if (cp && !obsoletePhones.has(cp)) {
                 const existing = uniqueMap.get(cp);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
+                const isBGroup = cp.startsWith('55869948') || cp.startsWith('55869949') || cp.startsWith('55869951');
+                const rawGroup = existing?.groupTag || acc.groupTag;
+                const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+                  ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+                  : rawGroup;
+
                 uniqueMap.set(cp, {
                   ...acc,
                   ...(existing || {}),
                   proxy: dedicatedProxy,
-                  createdAt: existing?.createdAt || acc.createdAt || '2026-08-24',
-                  warmupDay: existing?.warmupDay || acc.warmupDay || 2,
-                  groupTag: existing?.groupTag || acc.groupTag || '主力爆破A组'
+                  createdAt: existing?.createdAt || acc.createdAt || (isBGroup ? '2026-08-29' : '2026-08-24'),
+                  warmupDay: existing?.warmupDay || acc.warmupDay || (isBGroup ? 1 : 6),
+                  groupTag: normalizedGroup
                 });
               }
             });
@@ -127,13 +139,19 @@ export default function App() {
             const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
             const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
             const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
+            const isBGroup = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') || validWarmupDay <= 3;
+            const rawGroup = acc.groupTag;
+            const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+              ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+              : rawGroup;
+
             uniqueMap.set(cleanPhone, {
               ...acc,
               proxy: dedicatedProxy,
               createdAt: createdAt,
               warmupDay: validWarmupDay,
               avatarUrl: acc.avatarUrl || '',
-              groupTag: acc.groupTag || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '新进拓展B组' : '主力爆破A组')
+              groupTag: normalizedGroup
             });
           }
         });
