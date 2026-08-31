@@ -568,6 +568,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         return {
           ...a,
           warmupDay: targetDay,
+          baseWarmupDay: targetDay,
           createdAt: todayStr
         };
       }
@@ -926,10 +927,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   // 3. TG 群发设置 State
   const [sendStrategyMode, setSendStrategyMode] = useState<'two_stage' | 'direct'>('two_stage');
-  // 🎲 群发速率模式: 'turbo' (极速拟人抖动 2.2~4.8秒/条) | 'balanced' (平稳波动 5.5~11.2秒/条) | 'conservative' (深度防风控 18.5~32.5秒/条) | 'custom' (自定义浮点区间)
-  const [tgSendSpeedMode, setTgSendSpeedMode] = useState<'turbo' | 'balanced' | 'conservative' | 'custom'>('turbo');
-  const [customSpeedMin, setCustomSpeedMin] = useState<number>(2.5);
-  const [customSpeedMax, setCustomSpeedMax] = useState<number>(6.0);
+  // 🎲 群发速率模式: 'conservative' (真人业务员 45~60秒/条，15条约12~15分钟) | 'balanced' (平稳 20~35秒/条) | 'turbo' (极速 5~12秒/条) | 'custom' (自定义)
+  const [tgSendSpeedMode, setTgSendSpeedMode] = useState<'turbo' | 'balanced' | 'conservative' | 'custom'>('conservative');
+  const [customSpeedMin, setCustomSpeedMin] = useState<number>(45.0);
+  const [customSpeedMax, setCustomSpeedMax] = useState<number>(60.0);
   const [enableDynamicJitter, setEnableDynamicJitter] = useState<boolean>(true);
   const [enableTypingSimulation, setEnableTypingSimulation] = useState<boolean>(true);
   const [enableMicroPause, setEnableMicroPause] = useState<boolean>(true);
@@ -2511,12 +2512,12 @@ if __name__ == "__main__":
         };
       });
 
-      const speedLabel = tgSendSpeedMode === 'turbo' 
-        ? '🚀 极速拟人变速 (2.2~4.8秒/条 动态随机浮动)' 
+      const speedLabel = tgSendSpeedMode === 'conservative'
+        ? '🧑‍💼 真人业务员节奏 (45~60秒/条，15条约12~15分钟，带打字与喝水小憩)'
         : (tgSendSpeedMode === 'balanced' 
-            ? '🛡️ 平稳波动防风控 (5.5~11.2秒/条 动态随机浮动)' 
-            : (tgSendSpeedMode === 'conservative'
-                ? '🐢 深度伪装龟速 (18.5~32.5秒/条 动态随机浮动)'
+            ? '🛡️ 平稳波动防风控 (20~35秒/条 动态随机浮动)' 
+            : (tgSendSpeedMode === 'turbo'
+                ? '🚀 极速拟人变速 (5~12秒/条 动态随机浮动)'
                 : `🎛️ 自定义拟人区间 (${customSpeedMin}s ~ ${customSpeedMax}s 随机波动)`));
 
       setSimpleLogs(prev => [
@@ -2666,14 +2667,17 @@ if __name__ == "__main__":
         }
 
         // 6. 速率控制与非固定拟人抖动算法 (杜绝机器人固定匀速)
-        let minBaseSec = 2.2;
-        let maxBaseSec = 4.8;
-        if (tgSendSpeedMode === 'balanced') {
-          minBaseSec = 5.5;
-          maxBaseSec = 11.2;
-        } else if (tgSendSpeedMode === 'conservative') {
-          minBaseSec = 18.5;
-          maxBaseSec = 32.5;
+        let minBaseSec = 45.0;
+        let maxBaseSec = 60.0;
+        if (tgSendSpeedMode === 'conservative') {
+          minBaseSec = 45.0;
+          maxBaseSec = 60.0;
+        } else if (tgSendSpeedMode === 'balanced') {
+          minBaseSec = 20.0;
+          maxBaseSec = 35.0;
+        } else if (tgSendSpeedMode === 'turbo') {
+          minBaseSec = 5.0;
+          maxBaseSec = 12.0;
         } else if (tgSendSpeedMode === 'custom') {
           minBaseSec = Math.max(1.0, customSpeedMin);
           maxBaseSec = Math.max(minBaseSec + 0.5, customSpeedMax);
@@ -3769,7 +3773,7 @@ if __name__ == "__main__":
                       const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
                       const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
                       const effectiveGroup = normalizeGroupTag(acc.groupTag);
-                      const currentDay = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
+                      const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                       const rowIdx = (accountPageSize > 0 ? (accountCurrentPage - 1) * accountPageSize : 0) + idx + 1;
                       const isSelected = selectedAccountIds.includes(acc.id);
 
@@ -3933,7 +3937,7 @@ if __name__ == "__main__":
                 const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
                 const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
                 const effectiveGroup = normalizeGroupTag(acc.groupTag);
-                const currentDay = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
+                const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                 const isSelected = selectedAccountIds.includes(acc.id);
 
                 return (
@@ -5841,22 +5845,22 @@ if __name__ == "__main__":
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     <div
-                      onClick={() => setTgSendSpeedMode('turbo')}
+                      onClick={() => setTgSendSpeedMode('conservative')}
                       className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                        tgSendSpeedMode === 'turbo'
+                        tgSendSpeedMode === 'conservative'
                           ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 shadow-md ring-1 ring-emerald-500/40'
                           : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
                     >
                       <div className="font-bold text-xs flex items-center gap-1.5">
-                        <Flame className="w-3.5 h-3.5 text-emerald-400" />
-                        🚀 极速拟人变速 (推荐)
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        🧑‍💼 真人业务员节奏 (强烈推荐)
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>2.2 ~ 4.8 秒</strong>
+                        每条浮动 <strong>45 ~ 60 秒</strong> (15封约12~15分)
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        多号交替发信，每个号实际间隔 10.5~21.5 秒，极速高效且每条速度随机不同！
+                        模拟业务员看对话框、打字、发信与喝水小憩，5个号各具独立手速，防封安全性最高！
                       </p>
                     </div>
 
@@ -5870,33 +5874,33 @@ if __name__ == "__main__":
                     >
                       <div className="font-bold text-xs flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                        🛡️ 平稳波动防风控
+                        🛡️ 平稳波动模式
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>5.5 ~ 11.2 秒</strong>
+                        每条浮动 <strong>20 ~ 35 秒</strong>
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        单号实际间隔 24~48 秒，适合刚注册的新协议号或白天气温敏感期。
+                        单号中速交替发信，适合成熟稳定期账号在白天的营销推广。
                       </p>
                     </div>
 
                     <div
-                      onClick={() => setTgSendSpeedMode('conservative')}
+                      onClick={() => setTgSendSpeedMode('turbo')}
                       className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                        tgSendSpeedMode === 'conservative'
+                        tgSendSpeedMode === 'turbo'
                           ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-md ring-1 ring-amber-500/40'
                           : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
                     >
                       <div className="font-bold text-xs flex items-center gap-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                        🐢 深度伪装龟速
+                        <Flame className="w-3.5 h-3.5 text-amber-400" />
+                        🚀 极速拟人变速
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>18.5 ~ 32.5 秒</strong>
+                        每条浮动 <strong>5 ~ 12 秒</strong>
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        单号实际间隔 75~135 秒，超慢频次，完全模拟真人偶尔查看手机。
+                        多号高并发交替发信，适合老号集群或紧急高转化活动爆破。
                       </p>
                     </div>
 
@@ -5916,7 +5920,7 @@ if __name__ == "__main__":
                         自定义 <strong>{customSpeedMin}s ~ {customSpeedMax}s</strong> 浮动
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        自由设定最小与最大随机秒数，系统在区间内生成非整数浮点随机耗时。
+                        自由设定最小与最大随机秒数，系统在区间内生成高斯拟人随机耗时。
                       </p>
                     </div>
                   </div>

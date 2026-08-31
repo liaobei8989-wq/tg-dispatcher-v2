@@ -228,8 +228,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 {accounts.slice(0, 10).map((acc) => {
                   const cleanPhone = (acc.phone || '').replace(/\D/g, '');
                   const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(cleanPhone);
-                  const fallbackDay = isOldBatch ? 6 : 1;
-                  const currentDay = acc.warmupDay !== undefined && acc.warmupDay > 0 ? acc.warmupDay : fallbackDay;
+                  const effectiveCreatedAt = acc.createdAt || (isOldBatch ? '2026-08-24' : '2026-08-29');
+                  const currentDay = calculateWarmupDays(effectiveCreatedAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : (isOldBatch ? 6 : 1)));
                   const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                   return (
                   <tr key={acc.id} className="hover:bg-slate-800/30 transition-colors">

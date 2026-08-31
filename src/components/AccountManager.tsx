@@ -1657,14 +1657,14 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                     {/* Column 7: Warmup Day */}
                     <td className="py-3 px-4 font-mono">
                       {(() => {
-                        const currentDay = acc.warmupDay !== undefined && acc.warmupDay > 0 ? acc.warmupDay : (calculateWarmupDays(acc.createdAt, 2) || 2);
+                        const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                         return (
                           <div className="flex flex-col space-y-1.5">
                             <div className="flex items-center gap-1.5">
                               {currentDay <= 7 ? (
                                 <span
                                   className="bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-bold w-max flex items-center gap-1 shadow-sm"
-                                  title="系统内挂载养号的累计天数"
+                                  title="系统内挂载养号的累计天数 (每天 00:00 自动 +1 天)"
                                 >
                                   🌱 第 <strong className="text-amber-200 text-xs">{currentDay}</strong> 天
                                   <span className="text-[9px] text-amber-400 font-mono">({currentDay}/7天 Protective)</span>
@@ -1672,7 +1672,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                               ) : (
                                 <span
                                   className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[11px] font-bold w-max flex items-center gap-1 shadow-sm"
-                                  title="系统内挂载养号累计超过 7 天，已完全解锁发信限制"
+                                  title="系统内挂载养号累计超过 7 天，已完全成熟"
                                 >
                                   👑 第 <strong className="text-emerald-200 text-xs">{currentDay}</strong> 天
                                   <span className="text-[9px] text-emerald-400 font-mono">(系统成熟期)</span>
@@ -1688,12 +1688,12 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => {
-                                  const cur = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
+                                  const cur = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                                   const targetDay = cur + 1;
                                   const today = new Date().toISOString().split('T')[0];
                                   const updated = accounts.map((a) =>
                                     (a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, '')))
-                                      ? { ...a, warmupDay: targetDay, createdAt: today }
+                                      ? { ...a, warmupDay: targetDay, baseWarmupDay: targetDay, createdAt: today }
                                       : a
                                   );
                                   setAccounts(updated);
@@ -1706,12 +1706,12 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                               </button>
                               <button
                                 onClick={() => {
-                                  const cur = calculateWarmupDays(acc.createdAt, acc.warmupDay || 2);
+                                  const cur = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                                   const targetDay = Math.max(1, cur - 1);
                                   const today = new Date().toISOString().split('T')[0];
                                   const updated = accounts.map((a) =>
                                     (a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, '')))
-                                      ? { ...a, warmupDay: targetDay, createdAt: today }
+                                      ? { ...a, warmupDay: targetDay, baseWarmupDay: targetDay, createdAt: today }
                                       : a
                                   );
                                   setAccounts(updated);
@@ -1727,7 +1727,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                                   const today = new Date().toISOString().split('T')[0];
                                   const updated = accounts.map((a) =>
                                     (a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, '')))
-                                      ? { ...a, warmupDay: 1, createdAt: today }
+                                      ? { ...a, warmupDay: 1, baseWarmupDay: 1, createdAt: today }
                                       : a
                                   );
                                   setAccounts(updated);

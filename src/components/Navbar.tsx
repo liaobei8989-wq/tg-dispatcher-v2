@@ -91,11 +91,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-amber-400 font-bold font-mono">{totalSentToday} 条</span>
               </div>
               <div className="h-3 w-px bg-slate-800"></div>
-              <div className="flex items-center space-x-1.5 bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+              <button
+                type="button"
+                title="点击可一键清零补发统计"
+                onClick={async () => {
+                  if (window.confirm('确定要一键清零【自动补发】统计数据吗？')) {
+                    try {
+                      await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
+                      window.location.reload();
+                    } catch (e: any) {
+                      alert('清零失败: ' + e.message);
+                    }
+                  }
+                }}
+                className="flex items-center space-x-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 px-2 py-0.5 rounded-lg border border-emerald-500/20 hover:border-emerald-400/40 transition cursor-pointer active:scale-95 group"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span className="text-slate-300">自动补发:</span>
+                <span className="text-slate-300 group-hover:text-white">自动补发:</span>
                 <span className="text-cyan-400 font-extrabold font-mono">{totalFollowupToday} 条</span>
-              </div>
+                <span className="text-[10px] text-slate-400 group-hover:text-rose-300 opacity-60 group-hover:opacity-100 ml-0.5">🔄</span>
+              </button>
             </div>
           </div>
         </div>

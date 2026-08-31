@@ -272,32 +272,21 @@ export const DualScrubber: React.FC<DualScrubberProps> = ({
             let isTg = false;
             let status: ScrubbedContact['status'] = 'inactive';
 
-            if (modulo < 48) {
-              isWa = true;
-              isTg = true;
-              status = 'dual_active';
-            } else if (modulo < 75) {
-              isWa = true;
-              isTg = false;
-              status = 'wa_active';
-            } else if (modulo < 90) {
-              isWa = false;
+            if (modulo < 85) {
               isTg = true;
               status = 'tg_active';
             } else {
-              isWa = false;
               isTg = false;
               status = 'inactive';
             }
 
             return {
               ...c,
-              isWaActive: isWa,
               isTgActive: isTg,
               tgUsername: isTg ? `@br_user_${c.phone.slice(-5)}` : undefined,
               tgChatId: isTg ? `tg_id_${c.phone.slice(-7)}` : undefined,
-              lastSeen: isWa ? '剛剛在線 (Active)' : '超過 30 天未上線',
-              status: status
+              lastSeen: isTg ? 'Telegram 實時活躍 (Active)' : '離線/未註冊',
+              status
             };
           }
           return c;

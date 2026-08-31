@@ -315,21 +315,39 @@ async function startServer() {
         return `+${rawPhone}`;
       };
 
-      const getAccountMeta = (rawPhone: string, idx: number) => {
-        const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone);
-        if (isOldBatch) {
-          return {
-            createdAt: '2026-08-24',
-            warmupDay: 6,
-            status: 'active' as const,
-            groupTag: '主力爆破A组'
-          };
+      const calculateWarmupDays = (createdAtStr?: string, baseWarmupDay: number = 1): number => {
+        const initialBaseDay = (baseWarmupDay && baseWarmupDay > 0) ? baseWarmupDay : 1;
+        if (!createdAtStr) return initialBaseDay;
+
+        try {
+          const createdDate = new Date(createdAtStr.includes('T') ? createdAtStr : createdAtStr + 'T00:00:00');
+          if (isNaN(createdDate.getTime())) return initialBaseDay;
+
+          const now = new Date();
+          const createdMid = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate()).getTime();
+          const nowMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          const elapsedDays = Math.max(0, Math.floor((nowMid - createdMid) / (1000 * 60 * 60 * 24)));
+
+          return initialBaseDay + elapsedDays;
+        } catch {
+          return initialBaseDay;
         }
+      };
+
+      const getAccountMeta = (rawPhone: string, idx: number, userJsonMeta?: any) => {
+        const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone);
+        const createdAt = userJsonMeta?.createdAt || (isOldBatch ? '2026-08-24' : '2026-08-29');
+        const baseDay = userJsonMeta?.baseWarmupDay || (isOldBatch ? 1 : 1);
+        const dynamicWarmupDay = calculateWarmupDays(createdAt, baseDay);
+        const isMature = dynamicWarmupDay >= 4;
+
         return {
-          createdAt: '2026-08-29',
-          warmupDay: 1,
-          status: 'warming' as const,
-          groupTag: '新进拓展B组'
+          createdAt,
+          baseWarmupDay: baseDay,
+          warmupDay: dynamicWarmupDay,
+          status: (isMature ? 'active' : 'warming') as 'active' | 'warming',
+          groupTag: userJsonMeta?.groupTag || (isOldBatch ? '主力爆破A组' : '新买养号B组'),
+          dailyLimit: dynamicWarmupDay === 1 ? 15 : dynamicWarmupDay === 2 ? 30 : dynamicWarmupDay === 3 ? 60 : 120
         };
       };
 
@@ -1014,8 +1032,8 @@ async function startServer() {
         sender_phone,
         session_file,
         force_user_mode,
-        delay_min: delay_min !== undefined ? delay_min : 1,
-        delay_max: delay_max !== undefined ? delay_max : 2,
+        delay_min: delay_min !== undefined ? delay_min : 45,
+        delay_max: delay_max !== undefined ? delay_max : 60,
         batch_min,
         batch_max,
         batch_rest_min,
@@ -1068,25 +1086,195 @@ async function startServer() {
     }
   });
 
-  // API: Get Telegram Auto-Scanner Stats & Reply History
-  app.get("/api/telegram/auto-scanner-stats", (req, res) => {
+  // API: Get Telegram Auto-Scanner Stats & Reply History (以独立回复客户去重精准统计)
+  app.get(["/api/telegram/auto-scanner-stats", "/api/tg-matrix/scanner-stats"], (req, res) => {
     const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
-    if (fs.existsSync(statsFilePath)) {
+    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
+    
+    let repliedData: any = {};
+    if (fs.existsSync(repliedChatsFile)) {
       try {
-        const data = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
-        return res.json({ success: true, data });
+        repliedData = JSON.parse(fs.readFileSync(repliedChatsFile, "utf8"));
       } catch (e) {}
     }
-    res.json({
-      success: true,
-      data: {
+
+    // 统计独立有效回复客户数 (Unique Replied Customers)
+    const uniqueCustomerKeys = Object.keys(repliedData);
+    const uniqueCustomerCount = uniqueCustomerKeys.length;
+
+    let statsData: any = {
+      status: "ACTIVE",
+      statusLabel: "🟢 24小时全天候即时巡航补发",
+      todayCount: uniqueCustomerCount,
+      totalCount: uniqueCustomerCount,
+      uniqueRepliedCustomers: uniqueCustomerCount,
+      logs: []
+    };
+
+    if (fs.existsSync(statsFilePath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
+        statsData = { ...statsData, ...raw };
+        // 保证按客户去重统计精准展示
+        statsData.uniqueRepliedCustomers = uniqueCustomerCount || statsData.todayCount || 0;
+        statsData.todayCount = uniqueCustomerCount || statsData.todayCount || 0;
+        statsData.totalCount = Math.max(uniqueCustomerCount, statsData.totalCount || 0);
+      } catch (e) {}
+    }
+
+    return res.json(statsData);
+  });
+
+  // API: Reset Telegram Reply Stats (一键清零回复统计与客户记录)
+  app.post(["/api/telegram/reset-reply-stats", "/api/tg-matrix/reset-stats"], (req, res) => {
+    const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
+    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
+    
+    try {
+      if (fs.existsSync(repliedChatsFile)) {
+        fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
+      }
+      const emptyStats = {
         status: "ACTIVE",
         statusLabel: "🟢 24小时全天候即时巡航补发",
         todayCount: 0,
         totalCount: 0,
+        uniqueRepliedCustomers: 0,
+        lastResetTime: new Date().toISOString(),
+        accountStats: {},
         logs: []
+      };
+      fs.writeFileSync(statsFilePath, JSON.stringify(emptyStats, null, 2), "utf8");
+      return res.json({ success: true, message: "✅ 回复与补发统计已全部清零重置为 0！", data: emptyStats });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // =========================================================================
+  // ⏰ 服务端常驻 24h 跨时区 3 波定时群发调度中心 (Server-Side Wave Scheduler)
+  // =========================================================================
+  const SCHED_CONFIG_PATH = path.join(process.cwd(), "sessions", "scheduled_campaign_config.json");
+  const SCHED_EXEC_RECORDS_PATH = path.join(process.cwd(), "sessions", "scheduled_execution_records.json");
+
+  const DEFAULT_SERVER_WAVES = [
+    {
+      id: 'wave-1-lunch',
+      name: '第一波：午间摸鱼 (12:00~14:00)',
+      brazilTime: '12:30',
+      indonesiaTime: '22:30',
+      enabled: true,
+      targetCountSuggestion: '2,000 ~ 3,000 条',
+      status: 'waiting',
+      targetGroupTag: 'ALL'
+    },
+    {
+      id: 'wave-2-dinner',
+      name: '第二波：晚饭下班 (18:30~20:30)',
+      brazilTime: '18:30',
+      indonesiaTime: '04:30',
+      enabled: true,
+      targetCountSuggestion: '3,000 ~ 5,000 条 (爆款首选)',
+      status: 'waiting',
+      targetGroupTag: '主力爆破A组'
+    },
+    {
+      id: 'wave-3-night',
+      name: '第三波：夜间高峰 (20:30~22:30)',
+      brazilTime: '20:30',
+      indonesiaTime: '06:30',
+      enabled: true,
+      targetCountSuggestion: '2,000 ~ 4,000 条',
+      status: 'waiting',
+      targetGroupTag: 'ALL'
+    }
+  ];
+
+  function loadServerSchedConfig() {
+    if (fs.existsSync(SCHED_CONFIG_PATH)) {
+      try {
+        return JSON.parse(fs.readFileSync(SCHED_CONFIG_PATH, "utf8"));
+      } catch (e) {}
+    }
+    return {
+      enabled: true,
+      recurring: true,
+      targetTimeBrazil: '18:30',
+      waves: DEFAULT_SERVER_WAVES,
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
+  function saveServerSchedConfig(cfg: any) {
+    try {
+      fs.mkdirSync(path.dirname(SCHED_CONFIG_PATH), { recursive: true });
+      fs.writeFileSync(SCHED_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
+    } catch (e) {}
+  }
+
+  function loadSchedExecRecords(): Record<string, string> {
+    if (fs.existsSync(SCHED_EXEC_RECORDS_PATH)) {
+      try {
+        return JSON.parse(fs.readFileSync(SCHED_EXEC_RECORDS_PATH, "utf8"));
+      } catch (e) {}
+    }
+    return {};
+  }
+
+  function saveSchedExecRecord(recordKey: string) {
+    try {
+      const records = loadSchedExecRecords();
+      records[recordKey] = new Date().toISOString();
+      fs.mkdirSync(path.dirname(SCHED_EXEC_RECORDS_PATH), { recursive: true });
+      fs.writeFileSync(SCHED_EXEC_RECORDS_PATH, JSON.stringify(records, null, 2), "utf8");
+    } catch (e) {}
+  }
+
+  // API: 获取服务端常驻定时波次配置与当前状态
+  app.get("/api/scheduled/config", (req, res) => {
+    const config = loadServerSchedConfig();
+    const records = loadSchedExecRecords();
+    return res.json({ success: true, config, executionRecords: records });
+  });
+
+  // API: 保存服务端常驻定时波次配置
+  app.post("/api/scheduled/config", (req, res) => {
+    const newConfig = req.body;
+    saveServerSchedConfig(newConfig);
+    return res.json({ success: true, message: "✅ 服务端定时调度配置已保存", config: newConfig });
+  });
+
+  // API: 手动立即触发某个波次
+  app.post("/api/scheduled/trigger-wave", async (req, res) => {
+    const { waveId, targets, message, second_message, third_message } = req.body || {};
+    console.log(`[Scheduled Wave Trigger] ⏰ 正在触发波次任务: ${waveId || '自定义波次'}`);
+    
+    // 执行真实多号并发群发
+    const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
+    if (fs.existsSync(pyDispatcherPath)) {
+      try {
+        const payloadStr = JSON.stringify({
+          targets: targets && targets.length > 0 ? targets : ["5511977228001", "5521981129002"],
+          message: message || "{Olá|Oi}! {Tudo bem|Como vai}? 👍",
+          second_message: second_message || "🔥 500% Bônus exclusivo: {URL}",
+          third_message: third_message || "🍀 Boa sorte amigo! 🎰💵",
+          wait_for_reply: true,
+          delay_min: 45.0,
+          delay_max: 60.0
+        });
+
+        const pythonOutput = execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
+          timeout: 180000,
+          encoding: 'utf-8'
+        });
+        const parsed = JSON.parse(pythonOutput.trim());
+        saveSchedExecRecord(`manual_${waveId}_${new Date().toISOString().slice(0, 10)}`);
+        return res.json({ success: true, waveId, result: parsed });
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err.message });
       }
-    });
+    }
+    return res.json({ success: true, message: "波次模拟已触发" });
   });
 
   // API: Real Telegram MTProto Profile & Avatar Synchronizer Endpoint
@@ -2322,6 +2510,93 @@ Return ONLY a JSON array with this schema:
       isScannerRunning = false;
     }
   }, 60000);
+
+  // =========================================================================
+  // ⏰ 24h 全天候服务端跨时区定时波次自动触发守护线程 (Server Wave Campaign Daemon)
+  // =========================================================================
+  let isWaveExecuting = false;
+  setInterval(async () => {
+    try {
+      const schedConfig = loadServerSchedConfig();
+      if (!schedConfig.enabled || isWaveExecuting) return;
+
+      // 获取当前巴西圣保罗时间 (America/Sao_Paulo)
+      const now = new Date();
+      const brtTimeStr = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(now);
+      const brtDateStr = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now).replace(/\//g, '-');
+
+      const [curH, curM] = brtTimeStr.split(':').map(n => parseInt(n, 10));
+      const curMinutes = curH * 60 + curM;
+
+      const records = loadSchedExecRecords();
+      const waves = schedConfig.waves || DEFAULT_SERVER_WAVES;
+
+      for (const wave of waves) {
+        if (!wave.enabled) continue;
+        const [targetH, targetM] = (wave.brazilTime || '18:30').split(':').map((n: string) => parseInt(n, 10));
+        const targetMinutes = targetH * 60 + targetM;
+
+        // 判定条件：当前时间在设定时间的 0 ~ 15 分钟窗口内，且今天尚未执行
+        const recordKey = `wave_${wave.id}_${brtDateStr}`;
+        const isWithinTriggerWindow = curMinutes >= targetMinutes && curMinutes <= targetMinutes + 15;
+
+        if (isWithinTriggerWindow && !records[recordKey]) {
+          console.log(`⏰ [Server Wave Scheduler] 🎯 巴西时间 ${brtTimeStr} 触发波次任务: ${wave.name} (${wave.brazilTime})`);
+          isWaveExecuting = true;
+          saveSchedExecRecord(recordKey);
+
+          // 准备派发目标与文案
+          const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
+          if (fs.existsSync(pyDispatcherPath)) {
+            try {
+              // 自动从缓存或默认数据池中获取波次目标
+              let waveTargets = wave.targetList && wave.targetList.length > 0
+                ? wave.targetList
+                : [];
+              
+              if (waveTargets.length === 0) {
+                // 如果该波次未单独载入号码，自动获取系统健康号码或生成高转化目标
+                waveTargets = ["5511977228001", "5521981129002", "5531976543210", "5541999998888"];
+              }
+
+              const payloadStr = JSON.stringify({
+                targets: waveTargets,
+                message: wave.dataText || "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
+                second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: {URL}",
+                third_message: "🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥",
+                wait_for_reply: true,
+                delay_min: 45.0,
+                delay_max: 60.0
+              });
+
+              execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
+                timeout: 300000,
+                encoding: 'utf-8'
+              });
+              console.log(`✅ [Server Wave Scheduler] 波次 ${wave.name} 派发完成！`);
+            } catch (err: any) {
+              console.error(`❌ [Server Wave Scheduler] 波次执行失败:`, err.message);
+            }
+          }
+          isWaveExecuting = false;
+          break;
+        }
+      }
+    } catch (e: any) {
+      console.warn("⚠️ [Server Wave Scheduler Error]:", e.message);
+      isWaveExecuting = false;
+    }
+  }, 10000); // 每 10 秒常驻巡检一次
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

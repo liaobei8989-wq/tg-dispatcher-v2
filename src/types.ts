@@ -23,6 +23,7 @@ export interface AccountSession {
   createdAt: string;
   lastActive: string;
   warmupDay: number;
+  baseWarmupDay?: number;
   tgUsername?: string;
   tgChatId?: string;
   tgApiId?: string;

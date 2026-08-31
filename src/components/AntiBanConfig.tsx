@@ -62,12 +62,12 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 onClick={() => {
                   const supremePreset: AntiBanSettings = {
                     ...antiBan,
-                    minDelaySec: 15,
-                    maxDelaySec: 35,
+                    minDelaySec: 45,
+                    maxDelaySec: 60,
                     enableRandomRestDuration: true,
                     pauseIntervalCount: 15,
                     minPauseDurationMin: 3,
-                    maxPauseDurationMin: 8,
+                    maxPauseDurationMin: 6,
                     enableWarmupSchedule: true,
                     scheduledStartTime: '09:30',
                     scheduledEndTime: '23:30',
@@ -91,7 +91,7 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 className="bg-gradient-to-r from-amber-500 via-emerald-400 to-cyan-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 hover:opacity-95 transition-all cursor-pointer active:scale-95 animate-pulse"
               >
                 <Zap className="w-4 h-4 fill-slate-950 text-slate-950" />
-                <span>👑 一键应用【最顶配商业矩阵配置】 (12大引擎全开 + 1:1巴西IP + 防红熔断)</span>
+                <span>👑 一键应用【顶配真人业务员矩阵】 (45~60s/条 + 12~15分钟/15封 + 1:1巴西IP + 独立员工手速)</span>
               </button>
 
               <button
@@ -99,12 +99,12 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 onClick={() => {
                   const goldenPreset: AntiBanSettings = {
                     ...antiBan,
-                    minDelaySec: 15,
-                    maxDelaySec: 30,
+                    minDelaySec: 45,
+                    maxDelaySec: 60,
                     enableRandomRestDuration: true,
-                    pauseIntervalCount: 20,
+                    pauseIntervalCount: 15,
                     minPauseDurationMin: 2,
-                    maxPauseDurationMin: 6,
+                    maxPauseDurationMin: 5,
                     enableWarmupSchedule: true,
                     scheduledStartTime: '09:00',
                     scheduledEndTime: '22:00',
@@ -127,7 +127,7 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer active:scale-95"
               >
                 <ShieldCheck className="w-4 h-4 fill-slate-950 text-slate-950" />
-                <span>⚡ 恢复黄金防封</span>
+                <span>⚡ 恢复真人业务员防封 (45~60s)</span>
               </button>
 
               <button
@@ -220,8 +220,8 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 <span className="text-[11px] text-slate-400">最小延遲 (Min): {antiBan.minDelaySec}s</span>
                 <input
                   type="range"
-                  min={5}
-                  max={30}
+                  min={10}
+                  max={60}
                   value={antiBan.minDelaySec}
                   onChange={(e) => handleChange('minDelaySec', parseInt(e.target.value, 10))}
                   className="w-full accent-emerald-500 cursor-pointer mt-1"
@@ -231,16 +231,16 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                 <span className="text-[11px] text-slate-400">最大延遲 (Max): {antiBan.maxDelaySec}s</span>
                 <input
                   type="range"
-                  min={20}
-                  max={90}
+                  min={30}
+                  max={120}
                   value={antiBan.maxDelaySec}
                   onChange={(e) => handleChange('maxDelaySec', parseInt(e.target.value, 10))}
                   className="w-full accent-emerald-500 cursor-pointer mt-1"
                 />
               </div>
             </div>
-            <p className="text-[11px] text-slate-500">
-              建議巴西市場預設設置為 15~30 秒，可模擬人類正常聊天發送頻率。
+            <p className="text-[11px] text-emerald-400 font-medium">
+              💡 推荐真人业务员节奏：预设 45~60 秒，15 条消息总耗时约 12~15 分钟，完全贴合真人打字、发送与喝水小憩习惯，防封效果最佳！
             </p>
           </div>
 

@@ -246,8 +246,8 @@ export async function executeTelegramDirectSend(
   const autoSendSecond = options.auto_send_second !== undefined ? options.auto_send_second : true;
   const waitForReply = options.wait_for_reply !== undefined ? options.wait_for_reply : true;
   const listenTimeout = options.listen_timeout || 5; // 默认监听 5 秒
-  const delayMin = options.delay_min !== undefined ? options.delay_min : 1;
-  const delayMax = options.delay_max !== undefined ? options.delay_max : 2;
+  const delayMin = options.delay_min !== undefined ? options.delay_min : 45;
+  const delayMax = options.delay_max !== undefined ? options.delay_max : 60;
   const thirdDelayMin = options.second_to_third_delay_min !== undefined ? options.second_to_third_delay_min : 3.5;
   const thirdDelayMax = options.second_to_third_delay_max !== undefined ? options.second_to_third_delay_max : 6.5;
 

@@ -398,7 +398,7 @@ export const CrossTimezoneSchedulerModal: React.FC<CrossTimezoneSchedulerModalPr
                 </h3>
               </div>
               <p className="text-slate-400 text-xs">
-                支持 3 个黄金时间段独立上传各自名单数据包，上班一次性排期完毕即可关机托管！
+                支持 3 个黄金时间段独立上传各自名单数据包，内置<strong>100号异步错峰启动 (0.6~4.5s离散)</strong> 与 <strong>45~60s真人业务员手速</strong>，一次性排期完毕即可关机托管！
               </p>
             </div>
           </div>

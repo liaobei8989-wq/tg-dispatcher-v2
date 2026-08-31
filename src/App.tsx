@@ -44,9 +44,11 @@ export default function App() {
 
             if (!uniqueMap.has(cleanPhone)) {
               const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-              const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
-              const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
-              const isBGroup = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') || validWarmupDay <= 3;
+              const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
+              const createdAt = acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
+              const baseDay = acc.baseWarmupDay || 1;
+              const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
+              const isBGroup = isBGroupDefault || validWarmupDay <= 3;
               const rawGroup = acc.groupTag;
               const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
                 ? (isBGroup ? '新买养号B组' : '主力爆破A组')
@@ -56,7 +58,10 @@ export default function App() {
                 ...acc,
                 proxy: dedicatedProxy,
                 createdAt: createdAt,
+                baseWarmupDay: baseDay,
                 warmupDay: validWarmupDay,
+                dailyLimit: validWarmupDay >= 4 ? 120 : (validWarmupDay === 1 ? 15 : validWarmupDay === 2 ? 30 : 60),
+                status: validWarmupDay >= 4 ? 'active' : 'warming',
                 avatarUrl: acc.avatarUrl || '',
                 groupTag: normalizedGroup
               });
@@ -99,7 +104,11 @@ export default function App() {
               if (cp && !obsoletePhones.has(cp)) {
                 const existing = uniqueMap.get(cp);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
-                const isBGroup = cp.startsWith('55869948') || cp.startsWith('55869949') || cp.startsWith('55869951');
+                const isBGroupDefault = cp.startsWith('55869948') || cp.startsWith('55869949') || cp.startsWith('55869951');
+                const createdAt = existing?.createdAt || acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
+                const baseDay = existing?.baseWarmupDay || acc.baseWarmupDay || 1;
+                const dynamicWarmupDay = calculateWarmupDays(createdAt, baseDay);
+                const isBGroup = isBGroupDefault || dynamicWarmupDay <= 3;
                 const rawGroup = existing?.groupTag || acc.groupTag;
                 const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
                   ? (isBGroup ? '新买养号B组' : '主力爆破A组')
@@ -109,8 +118,11 @@ export default function App() {
                   ...acc,
                   ...(existing || {}),
                   proxy: dedicatedProxy,
-                  createdAt: existing?.createdAt || acc.createdAt || (isBGroup ? '2026-08-29' : '2026-08-24'),
-                  warmupDay: existing?.warmupDay || acc.warmupDay || (isBGroup ? 1 : 6),
+                  createdAt: createdAt,
+                  baseWarmupDay: baseDay,
+                  warmupDay: dynamicWarmupDay,
+                  dailyLimit: dynamicWarmupDay >= 4 ? 120 : (dynamicWarmupDay === 1 ? 15 : dynamicWarmupDay === 2 ? 30 : 60),
+                  status: dynamicWarmupDay >= 4 ? 'active' : 'warming',
                   groupTag: normalizedGroup
                 });
               }
@@ -136,9 +148,11 @@ export default function App() {
 
           if (!uniqueMap.has(cleanPhone)) {
             const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-            const createdAt = acc.createdAt || (cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') ? '2026-08-29' : '2026-08-24');
-            const validWarmupDay = calculateWarmupDays(createdAt, acc.warmupDay);
-            const isBGroup = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951') || validWarmupDay <= 3;
+            const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
+            const createdAt = acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
+            const baseDay = acc.baseWarmupDay || 1;
+            const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
+            const isBGroup = isBGroupDefault || validWarmupDay <= 3;
             const rawGroup = acc.groupTag;
             const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
               ? (isBGroup ? '新买养号B组' : '主力爆破A组')
@@ -148,7 +162,10 @@ export default function App() {
               ...acc,
               proxy: dedicatedProxy,
               createdAt: createdAt,
+              baseWarmupDay: baseDay,
               warmupDay: validWarmupDay,
+              dailyLimit: validWarmupDay >= 4 ? 120 : (validWarmupDay === 1 ? 15 : validWarmupDay === 2 ? 30 : 60),
+              status: validWarmupDay >= 4 ? 'active' : 'warming',
               avatarUrl: acc.avatarUrl || '',
               groupTag: normalizedGroup
             });
@@ -171,12 +188,12 @@ export default function App() {
 
   // Anti-ban settings state with localStorage persistence
   const DEFAULT_ANTIBAN: AntiBanSettings = {
-    minDelaySec: 15,
-    maxDelaySec: 30,
-    pauseIntervalCount: 20,
+    minDelaySec: 45,
+    maxDelaySec: 60,
+    pauseIntervalCount: 15,
     pauseDurationMin: 3,
     minPauseDurationMin: 2,
-    maxPauseDurationMin: 6,
+    maxPauseDurationMin: 5,
     enableRandomRestDuration: true,
     enableWarmupSchedule: true,
     scheduledStartTime: '09:00',
@@ -279,7 +296,11 @@ export default function App() {
   }, []);
 
   // Reset all platform data to complete 0 state
-  const handleResetAllToZero = () => {
+  const handleResetAllToZero = async () => {
+    try {
+      await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
+    } catch (e) {}
+    setTotalFollowupToday(0);
     setScrubbedContacts([]);
     setAccounts([]);
     setLogs([]);

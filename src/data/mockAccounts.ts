@@ -1,21 +1,29 @@
 import { AccountSession } from '../types';
 
-export function calculateWarmupDays(createdAtStr?: string, explicitWarmupDay?: number): number {
-  if (explicitWarmupDay !== undefined && explicitWarmupDay !== null && explicitWarmupDay > 0) {
-    return explicitWarmupDay;
-  }
+/**
+ * Automatically calculates the dynamic warmup day for an account.
+ * Accounts automatically advance +1 warmup day for each elapsed calendar day (rolling over daily at 00:00).
+ * @param createdAtStr Account creation / warmup start date string (e.g. '2026-08-24' or ISO)
+ * @param baseWarmupDay Starting day baseline at createdAt (default: 1)
+ * @returns Current rolled-over warmup day (e.g. Day 1 -> Day 2 -> Day 3...)
+ */
+export function calculateWarmupDays(createdAtStr?: string, baseWarmupDay: number = 1): number {
+  const initialBaseDay = (baseWarmupDay && baseWarmupDay > 0) ? baseWarmupDay : 1;
+  if (!createdAtStr) return initialBaseDay;
 
-  if (!createdAtStr) return 6;
   try {
     const createdDate = new Date(createdAtStr.includes('T') ? createdAtStr : createdAtStr + 'T00:00:00');
-    if (isNaN(createdDate.getTime())) return 6;
+    if (isNaN(createdDate.getTime())) return initialBaseDay;
+
     const now = new Date();
+    // Compare dates at midnight in local / calendar day to compute exact elapsed days
     const createdMid = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate()).getTime();
     const nowMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const elapsedDays = Math.floor((nowMid - createdMid) / (1000 * 60 * 60 * 24));
-    return Math.max(1, 1 + Math.max(0, elapsedDays));
+    const elapsedDays = Math.max(0, Math.floor((nowMid - createdMid) / (1000 * 60 * 60 * 24)));
+
+    return initialBaseDay + elapsedDays;
   } catch {
-    return 6;
+    return initialBaseDay;
   }
 }
 
