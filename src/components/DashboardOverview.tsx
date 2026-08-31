@@ -228,8 +228,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 {accounts.slice(0, 10).map((acc) => {
                   const cleanPhone = (acc.phone || '').replace(/\D/g, '');
                   const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(cleanPhone);
-                  const effectiveCreatedAt = acc.createdAt || (isOldBatch ? '2026-08-24' : '2026-08-29');
-                  const currentDay = calculateWarmupDays(effectiveCreatedAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : (isOldBatch ? 6 : 1)));
+                  const effectiveCreatedAt = acc.createdAt || '2026-08-23';
+                  const currentDay = calculateWarmupDays(effectiveCreatedAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8));
                   const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                   return (
                   <tr key={acc.id} className="hover:bg-slate-800/30 transition-colors">
@@ -319,8 +319,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className="flex items-start gap-3 p-3 bg-slate-800/50 rounded-xl border border-slate-800">
               <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0">2</span>
               <div>
-                <p className="font-semibold text-slate-200">设置防封随机延迟 (15~30秒)</p>
-                <p className="text-slate-400 text-[11px] mt-0.5">防重发打字模拟 + 隐形 Unicode 字符打乱 Hash 签名。</p>
+                <p className="font-semibold text-slate-200">设置防封随机延迟 (45~60秒 真人业务员节奏)</p>
+                <p className="text-slate-400 text-[11px] mt-0.5">模拟真人打字(3.5~6s) + 喝水小憩与隐形 Unicode 字符打乱 Hash 签名。</p>
               </div>
             </div>
 

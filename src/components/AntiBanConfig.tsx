@@ -606,28 +606,30 @@ export const AntiBanConfig: React.FC<AntiBanConfigProps> = ({ antiBan, setAntiBa
                   type="button"
                   onClick={() => {
                     const domain = `promobr${num}.xyz`;
-                    const subdomains = Array.from({ length: 10 }, (_, i) => `https://m${i + 1}.${domain}`);
+                    const prefixes = ['vip', 'br', 'pix', 'spin', 'bet', 'slot', 'lucky', 'win', 'top', 'go', 'play', 'forra', 'mega', 'sorte', 'ouro', 'clube', 'brasil', 'premio', 'bonus', 'turbo'];
+                    const subdomains = prefixes.map((p, idx) => `https://${p}${(idx + 1).toString().padStart(2, '0')}.${domain}`);
                     handleChange('urls', subdomains);
                   }}
                   className="px-2 py-1 rounded bg-slate-800 hover:bg-emerald-950/80 border border-slate-700 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-300 font-mono transition-all"
                 >
-                  批次{num} (promobr{num} 10子域名)
+                  批次{num} (promobr{num} 20子域名)
                 </button>
               ))}
               <button
                 type="button"
                 onClick={() => {
-                  const all50 = [];
+                  const prefixes = ['vip', 'br', 'pix', 'spin', 'bet', 'slot', 'lucky', 'win', 'top', 'go', 'play', 'forra', 'mega', 'sorte', 'ouro', 'clube', 'brasil', 'premio', 'bonus', 'turbo'];
+                  const all100 = [];
                   for (let d = 1; d <= 5; d++) {
-                    for (let s = 1; s <= 10; s++) {
-                      all50.push(`https://m${s}.promobr${d}.xyz`);
+                    for (let s = 0; s < prefixes.length; s++) {
+                      all100.push(`https://${prefixes[s]}${(s + 1).toString().padStart(2, '0')}.promobr${d}.xyz`);
                     }
                   }
-                  handleChange('urls', all50);
+                  handleChange('urls', all100);
                 }}
                 className="px-2 py-1 rounded bg-slate-800 hover:bg-amber-950/80 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 font-mono transition-all"
               >
-                🔥 全 50 子域名大矩阵
+                🔥 全 100 子域名大矩阵 (5×20)
               </button>
               <button
                 type="button"

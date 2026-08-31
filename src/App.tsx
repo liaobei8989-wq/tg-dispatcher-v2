@@ -211,16 +211,26 @@ export default function App() {
     warningThresholdPercent: 80,
     autoResumeNextDay: true,
     urls: [
-      'https://m1.promobr1.xyz',
-      'https://m2.promobr1.xyz',
-      'https://m3.promobr1.xyz',
-      'https://m4.promobr1.xyz',
-      'https://m5.promobr1.xyz',
-      'https://m6.promobr1.xyz',
-      'https://m7.promobr1.xyz',
-      'https://m8.promobr1.xyz',
-      'https://m9.promobr1.xyz',
-      'https://m10.promobr1.xyz'
+      'https://vip01.promobr1.xyz', 'https://br02.promobr1.xyz', 'https://pix03.promobr1.xyz', 'https://spin04.promobr1.xyz', 'https://bet05.promobr1.xyz',
+      'https://slot06.promobr1.xyz', 'https://lucky07.promobr1.xyz', 'https://win08.promobr1.xyz', 'https://top09.promobr1.xyz', 'https://go10.promobr1.xyz',
+      'https://play11.promobr1.xyz', 'https://forra12.promobr1.xyz', 'https://mega13.promobr1.xyz', 'https://sorte14.promobr1.xyz', 'https://ouro15.promobr1.xyz',
+      'https://clube16.promobr1.xyz', 'https://brasil17.promobr1.xyz', 'https://premio18.promobr1.xyz', 'https://bonus19.promobr1.xyz', 'https://turbo20.promobr1.xyz',
+      'https://vip01.promobr2.xyz', 'https://br02.promobr2.xyz', 'https://pix03.promobr2.xyz', 'https://spin04.promobr2.xyz', 'https://bet05.promobr2.xyz',
+      'https://slot06.promobr2.xyz', 'https://lucky07.promobr2.xyz', 'https://win08.promobr2.xyz', 'https://top09.promobr2.xyz', 'https://go10.promobr2.xyz',
+      'https://play11.promobr2.xyz', 'https://forra12.promobr2.xyz', 'https://mega13.promobr2.xyz', 'https://sorte14.promobr2.xyz', 'https://ouro15.promobr2.xyz',
+      'https://clube16.promobr2.xyz', 'https://brasil17.promobr2.xyz', 'https://premio18.promobr2.xyz', 'https://bonus19.promobr2.xyz', 'https://turbo20.promobr2.xyz',
+      'https://vip01.promobr3.xyz', 'https://br02.promobr3.xyz', 'https://pix03.promobr3.xyz', 'https://spin04.promobr3.xyz', 'https://bet05.promobr3.xyz',
+      'https://slot06.promobr3.xyz', 'https://lucky07.promobr3.xyz', 'https://win08.promobr3.xyz', 'https://top09.promobr3.xyz', 'https://go10.promobr3.xyz',
+      'https://play11.promobr3.xyz', 'https://forra12.promobr3.xyz', 'https://mega13.promobr3.xyz', 'https://sorte14.promobr3.xyz', 'https://ouro15.promobr3.xyz',
+      'https://clube16.promobr3.xyz', 'https://brasil17.promobr3.xyz', 'https://premio18.promobr3.xyz', 'https://bonus19.promobr3.xyz', 'https://turbo20.promobr3.xyz',
+      'https://vip01.promobr4.xyz', 'https://br02.promobr4.xyz', 'https://pix03.promobr4.xyz', 'https://spin04.promobr4.xyz', 'https://bet05.promobr4.xyz',
+      'https://slot06.promobr4.xyz', 'https://lucky07.promobr4.xyz', 'https://win08.promobr4.xyz', 'https://top09.promobr4.xyz', 'https://go10.promobr4.xyz',
+      'https://play11.promobr4.xyz', 'https://forra12.promobr4.xyz', 'https://mega13.promobr4.xyz', 'https://sorte14.promobr4.xyz', 'https://ouro15.promobr4.xyz',
+      'https://clube16.promobr4.xyz', 'https://brasil17.promobr4.xyz', 'https://premio18.promobr4.xyz', 'https://bonus19.promobr4.xyz', 'https://turbo20.promobr4.xyz',
+      'https://vip01.promobr5.xyz', 'https://br02.promobr5.xyz', 'https://pix03.promobr5.xyz', 'https://spin04.promobr5.xyz', 'https://bet05.promobr5.xyz',
+      'https://slot06.promobr5.xyz', 'https://lucky07.promobr5.xyz', 'https://win08.promobr5.xyz', 'https://top09.promobr5.xyz', 'https://go10.promobr5.xyz',
+      'https://play11.promobr5.xyz', 'https://forra12.promobr5.xyz', 'https://mega13.promobr5.xyz', 'https://sorte14.promobr5.xyz', 'https://ouro15.promobr5.xyz',
+      'https://clube16.promobr5.xyz', 'https://brasil17.promobr5.xyz', 'https://premio18.promobr5.xyz', 'https://bonus19.promobr5.xyz', 'https://turbo20.promobr5.xyz'
     ]
   };
 

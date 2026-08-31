@@ -20,9 +20,24 @@ API_ID = 39005001
 API_HASH = "47cc194b1f3806369176b769c89b3b66"
 SESSION_FILE = "brazil_proto_5541987023810.session"
 
-# 5 个副域名派生 50 个独立轮换子域名 (promobr1.xyz ~ promobr5.xyz)
-SECONDARY_DOMAINS = ["promobr1.xyz", "promobr2.xyz", "promobr3.xyz", "promobr4.xyz", "promobr5.xyz"]
-SUBDOMAINS = [f"https://vip{i}.{domain}" for domain in SECONDARY_DOMAINS for i in range(1, 11)]
+# 5 个官方指定副域名，每个派生 20 个独立子域名 (共 100 个独立防封轮换域名池)
+SECONDARY_DOMAINS = [
+    "promobr1.xyz",
+    "promobr2.xyz",
+    "promobr3.xyz",
+    "promobr4.xyz",
+    "promobr5.xyz"
+]
+SUB_PREFIXES = [
+    'vip', 'br', 'pix', 'spin', 'bet', 'slot', 'lucky', 'win', 'top', 'go',
+    'play', 'forra', 'mega', 'sorte', 'ouro', 'clube', 'brasil', 'premio', 'bonus', 'turbo'
+]
+# 自动生成 100 个轮换子域名 (https://vip01.promobr1.xyz ~ https://turbo20.promobr5.xyz)
+SUBDOMAINS = [
+    f"https://{prefix}{idx+1:02d}.{dom}"
+    for dom in SECONDARY_DOMAINS
+    for idx, prefix in enumerate(SUB_PREFIXES)
+]
 
 # CODEX AI / Gemini 拟真人生成器
 def generate_codex_human_text(persona="br_player"):
@@ -80,7 +95,7 @@ if __name__ == "__main__":
   {
     filename: 'tg_telethon_direct_sender.py',
     title: '✈️ Telegram 漏斗式两步精准群发脚本 (tg_telethon_direct_sender.py)',
-    description: '使用 Python Telethon 官方底层 MTProto 协议连接，采用先打招呼后推送 HTML 蓝色超链接（50轮换子域名）的漏斗模式，内置梯形递增防封控制与巴西黄金时段调配策略。',
+    description: '使用 Python Telethon 官方底层 MTProto 协议连接，采用先打招呼后推送 HTML 蓝色超链接（100轮换子域名）的漏斗模式，内置梯形递增防封控制与巴西黄金时段调配策略。',
     language: 'python',
     code: `import os
 import re
@@ -117,7 +132,7 @@ BATCH_SIZE = 6
 BATCH_REST_MIN_SEC = 300  # 最少休息 5 分钟
 BATCH_REST_MAX_SEC = 600  # 最多休息 10 分钟
 
-# WAIT_FOR_REPLY = False : (推荐模式 1: 自动双连发) 先发纯文本问候语，间隔 3~5 秒自动追发带 50 子域名的营销链接
+# WAIT_FOR_REPLY = False : (推荐模式 1: 自动双连发) 先发纯文本问候语，间隔 3~5 秒自动追发带 100 子域名的营销链接
 # WAIT_FOR_REPLY = True  : (推荐模式 2: 客户回复触发) 发送问候语后挂起监听 60 秒，只有等客户回复(如 "Tudo bem")才派发链接！
 WAIT_FOR_REPLY = False
 
@@ -130,7 +145,7 @@ GREETINGS = [
     "Opa, bom dia! Tudo tranquilo?"
 ]
 
-# 5 个官方指定副域名，每个派生 10 个独立子域名 (共 50 个独立防封轮换域名池)
+# 5 个官方指定副域名，每个派生 20 个独立子域名 (共 100 个独立防封轮换域名池)
 SECONDARY_DOMAINS = [
     "promobr1.xyz",
     "promobr2.xyz",
@@ -138,10 +153,18 @@ SECONDARY_DOMAINS = [
     "promobr4.xyz",
     "promobr5.xyz"
 ]
-# 自动生成 50 个轮换子域名 (https://vip1.promobr1.xyz ~ https://vip10.promobr5.xyz)
-SUBDOMAINS = [f"https://vip{i}.{domain}" for domain in SECONDARY_DOMAINS for i in range(1, 11)]
+SUB_PREFIXES = [
+    'vip', 'br', 'pix', 'spin', 'bet', 'slot', 'lucky', 'win', 'top', 'go',
+    'play', 'forra', 'mega', 'sorte', 'ouro', 'clube', 'brasil', 'premio', 'bonus', 'turbo'
+]
+# 自动生成 100 个轮换子域名 (https://vip01.promobr1.xyz ~ https://turbo20.promobr5.xyz)
+SUBDOMAINS = [
+    f"https://{prefix}{idx+1:02d}.{dom}"
+    for dom in SECONDARY_DOMAINS
+    for idx, prefix in enumerate(SUB_PREFIXES)
+]
 
-# 第二步：诱导转化文案模板（包含 {domain} 动态替换 50 个子域名）
+# 第二步：诱导转化文案模板（包含 {domain} 动态替换 100 个子域名）
 # 支持 HTML 标签格式，保证在 Telegram 客户端 100% 显示为蓝色超链接，点击直接跳转打开！
 PROMO_TEMPLATES = [
     'Bônus VIP de até 200% liberado hoje no site oficial. Resgate seu cupom exclusivo aqui: <a href="{domain}">{domain}</a>',
@@ -199,7 +222,7 @@ async def resolve_peer_and_send(client, session_name, target):
         else:
             entity = await client.get_input_entity(target)
 
-        # 随机挑选 50 个子域名的其中一个
+        # 随机挑选 100 个子域名的其中一个
         selected_domain = random.choice(SUBDOMAINS)
         promo_msg = random.choice(PROMO_TEMPLATES).format(domain=selected_domain)
 
@@ -209,7 +232,7 @@ async def resolve_peer_and_send(client, session_name, target):
         print(f"  └─ 💬 [第一步问候成功] [{session_name}] -> {target}: \"{greeting_msg}\"")
 
         if WAIT_FOR_REPLY:
-            # 模式 A: 开启监听，严格等待客户回复后再推送带 50 子域名的营销链接
+            # 模式 A: 开启监听，严格等待客户回复后再推送带 100 子域名的营销链接
             print(f"  └─ ⏳ [监听模式启动] 正等待 {target} 回复 (最长等待 60 秒)...")
             reply_event = asyncio.Event()
 
@@ -218,7 +241,7 @@ async def resolve_peer_and_send(client, session_name, target):
             async def reply_handler(event):
                 print(f"  └─ 🎯 [收到客户回复!] {target} 回复: \"{event.raw_text}\"")
                 await client.send_message(entity, promo_msg, parse_mode='html')
-                print(f"  └─ 🚀 [自动追发营销文案成功!] (使用 50 轮换子域名: {selected_domain})")
+                print(f"  └─ 🚀 [自动追发营销文案成功!] (使用 100 轮换子域名: {selected_domain})")
                 reply_event.set()
 
             try:
@@ -228,13 +251,13 @@ async def resolve_peer_and_send(client, session_name, target):
             finally:
                 client.remove_event_handler(reply_handler)
         else:
-            # 模式 B: 时间间隔自动追发（问候 -> 停顿 3-5 秒 -> 自动推送带 50 子域名的营销链接）
+            # 模式 B: 时间间隔自动追发（问候 -> 停顿 3-5 秒 -> 自动推送带 100 子域名的营销链接）
             delay = random.uniform(3.0, 5.0)
             print(f"  └─ ⏳ 模拟人类思考打字中 ({delay:.1f} 秒)...")
             await asyncio.sleep(delay)
             
             await client.send_message(entity, promo_msg, parse_mode='html')
-            print(f"  └─ 🚀 [第二步营销链接推送成功] (使用 50 轮换子域名: {selected_domain})")
+            print(f"  └─ 🚀 [第二步营销链接推送成功] (使用 100 轮换子域名: {selected_domain})")
 
         # 清理临时通讯录联系人
         if imported_user:
@@ -248,10 +271,10 @@ async def resolve_peer_and_send(client, session_name, target):
 
 async def main():
     print("==================================================")
-    print("🚀 TG 多协议号批量强发系统 (含 50 子域名轮换 & 防封两步法)")
+    print("🚀 TG 多协议号批量强发系统 (含 100 子域名轮换 & 防封两步法)")
     print("==================================================")
     print(f"🌐 域名资产库: 5 个副域名 [{', '.join(SECONDARY_DOMAINS)}]")
-    print(f"🔗 已派生生成 50 个独立轮换子域名 (如: {SUBDOMAINS[0]}, {SUBDOMAINS[10]}, {SUBDOMAINS[20]} ...)")
+    print(f"🔗 已派生生成 100 个独立轮换子域名 (如: {SUBDOMAINS[0]}, {SUBDOMAINS[20]}, {SUBDOMAINS[40]} ...)")
     print("==================================================")
     
     raw_targets = load_targets("targets.txt")
@@ -277,9 +300,9 @@ async def main():
         async with TelegramClient(session_file, API_ID, API_HASH) as client:
             success = await resolve_peer_and_send(client, session_name, target)
         
-        # 1. 基础单条发送间隔冷却休眠 (15~30秒)
-        sleep_time = random.uniform(15.0, 30.0)
-        print(f"  ⏳ 随机防封冷却休眠 {sleep_time:.1f} 秒...")
+        # 1. 基础单条发送间隔冷却休眠 (45~60秒 真人业务员手速)
+        sleep_time = random.uniform(45.0, 60.0)
+        print(f"  ⏳ 随机防封冷却休眠 {sleep_time:.1f} 秒 (15条约12~15分钟)...")
         await asyncio.sleep(sleep_time)
 
         # 2. 批次安全休眠：每发送 BATCH_SIZE (如 6) 人，强制长休眠 5~10 分钟
