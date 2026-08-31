@@ -45,10 +45,10 @@ export default function App() {
             if (!uniqueMap.has(cleanPhone)) {
               const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
               const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
-              const createdAt = acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
-              const baseDay = acc.baseWarmupDay || 1;
+              const createdAt = acc.createdAt || '2026-08-23';
+              const baseDay = acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
               const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
-              const isBGroup = isBGroupDefault || validWarmupDay <= 3;
+              const isBGroup = isBGroupDefault && validWarmupDay <= 3;
               const rawGroup = acc.groupTag;
               const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
                 ? (isBGroup ? '新买养号B组' : '主力爆破A组')
@@ -105,10 +105,10 @@ export default function App() {
                 const existing = uniqueMap.get(cp);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
                 const isBGroupDefault = cp.startsWith('55869948') || cp.startsWith('55869949') || cp.startsWith('55869951');
-                const createdAt = existing?.createdAt || acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
-                const baseDay = existing?.baseWarmupDay || acc.baseWarmupDay || 1;
+                const createdAt = existing?.createdAt || acc.createdAt || '2026-08-23';
+                const baseDay = existing?.baseWarmupDay || acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
                 const dynamicWarmupDay = calculateWarmupDays(createdAt, baseDay);
-                const isBGroup = isBGroupDefault || dynamicWarmupDay <= 3;
+                const isBGroup = isBGroupDefault && dynamicWarmupDay <= 3;
                 const rawGroup = existing?.groupTag || acc.groupTag;
                 const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
                   ? (isBGroup ? '新买养号B组' : '主力爆破A组')
@@ -149,10 +149,10 @@ export default function App() {
           if (!uniqueMap.has(cleanPhone)) {
             const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
             const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
-            const createdAt = acc.createdAt || (isBGroupDefault ? '2026-08-29' : '2026-08-24');
-            const baseDay = acc.baseWarmupDay || 1;
+            const createdAt = acc.createdAt || '2026-08-23';
+            const baseDay = acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
             const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
-            const isBGroup = isBGroupDefault || validWarmupDay <= 3;
+            const isBGroup = isBGroupDefault && validWarmupDay <= 3;
             const rawGroup = acc.groupTag;
             const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
               ? (isBGroup ? '新买养号B组' : '主力爆破A组')
