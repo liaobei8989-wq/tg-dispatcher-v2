@@ -1,6 +1,7 @@
 import React from 'react';
 import { AccountSession, AntiBanSettings, CampaignLog } from '../types';
 import { calculateWarmupDays, getDedicatedProxyForPhone } from '../data/mockAccounts';
+import { safeSaveAccountsToLocalStorage } from '../utils/accountStorage';
 import {
   Smartphone,
   CheckCircle2,
@@ -13,7 +14,8 @@ import {
   Clock,
   ShieldCheck,
   ExternalLink,
-  Users
+  Users,
+  Edit2
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -225,11 +227,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {accounts.slice(0, 10).map((acc) => {
+                {accounts.slice(0, 10).map((acc, idx) => {
                   const cleanPhone = (acc.phone || '').replace(/\D/g, '');
-                  const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(cleanPhone);
-                  const effectiveCreatedAt = acc.createdAt || '2026-08-23';
-                  const currentDay = calculateWarmupDays(effectiveCreatedAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8));
+                  const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
+                  const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
+                  const defaultDay = isTop5 ? 7 : 3;
+                  const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8 || !acc.warmupDay;
+                  const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
+                  const effectiveCreatedAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+                  const currentDay = hasCorruptDay ? defaultDay : calculateWarmupDays(effectiveCreatedAt, baseDay);
                   const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                   return (
                   <tr key={acc.id} className="hover:bg-slate-800/30 transition-colors">
@@ -244,19 +250,93 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </td>
                     <td className="py-2.5 px-3 text-slate-300 font-mono">{acc.phone}</td>
                     <td className="py-2.5 px-3">
-                      {acc.sentToday >= Math.floor(acc.dailyLimit * 0.8) && acc.status !== 'banned' ? (
-                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 w-max shadow-sm">
-                          <ShieldCheck className="w-3 h-3 text-amber-400" /> 80%预警熔断
-                        </span>
-                      ) : currentDay >= 4 ? (
-                        <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
-                          <CheckCircle2 className="w-3 h-3" /> 稳定成熟期 (第{currentDay}天)
-                        </span>
-                      ) : (
-                        <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
-                          <Clock className="w-3 h-3 text-amber-400" /> 养号保护期 (第{currentDay}天)
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {acc.sentToday >= Math.floor(acc.dailyLimit * 0.8) && acc.status !== 'banned' ? (
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 w-max shadow-sm">
+                            <ShieldCheck className="w-3 h-3 text-amber-400" /> 80%预警熔断
+                          </span>
+                        ) : currentDay >= 4 ? (
+                          <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
+                            <CheckCircle2 className="w-3 h-3" /> 稳定成熟期 (第{currentDay}天)
+                          </span>
+                        ) : (
+                          <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 w-max">
+                            <Clock className="w-3 h-3 text-amber-400" /> 养号保护期 (第{currentDay}天)
+                          </span>
+                        )}
+
+                        {/* Manual Day Adjustment Buttons */}
+                        {setAccounts && (
+                          <div className="inline-flex items-center gap-0.5 bg-slate-900 border border-slate-700/80 rounded px-1 py-0.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDay = Math.max(1, currentDay - 1);
+                                const today = new Date().toISOString().split('T')[0];
+                                setAccounts(prev => {
+                                  const updated = prev.map(a => 
+                                    a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, ''))
+                                      ? { ...a, warmupDay: newDay, baseWarmupDay: newDay, createdAt: today, status: (newDay >= 4 ? 'active' : 'warming') as any, dailyLimit: newDay >= 4 ? 120 : 60 }
+                                      : a
+                                  );
+                                  safeSaveAccountsToLocalStorage(updated);
+                                  return updated;
+                                });
+                              }}
+                              className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold"
+                              title="减少 1 天"
+                            >
+                              -
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const input = prompt(`请输入 [${acc.alias || acc.phone}] 的自定义养号天数 (1-30):`, String(currentDay));
+                                if (input !== null) {
+                                  const parsed = parseInt(input.trim(), 10);
+                                  if (!isNaN(parsed) && parsed > 0) {
+                                    const today = new Date().toISOString().split('T')[0];
+                                    setAccounts(prev => {
+                                      const updated = prev.map(a => 
+                                        a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, ''))
+                                          ? { ...a, warmupDay: parsed, baseWarmupDay: parsed, createdAt: today, status: (parsed >= 4 ? 'active' : 'warming') as any, dailyLimit: parsed >= 4 ? 120 : 60 }
+                                          : a
+                                      );
+                                      safeSaveAccountsToLocalStorage(updated);
+                                      return updated;
+                                    });
+                                  }
+                                }
+                              }}
+                              className="px-1 text-cyan-400 hover:underline font-mono font-bold flex items-center gap-0.5"
+                              title="点击直接输入任意天数"
+                            >
+                              <Edit2 className="w-2.5 h-2.5 opacity-70" />
+                              改
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDay = currentDay + 1;
+                                const today = new Date().toISOString().split('T')[0];
+                                setAccounts(prev => {
+                                  const updated = prev.map(a => 
+                                    a.id === acc.id || (a.phone && acc.phone && a.phone.replace(/\D/g, '') === acc.phone.replace(/\D/g, ''))
+                                      ? { ...a, warmupDay: newDay, baseWarmupDay: newDay, createdAt: today, status: (newDay >= 4 ? 'active' : 'warming') as any, dailyLimit: newDay >= 4 ? 120 : 60 }
+                                      : a
+                                  );
+                                  safeSaveAccountsToLocalStorage(updated);
+                                  return updated;
+                                });
+                              }}
+                              className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold"
+                              title="增加 1 天"
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3 font-mono">
                       <div className="flex items-center gap-2">

@@ -335,9 +335,12 @@ async function startServer() {
       };
 
       const getAccountMeta = (rawPhone: string, idx: number, userJsonMeta?: any) => {
-        const isOldBatch = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone);
-        const createdAt = userJsonMeta?.createdAt || '2026-08-23';
-        const baseDay = userJsonMeta?.baseWarmupDay || 8;
+        const isTop5 = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone) || idx < 5;
+        const targetDefaultDay = isTop5 ? 7 : 3;
+        const createdAt = userJsonMeta?.createdAt || '2026-08-31';
+        const baseDay = userJsonMeta?.baseWarmupDay !== undefined 
+          ? userJsonMeta.baseWarmupDay 
+          : (userJsonMeta?.warmupDay && userJsonMeta.warmupDay !== 16 && userJsonMeta.warmupDay !== 8 ? userJsonMeta.warmupDay : targetDefaultDay);
         const dynamicWarmupDay = calculateWarmupDays(createdAt, baseDay);
         const isMature = dynamicWarmupDay >= 4;
 
@@ -346,7 +349,7 @@ async function startServer() {
           baseWarmupDay: baseDay,
           warmupDay: dynamicWarmupDay,
           status: (isMature ? 'active' : 'warming') as 'active' | 'warming',
-          groupTag: userJsonMeta?.groupTag || '主力爆破A组',
+          groupTag: userJsonMeta?.groupTag || (isTop5 ? '主力爆破A组' : '新买养号B组'),
           dailyLimit: dynamicWarmupDay === 1 ? 15 : dynamicWarmupDay === 2 ? 30 : dynamicWarmupDay === 3 ? 60 : 120
         };
       };

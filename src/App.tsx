@@ -26,7 +26,6 @@ export default function App() {
 
   // Scrubbed contacts pool shared across modules
   const [scrubbedContacts, setScrubbedContacts] = useState<ScrubbedContact[]>([]);
-
   // Accounts state with fallback to INITIAL_MOCK_ACCOUNTS & dynamic sync
   const [accounts, setAccounts] = useState<AccountSession[]>(() => {
     try {
@@ -36,6 +35,7 @@ export default function App() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const uniqueMap = new Map<string, AccountSession>();
           const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+          const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
 
           parsed.forEach((acc: AccountSession, idx: number) => {
             // Telegram only verification
@@ -43,15 +43,17 @@ export default function App() {
             if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone)) return;
 
             if (!uniqueMap.has(cleanPhone)) {
+              const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
               const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-              const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
-              const createdAt = acc.createdAt || '2026-08-23';
-              const baseDay = acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
-              const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
-              const isBGroup = isBGroupDefault && validWarmupDay <= 3;
+              const defaultDay = isTop5 ? 7 : 3;
+              const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8 || !acc.warmupDay;
+              const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
+              const createdAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+              const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
+              const isMature = validWarmupDay >= 4;
               const rawGroup = acc.groupTag;
               const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
-                ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+                ? (isTop5 ? '主力爆破A组' : '新买养号B组')
                 : rawGroup;
 
               uniqueMap.set(cleanPhone, {
@@ -60,8 +62,8 @@ export default function App() {
                 createdAt: createdAt,
                 baseWarmupDay: baseDay,
                 warmupDay: validWarmupDay,
-                dailyLimit: validWarmupDay >= 4 ? 120 : (validWarmupDay === 1 ? 15 : validWarmupDay === 2 ? 30 : 60),
-                status: validWarmupDay >= 4 ? 'active' : 'warming',
+                dailyLimit: validWarmupDay >= 4 ? 120 : 60,
+                status: isMature ? 'active' : 'warming',
                 avatarUrl: acc.avatarUrl || '',
                 groupTag: normalizedGroup
               });
@@ -81,6 +83,8 @@ export default function App() {
   // Async hydration from server API and IndexedDB on initial load
   React.useEffect(() => {
     const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+    const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
+
     // 1. Fetch live accounts from server sessions directory
     fetch('/api/telegram/get-accounts')
       .then(res => res.json())
@@ -103,15 +107,17 @@ export default function App() {
               const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
               if (cp && !obsoletePhones.has(cp)) {
                 const existing = uniqueMap.get(cp);
+                const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
-                const isBGroupDefault = cp.startsWith('55869948') || cp.startsWith('55869949') || cp.startsWith('55869951');
-                const createdAt = existing?.createdAt || acc.createdAt || '2026-08-23';
-                const baseDay = existing?.baseWarmupDay || acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
-                const dynamicWarmupDay = calculateWarmupDays(createdAt, baseDay);
-                const isBGroup = isBGroupDefault && dynamicWarmupDay <= 3;
+                const defaultDay = isTop5 ? 7 : 3;
+                const hasCorruptDay = (existing?.warmupDay === 16 || existing?.warmupDay === 8 || acc.warmupDay === 16 || acc.warmupDay === 8);
+                const baseDay = hasCorruptDay ? defaultDay : (existing?.baseWarmupDay || acc.baseWarmupDay || defaultDay);
+                const createdAt = hasCorruptDay ? '2026-08-31' : (existing?.createdAt || acc.createdAt || '2026-08-31');
+                const dynamicWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
+                const isMature = dynamicWarmupDay >= 4;
                 const rawGroup = existing?.groupTag || acc.groupTag;
                 const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
-                  ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+                  ? (isTop5 ? '主力爆破A组' : '新买养号B组')
                   : rawGroup;
 
                 uniqueMap.set(cp, {
@@ -121,8 +127,8 @@ export default function App() {
                   createdAt: createdAt,
                   baseWarmupDay: baseDay,
                   warmupDay: dynamicWarmupDay,
-                  dailyLimit: dynamicWarmupDay >= 4 ? 120 : (dynamicWarmupDay === 1 ? 15 : dynamicWarmupDay === 2 ? 30 : 60),
-                  status: dynamicWarmupDay >= 4 ? 'active' : 'warming',
+                  dailyLimit: isMature ? 120 : 60,
+                  status: isMature ? 'active' : 'warming',
                   groupTag: normalizedGroup
                 });
               }
@@ -147,15 +153,17 @@ export default function App() {
           if (!cleanPhone || cleanPhone.length < 8) return;
 
           if (!uniqueMap.has(cleanPhone)) {
+            const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
             const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-            const isBGroupDefault = cleanPhone.startsWith('55869948') || cleanPhone.startsWith('55869949') || cleanPhone.startsWith('55869951');
-            const createdAt = acc.createdAt || '2026-08-23';
-            const baseDay = acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 8);
-            const validWarmupDay = calculateWarmupDays(createdAt, baseDay);
-            const isBGroup = isBGroupDefault && validWarmupDay <= 3;
+            const defaultDay = isTop5 ? 7 : 3;
+            const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;
+            const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
+            const createdAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+            const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
+            const isMature = validWarmupDay >= 4;
             const rawGroup = acc.groupTag;
             const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
-              ? (isBGroup ? '新买养号B组' : '主力爆破A组')
+              ? (isTop5 ? '主力爆破A组' : '新买养号B组')
               : rawGroup;
 
             uniqueMap.set(cleanPhone, {
@@ -164,17 +172,16 @@ export default function App() {
               createdAt: createdAt,
               baseWarmupDay: baseDay,
               warmupDay: validWarmupDay,
-              dailyLimit: validWarmupDay >= 4 ? 120 : (validWarmupDay === 1 ? 15 : validWarmupDay === 2 ? 30 : 60),
-              status: validWarmupDay >= 4 ? 'active' : 'warming',
+              dailyLimit: isMature ? 120 : 60,
+              status: isMature ? 'active' : 'warming',
               avatarUrl: acc.avatarUrl || '',
               groupTag: normalizedGroup
             });
           }
         });
-        const sanitized = Array.from(uniqueMap.values());
-        if (sanitized.length > 0) {
-          setAccounts(sanitized);
-        }
+        const list = Array.from(uniqueMap.values());
+        setAccounts(list);
+        safeSaveAccountsToLocalStorage(list);
       }
     }).catch(err => {
       console.warn('IndexedDB account hydration skipped:', err);
