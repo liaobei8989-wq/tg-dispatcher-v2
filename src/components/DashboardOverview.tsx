@@ -35,8 +35,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   const totalAccounts = accounts.length;
   const onlineAccounts = accounts.filter(a => a.status === 'active' || a.status === 'warming').length;
-  const matureAccounts = accounts.filter(a => a.status === 'active' && a.warmupDay > 7).length;
-  const warmingAccounts = accounts.filter(a => a.status === 'warming' || (a.status === 'active' && a.warmupDay <= 7)).length;
+  const matureAccounts = accounts.filter(a => a.status === 'active' && a.warmupDay >= 4).length;
+  const warmingAccounts = accounts.filter(a => a.status === 'warming' || (a.status === 'active' && a.warmupDay < 4)).length;
   const riskAccounts = accounts.filter(a => a.status === 'risk').length;
   const bannedAccounts = accounts.filter(a => a.status === 'banned').length;
 

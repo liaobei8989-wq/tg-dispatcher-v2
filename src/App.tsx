@@ -238,7 +238,12 @@ export default function App() {
     try {
       const saved = localStorage.getItem('antiban_settings');
       if (saved) {
-        return { ...DEFAULT_ANTIBAN, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        const merged = { ...DEFAULT_ANTIBAN, ...parsed };
+        if (!merged.minDelaySec || merged.minDelaySec < 40) merged.minDelaySec = 45;
+        if (!merged.maxDelaySec || merged.maxDelaySec < 50) merged.maxDelaySec = 60;
+        if (!merged.urls || merged.urls.length < 50) merged.urls = DEFAULT_ANTIBAN.urls;
+        return merged;
       }
     } catch (e) {
       console.error('Failed to parse antiban_settings from localStorage', e);
