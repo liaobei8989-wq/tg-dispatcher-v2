@@ -2521,9 +2521,8 @@ Return ONLY a JSON array with this schema:
   });
 
   const distPath = path.join(process.cwd(), "dist");
-  const isProduction = process.env.NODE_ENV === "production" || (fs.existsSync(path.join(distPath, "index.html")) && !process.env.npm_lifecycle_event?.includes("dev"));
 
-  if (!isProduction) {
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -2544,34 +2543,26 @@ Return ONLY a JSON array with this schema:
       appType: "spa",
     });
     app.use(vite.middlewares);
-    
-    // HTML fallback for SPA routing: only serve index.html for page navigation requests, not asset files
-    app.get("*", async (req, res, next) => {
+
+    // Fallback for HTML entry point in dev if needed
+    app.use('*', async (req, res, next) => {
       const url = req.originalUrl;
-      // Do not intercept static assets, JS/TS/CSS/JSON files, or API routes
-      if (url.startsWith('/api') || url.includes('.') && !url.endsWith('.html')) {
+      if (url.startsWith('/api')) {
         return next();
       }
       try {
         const indexPath = path.resolve(process.cwd(), "index.html");
-        if (fs.existsSync(indexPath)) {
-          let template = fs.readFileSync(indexPath, "utf-8");
-          template = await vite.transformIndexHtml(url, template);
-          res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(template);
-        } else {
-          next();
-        }
+        let template = fs.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(template);
       } catch (e: any) {
-        if (vite) {
-          vite.ssrFixStacktrace(e);
-        }
+        vite.ssrFixStacktrace(e);
         next(e);
       }
     });
   } else {
     app.use(express.static(distPath));
-    app.get("*", (req, res, next) => {
-      if (req.originalUrl.startsWith('/api')) return next();
+    app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

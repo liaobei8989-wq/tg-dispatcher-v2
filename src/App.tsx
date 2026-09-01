@@ -313,7 +313,7 @@ export default function App() {
       }
     };
     fetchFollowupStats();
-    const interval = setInterval(fetchFollowupStats, 4000);
+    const interval = setInterval(fetchFollowupStats, 15000);
     return () => clearInterval(interval);
   }, []);
 

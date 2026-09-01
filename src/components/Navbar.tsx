@@ -82,11 +82,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Quick Stats Bar */}
           <div className="flex items-center space-x-2 sm:space-x-3 self-end sm:self-auto">
             <div className="flex items-center space-x-2 sm:space-x-3 text-[11px] sm:text-xs bg-slate-950/80 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl border border-slate-800/80 shadow-inner">
-              <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('tg_simple');
+                  setTimeout(() => {
+                    const el = document.getElementById('tg-account-table-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+                className="flex items-center space-x-1.5 hover:bg-slate-900 px-2 py-0.5 rounded-lg border border-transparent hover:border-emerald-500/30 transition cursor-pointer group"
+                title="点击直达 TG 账号列表与挂载中心"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-slate-400">TG 协议号:</span>
-                <span className="text-emerald-400 font-bold font-mono">{activeAccountCount} 个</span>
-              </div>
+                <span className="text-slate-400 group-hover:text-slate-200">TG 协议号:</span>
+                <span className="text-emerald-400 font-bold font-mono group-hover:underline flex items-center gap-0.5">
+                  {activeAccountCount} 个 <span className="text-[10px] text-emerald-400">↑</span>
+                </span>
+              </button>
               <div className="h-3 w-px bg-slate-800"></div>
               <button
                 type="button"

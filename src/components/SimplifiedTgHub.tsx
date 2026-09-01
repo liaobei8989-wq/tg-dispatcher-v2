@@ -748,7 +748,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   useEffect(() => {
     fetchScannerStats();
-    const timer = setInterval(fetchScannerStats, 8000);
+    const timer = setInterval(fetchScannerStats, 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -2894,12 +2894,24 @@ if __name__ == "__main__":
           </div>
 
           <div className="flex items-center gap-3 self-stretch md:self-auto justify-end">
-            <div className="bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800 text-right font-mono">
-              <div className="text-[10px] text-slate-400">活跃 TG 账号</div>
-              <div className="text-emerald-400 font-extrabold text-base">
-                {distinctTgAccounts.length || accounts.length} 个
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('tg-account-table-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="bg-slate-950/80 hover:bg-slate-900 px-4 py-2 rounded-xl border border-slate-800 hover:border-emerald-500/50 text-right font-mono transition-all cursor-pointer group"
+              title="点击立即直达下方账号列表与批量管理"
+            >
+              <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                <span>活跃 TG 账号</span>
+                <span className="text-[9px] text-emerald-400 group-hover:underline">(点击查看)</span>
               </div>
-            </div>
+              <div className="text-emerald-400 font-extrabold text-base flex items-center justify-end gap-1">
+                <span>{distinctTgAccounts.length || accounts.length} 个</span>
+                <span className="text-xs group-hover:translate-y-0.5 transition-transform">↓</span>
+              </div>
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -3371,7 +3383,7 @@ if __name__ == "__main__":
         </div>
 
         {/* TG Accounts Real-time Binding Status Grid (Dynamic) */}
-        <div className="space-y-3">
+        <div id="tg-account-table-section" className="space-y-3 scroll-mt-20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <span className="font-bold text-slate-300 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
