@@ -594,15 +594,23 @@ async def run_worker(
 
 async def main():
     if len(sys.argv) < 2:
-        print(json.dumps({"success": False, "error": "Missing payload argument"}))
-        return
-
-    try:
-        raw_payload = sys.argv[1]
-        payload = json.loads(raw_payload)
-    except Exception as e:
-        print(json.dumps({"success": False, "error": f"Invalid JSON payload: {str(e)}"}))
-        return
+        print("💡 [提示] 未检测到命令行 JSON 参数，自动使用默认测试任务配置...")
+        payload = {
+            "targets": ["5511999998888"],
+            "message": "Oi {amigo|linda}, tudo bem?",
+            "second_message": "Aqui tem um bônus especial: {URL}",
+            "enable_third_message": False,
+            "wait_for_reply": False,
+            "delay_min": 5.0,
+            "delay_max": 10.0
+        }
+    else:
+        try:
+            raw_payload = sys.argv[1]
+            payload = json.loads(raw_payload)
+        except Exception as e:
+            print(json.dumps({"success": False, "error": f"Invalid JSON payload: {str(e)}"}))
+            return
 
     targets = payload.get("targets", [])
     if isinstance(targets, str):
