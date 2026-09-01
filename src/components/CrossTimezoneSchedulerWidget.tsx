@@ -26,6 +26,7 @@ import { ScheduledCampaignConfig, TimezoneClock } from '../types';
 import {
   getCurrentClocks,
   calculateNextRunInfo,
+  findNextUpcomingWave,
   loadScheduledCampaignConfig,
   saveScheduledCampaignConfig,
   convertBrazilToIndonesia,
@@ -35,7 +36,7 @@ import {
 import { CrossTimezoneSchedulerModal } from './CrossTimezoneSchedulerModal';
 
 interface CrossTimezoneSchedulerWidgetProps {
-  onTriggerNow: (config?: ScheduledCampaignConfig) => void;
+  onTriggerNow: (config?: ScheduledCampaignConfig, wave?: any) => void;
   isCampaignRunning: boolean;
   targetCount: number;
 }
@@ -48,32 +49,51 @@ export const CrossTimezoneSchedulerWidget: React.FC<CrossTimezoneSchedulerWidget
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [config, setConfig] = useState<ScheduledCampaignConfig>(loadScheduledCampaignConfig);
   const [clocks, setClocks] = useState(getCurrentClocks());
-  const [countdown, setCountdown] = useState(calculateNextRunInfo(config.targetTimeBrazil));
+  const initialWaveInfo = findNextUpcomingWave(config.waves);
+  const [nextWaveObj, setNextWaveObj] = useState<any>(initialWaveInfo.nextWave);
+  const [countdown, setCountdown] = useState(initialWaveInfo.countdown);
 
   // Ticking effect every 1 second
   useEffect(() => {
     const timer = setInterval(() => {
       const currentClocks = getCurrentClocks();
       setClocks(currentClocks);
-      const nextInfo = calculateNextRunInfo(config.targetTimeBrazil);
-      setCountdown(nextInfo);
+      
+      const waveInfo = findNextUpcomingWave(config.waves);
+      setNextWaveObj(waveInfo.nextWave);
+      setCountdown(waveInfo.countdown);
 
-      // Check if scheduled time is reached and not currently running
+      // Check if any wave is due right now and campaign is not already running
       if (
         config.enabled &&
         config.status === 'waiting' &&
         !isCampaignRunning &&
-        nextInfo.isDueNow
+        waveInfo.dueWave
       ) {
-        console.log('[Timezone Scheduler] ⏰ Scheduled trigger time reached! Auto executing campaign...');
+        const dueWave = waveInfo.dueWave;
+        console.log(`[Timezone Scheduler] ⏰ 波次定时时间已到达: ${dueWave.name} (${dueWave.brazilTime})! 正在自动发射...`);
+        
+        // Update wave execution timestamp
+        const updatedWaves = (config.waves || []).map(w => {
+          if (w.id === dueWave.id) {
+            return {
+              ...w,
+              lastExecutedAt: new Date().toISOString(),
+              status: config.recurring ? ('waiting' as const) : ('completed' as const)
+            };
+          }
+          return w;
+        });
+
         const updated: ScheduledCampaignConfig = {
           ...config,
           lastExecutedAt: new Date().toISOString(),
+          waves: updatedWaves,
           status: config.recurring ? 'waiting' : 'completed'
         };
         setConfig(updated);
         saveScheduledCampaignConfig(updated);
-        onTriggerNow(updated);
+        onTriggerNow(updated, dueWave);
       }
     }, 1000);
 
@@ -95,7 +115,8 @@ export const CrossTimezoneSchedulerWidget: React.FC<CrossTimezoneSchedulerWidget
 
   const handleSimulate = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onTriggerNow(config);
+    const targetWave = nextWaveObj || config.waves?.[0];
+    onTriggerNow(config, targetWave);
   };
 
   // Quick inline time change directly from widget
@@ -156,10 +177,10 @@ export const CrossTimezoneSchedulerWidget: React.FC<CrossTimezoneSchedulerWidget
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>定时预约设定:</span>
+                <span>下一个就绪波次:</span>
                 <span className="text-emerald-400 font-mono font-black">
                   {config.enabled && config.status !== 'paused'
-                    ? `🇧🇷 巴西 ${config.targetTimeBrazil} ➔ 🇮🇩 印尼 ${convertBrazilToIndonesia(config.targetTimeBrazil).label}`
+                    ? `【${nextWaveObj?.name || '定时波次'}】🇧🇷 巴西 ${nextWaveObj?.brazilTime || config.targetTimeBrazil} ➔ 🇮🇩 印尼 ${convertBrazilToIndonesia(nextWaveObj?.brazilTime || config.targetTimeBrazil).label}`
                     : '已暂停'}
                 </span>
               </span>
@@ -171,7 +192,7 @@ export const CrossTimezoneSchedulerWidget: React.FC<CrossTimezoneSchedulerWidget
                 {config.enabled && config.status !== 'paused' ? countdown.remainingFormatted : '已暂停'}
               </span>
               <span className="text-[10px] text-slate-500 hidden sm:inline">
-                ({config.recurring ? '每天循环' : '单次预约'})
+                ({config.recurring ? '3波循环' : '单次预约'} | 待发: {(nextWaveObj?.targetList?.length || 0)}条)
               </span>
             </div>
           </div>

@@ -184,7 +184,7 @@ export interface ScheduledCampaignConfig {
   primaryTimezone: 'brazil' | 'indonesia';
   autoStopBrazilTime?: string; // e.g. "22:00"
   enableAutoStop: boolean;
-  speedMode: 'turbo' | 'balanced' | 'safe';
+  speedMode: 'turbo' | 'balanced' | 'safe' | 'conservative';
   strategyMode: 'two_stage' | 'direct';
   batchLimitCount: number; // e.g. 50, 100, or 0 for all
   lastExecutedAt?: string;

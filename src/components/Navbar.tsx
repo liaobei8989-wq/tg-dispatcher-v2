@@ -27,6 +27,7 @@ interface NavbarProps {
   totalFollowupToday?: number;
   isCampaignRunning: boolean;
   onResetAllToZero: () => void;
+  onResetDailySent?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalFollowupToday = 0,
   isCampaignRunning,
   onResetAllToZero,
+  onResetDailySent,
 }) => {
   const navItems = [
     { id: 'tg_simple', label: '⚡ TG 极速一键中台', icon: Send, pulse: isCampaignRunning, badge: '极简主控' },
@@ -86,10 +88,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-emerald-400 font-bold font-mono">{activeAccountCount} 个</span>
               </div>
               <div className="h-3 w-px bg-slate-800"></div>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-slate-400">已群发:</span>
+              <button
+                type="button"
+                title="每日 00:00 自动清零；亦可随时点击此按钮手动一键清零今日已发计数"
+                onClick={onResetDailySent}
+                className="flex items-center space-x-1.5 bg-amber-950/30 hover:bg-amber-900/50 px-2 py-0.5 rounded-lg border border-amber-500/20 hover:border-amber-400/40 transition cursor-pointer active:scale-95 group"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span className="text-slate-300 group-hover:text-white">已群发:</span>
                 <span className="text-amber-400 font-bold font-mono">{totalSentToday} 条</span>
-              </div>
+                <span className="text-[10px] text-slate-400 group-hover:text-amber-200 opacity-60 group-hover:opacity-100 ml-0.5">🔄</span>
+              </button>
               <div className="h-3 w-px bg-slate-800"></div>
               <button
                 type="button"

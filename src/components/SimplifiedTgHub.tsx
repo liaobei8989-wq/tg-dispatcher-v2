@@ -312,6 +312,18 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   onOpenProxyModal,
   initialTargets
 }) => {
+  const isAbortedRef = useRef<boolean>(false);
+
+  // ⏱️ 响应毫秒级中断的休眠工具函数 (只要 isAbortedRef 变为 true，最多 150ms 立即打破循环退出)
+  const interruptibleSleep = async (ms: number) => {
+    const step = 150;
+    let elapsed = 0;
+    while (elapsed < ms && !isAbortedRef.current) {
+      await new Promise(r => setTimeout(r, Math.min(step, ms - elapsed)));
+      elapsed += step;
+    }
+  };
+
   // Modal states
   const [showImportAccountsModal, setShowImportAccountsModal] = useState<boolean>(false);
   const [showMainTgSendModal, setShowMainTgSendModal] = useState<boolean>(false);
@@ -2347,11 +2359,12 @@ if __name__ == "__main__":
   };
 
   // ⏰ Handle Trigger Scheduled Mass Send (跨时区定时到点自动群发或模拟演练)
-  const handleTriggerScheduledMassSend = (cfg?: ScheduledCampaignConfig) => {
+  const handleTriggerScheduledMassSend = (cfg?: ScheduledCampaignConfig, specificWave?: any) => {
     const config = cfg || loadScheduledCampaignConfig();
     
     // Check if there is an active matching wave
-    const matchingWave = config.waves?.find(w => w.brazilTime === config.targetTimeBrazil && w.enabled) 
+    const matchingWave = specificWave
+      || config.waves?.find(w => w.brazilTime === config.targetTimeBrazil && w.enabled) 
       || config.waves?.find(w => w.enabled)
       || config.waves?.[0];
 
@@ -2369,41 +2382,62 @@ if __name__ == "__main__":
       .map(l => l.trim())
       .filter(Boolean);
     
+    const waveLabel = matchingWave?.name || '定时波次';
+    const waveTime = matchingWave?.brazilTime || config.targetTimeBrazil;
+
     if (currentRawLines.length === 0) {
-      // Auto populate with healthy sample targets so the user gets instant visual feedback
-      const sampleTargets = `@BrazilGo888VIP_Bot
-5511977228001
-@VIP_Player_BR88
-5521981129002
-@tg_highroller_01
-5531976543210
-@tg_slot_master
-5541999998888
-@tg_agent_888
-5511987654321`;
-      setMassDataText(sampleTargets);
-      currentRawLines = sampleTargets.split('\n').map(l => l.trim()).filter(Boolean);
+      setSimpleLogs(prev => [
+        ...prev,
+        `==================== ⏰ 【${waveLabel}】跨时区定时波次检查 ====================`,
+        `[⚠️ 空数据包跳过] 当前【${waveLabel}】待发数据为空或已被清空 (0条待发数据)，系统已安全跳过本次执行，未向任何号码发信。`
+      ]);
+      return;
     }
 
     setSimpleLogs(prev => [
       ...prev,
-      `==================== ⏰ 跨时区定时群发任务准时启动 ====================`,
-      `[🇧🇷 巴西触发时间] ${config.targetTimeBrazil} BRT (巴西圣保罗/巴西利亚黄金晚高峰)`,
-      `[🇮🇩 印尼换算时间] ${config.targetTimeIndonesia} WIB (印尼西区早晨 05:00 / 06:00)`,
-      `[🏷️ 指定执行分组] 本波次已绑定【${waveGroup === 'ALL' ? '全部分组 (混合轮发)' : waveGroup}】协议发信号矩阵！`,
-      matchingWave?.fileName ? `[📁 波次独立数据] 已挂载【${matchingWave.name}】专属数据包: ${matchingWave.fileName} (${currentRawLines.length} 条)` : `[📊 队列状态] 当前待发名单: ${currentRawLines.length} 条`,
-      `[💡 跨时区免守候机制] 操作员在印尼熟睡未起，云端定时守护引擎已准时唤醒！`,
-      `[🚀 矩阵群发引擎] 自动调度 Telegram 协议发件账号，开启两阶段防封多号交替轮发！`
+      `==================== ⏰ 【${waveLabel}】跨时区定时群发任务准时启动 ====================`,
+      `[🇧🇷 巴西触发时间] ${waveTime} BRT (巴西圣保罗/巴西利亚黄金晚高峰)`,
+      `[🇮🇩 印尼换算时间] ${convertBrazilToIndonesia(waveTime).label} (印尼西区早晨)`,
+      `[🏷️ 指定执行分组] 本波次已绑定【${waveGroup === 'ALL' ? '全部分组 (多号全并行)' : waveGroup}】协议发信号矩阵！`,
+      matchingWave?.fileName ? `[📁 波次独立数据] 已挂载【${waveLabel}】专属数据包: ${matchingWave.fileName} (${currentRawLines.length} 条)` : `[📊 队列状态] 当前待发名单: ${currentRawLines.length} 条`,
+      `[💡 跨时区免守候机制] 云端 24/7 定时守护引擎已准时唤醒！`,
+      `[🚀 多号真并发引擎] 正在同时激活所有可用协议号，各通道完全独立并行发信，告别排队卡顿！`
     ]);
 
     setTimeout(() => {
-      handleStartMassSend();
+      handleStartMassSend(currentRawLines, true, matchingWave);
     }, 150);
   };
 
-  // Handle One-Click Mass Send (一键群发)
-  const handleStartMassSend = () => {
-    const rawLines = massDataText.split('\n').map(l => l.trim()).filter(Boolean);
+  // 🛑 紧急停止当前正在执行的群发任务（客户端 Worker 毫秒级熔断 + 服务端 Python 进程彻底杀死）
+  const handleStopCampaign = async () => {
+    isAbortedRef.current = true;
+    setIsCampaignRunning(false);
+    setSimpleLogs(prev => [
+      ...prev,
+      `🛑 ==================== [紧急停跑] 操作员已强制停止群发任务 ====================`,
+      `[即刻熔断] 已向所有正在运行的协议号并发 Worker 发出全局中断信号 (Abort Signal)！`,
+      `[清空执行队列] 正在终止等待中的休眠、打字延时与发信循环...`,
+      `[云端同步] 正在通知服务器彻底终结所有底层 Python 群发子进程...`
+    ]);
+    try {
+      const res = await fetch('/api/campaign/stop', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSimpleLogs(prev => [...prev, `[云端进程终结 ✅] 服务端确认：所有底层群发与调度子进程已彻底被安全终结。`]);
+      }
+    } catch (e: any) {
+      console.warn("Stop campaign notify failed:", e);
+    }
+  };
+
+  // Handle One-Click Mass Send (一键群发 - 多号真并发矩阵架构)
+  const handleStartMassSend = (customTargets?: string[], isAutoScheduled = false, currentWave?: any) => {
+    const rawLines = (customTargets && customTargets.length > 0)
+      ? customTargets
+      : massDataText.split('\n').map(l => l.trim()).filter(Boolean);
+
     if (rawLines.length === 0) {
       alert('请先在【导入数据】中粘贴或上传目标 TG 号/数据名单！');
       return;
@@ -2416,7 +2450,7 @@ if __name__ == "__main__":
     });
     const hasRealSessions = realSessionFiles.length > 0;
 
-    if (!hasRealSessions) {
+    if (!hasRealSessions && !isAutoScheduled) {
       const confirmContinue = confirm(
         "⚠️【发件凭证缺失提示】\n\n当前服务器磁盘未挂载任何发件号的 .session 真实凭证！\n如果强行群发，系统将无法与 Telegram 网络建立通信，导致所有目标发送失败 (0 条送达)。\n\n【确定】: 仍然强行测试发送\n【取消】: 页面将为您定位到【.session 文件上传中心】"
       );
@@ -2429,322 +2463,319 @@ if __name__ == "__main__":
       }
     }
 
+    isAbortedRef.current = false;
     setIsCampaignRunning(true);
     setActiveSubModal('none');
     setShowMainTgSendModal(false);
 
     const modeLabel = sendStrategyMode === 'two_stage' ? '【两阶段问候语防封模式】' : '【一键直发模式】';
-    const activeTgAccountsCount = accounts.filter(a => a.platform === 'telegram').length || accounts.length || 4;
 
     // 读取游标，支持从 sentOffset 自动续发
     let currentIndex = sentOffset;
-    if (currentIndex >= rawLines.length) {
-      if (confirm(`已到达上次群发终点 (第 ${sentOffset} 条 / 共 ${rawLines.length} 条)。是否自动归零重置，从第 1 条开始重新发送？`)) {
-        currentIndex = 0;
-        updateSentOffset(0);
-      } else {
-        setIsCampaignRunning(false);
-        return;
+    if (!isAutoScheduled) {
+      if (currentIndex >= rawLines.length) {
+        if (confirm(`已到达上次群发终点 (第 ${sentOffset} 条 / 共 ${rawLines.length} 条)。是否自动归零重置，从第 1 条开始重新发送？`)) {
+          currentIndex = 0;
+          updateSentOffset(0);
+        } else {
+          setIsCampaignRunning(false);
+          return;
+        }
+      } else if (currentIndex > 0) {
+        const shouldReset = confirm(`📍 检测到上次群发进度记录在前 ${currentIndex} 条。\n\n【确定】: 重置游标，从第 1 条开始重新完整群发所有号码 (包含测试主号)\n【取消】: 续发模式，自动跳过前 ${currentIndex} 条已发号码，从第 ${currentIndex + 1} 条继续发件`);
+        if (shouldReset) {
+          currentIndex = 0;
+          updateSentOffset(0);
+        }
       }
-    } else if (currentIndex > 0) {
-      const shouldReset = confirm(`📍 检测到上次群发进度记录在前 ${currentIndex} 条。\n\n【确定】: 重置游标，从第 1 条开始重新完整群发所有号码 (包含测试主号)\n【取消】: 续发模式，自动跳过前 ${currentIndex} 条已发号码，从第 ${currentIndex + 1} 条继续发件`);
-      if (shouldReset) {
-        currentIndex = 0;
-        updateSentOffset(0);
+    } else {
+      // Auto scheduled starts from 0 for fresh wave
+      currentIndex = 0;
+      updateSentOffset(0);
+    }
+
+    // 1. 动态构建独立发件账号池 (匹配 .session 协议号凭证，支持按分组分流)
+    let initialAccountPool = hasRealSessions 
+      ? realSessionFiles.map((s) => {
+          const rawPhoneNum = s.fileName.replace('.session', '');
+          const matchedAcc = accounts.find(a => a.phone.replace(/[^0-9]/g, '').includes(rawPhoneNum));
+          return {
+            phone: matchedAcc ? matchedAcc.phone : `+${rawPhoneNum}`,
+            sessionFile: s.fileName,
+            groupTag: matchedAcc?.groupTag || '主力爆破A组'
+          };
+        })
+      : (accounts.length > 0 
+          ? accounts.map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
+          : [{ phone: '+55 41 99999-8888', sessionFile: undefined, groupTag: '主力爆破A组' }]);
+
+    const activeFilter = currentWave?.targetGroupTag || massSendGroupFilter;
+    if (activeFilter && activeFilter !== 'ALL') {
+      const filtered = initialAccountPool.filter(a => a.groupTag === activeFilter);
+      if (filtered.length > 0) {
+        initialAccountPool = filtered;
       }
     }
+    const accountPool = initialAccountPool;
+
+    // 辅助随机生成器：单号每发完 15 条自动微休 3~5 分钟 (180 ~ 300 秒)
+    const getRandomThreshold = () => 15; // 严格单号 15 条微批次阈值
+    const getRandomRestSec = () => Math.floor(Math.random() * (300 - 180 + 1)) + 180; // 3~5分钟随机微休
+
+    // 2. 初始化每个发件账号独立的员工性格档案 (动态自适应任意 N 个账号的弹性矩阵)
+    const poolSize = accountPool.length;
+    // 根据实际在线协议号总数自适应错峰步长，无论 10 个号、50 个号、100 个号还是 500+ 个号均自动平滑散开
+    const dynamicStaggerStepMs = Math.max(150, Math.min(2000, Math.floor(45000 / Math.max(poolSize, 1))));
+
+    const accountTracker = accountPool.map((acc, idx) => {
+      const rawDigits = acc.phone.replace(/\D/g, '');
+      const phoneSeed = parseInt(rawDigits.slice(-2) || '15', 10);
+      const personalityRoll = (phoneSeed + idx * 7) % 100;
+      
+      let personalityType = '标准稳健型 (正点到岗)';
+      let arrivalDelayMs = (idx % Math.min(poolSize, 50)) * dynamicStaggerStepMs + Math.floor(Math.random() * 2000) + 1000;
+      let typingFactor = 1.0;
+      let restThreshold = 15;
+
+      if (personalityRoll < 30) {
+        personalityType = '积极早鸟型 (提早到岗)';
+        arrivalDelayMs = Math.floor(Math.random() * 2000) + 500 + (idx % Math.min(poolSize, 20)) * (dynamicStaggerStepMs * 0.4);
+        typingFactor = 0.88 + (phoneSeed % 10) / 100; // 0.88 ~ 0.98x 手速稍快
+        restThreshold = 14 + (phoneSeed % 3); // 14 ~ 16 条
+      } else if (personalityRoll < 80) {
+        personalityType = '标准稳健型 (正点到岗)';
+        arrivalDelayMs = (idx % Math.min(poolSize, 50)) * dynamicStaggerStepMs + Math.floor(Math.random() * 3000) + 1500;
+        typingFactor = 0.98 + (phoneSeed % 15) / 100; // 0.98 ~ 1.13x 标准
+        restThreshold = 13 + (phoneSeed % 3); // 13 ~ 15 条
+      } else {
+        personalityType = '慢热从容型 (稍迟就位)';
+        arrivalDelayMs = (idx % Math.min(poolSize, 60)) * (dynamicStaggerStepMs * 1.5) + Math.floor(Math.random() * 5000) + 3000;
+        typingFactor = 1.12 + (phoneSeed % 15) / 100; // 1.12 ~ 1.27x 慢吞吞
+        restThreshold = 12 + (phoneSeed % 4); // 12 ~ 15 条
+      }
+
+      return {
+        ...acc,
+        personalityType,
+        arrivalDelayMs,
+        continuousSent: 0,
+        maxBeforeRest: restThreshold,
+        cooldownUntil: 0,
+        typingFactor: parseFloat(typingFactor.toFixed(2))
+      };
+    });
 
     setSimpleLogs(prev => [
       ...prev,
-      `==================== 一键群发任务开启 ====================`,
+      `==================== 🚀 弹性多账号拟人作息矩阵群发引擎启动 (${accountTracker.length} 个协议号并发) ====================`,
       `[策略模式] ${modeLabel}`,
-      `[📍 断点自动识别] 本次自动跳过前 ${currentIndex} 条已成功数据，从第 ${currentIndex + 1} 条开始履约！`,
-      `[准备就绪] 目标名单总数: ${rawLines.length} 条 | 调度 ${activeTgAccountsCount} 个 TG 协议号集群 | 关联磁盘 .session 凭证: ${hasRealSessions ? `${realSessionFiles.length} 个已载入` : '⚠️ 未检测到 (沙盒调试模式)'}`,
-      !hasRealSessions ? `⚠️ [提示]: 未检测到真实 .session 登录文件。请在下方【.session 协议号文件管理与上传中心】选择并上传您的真实 .session 文件！` : ''
+      `[员工矩阵] 装载 ${accountTracker.length} 位拟人员工性格档案 (弹性支持任意规模账号矩阵，自适应平滑错峰，绝不同秒并发！)`,
+      `[拟人作息] 模拟真人打卡、阅读客户、打字手速(0.88x~1.27x)与 15 条微休(3~5分钟)，防封效果拉满！`,
+      `[单条节奏] 45~65 秒高斯拟人随机打散 + 发信前 3~5 秒模拟真实打字中 (Typing)`,
+      `[📍 断点识别] 本次从第 ${currentIndex + 1} 条开始履约，总名单 ${rawLines.length} 条！`,
+      `[凭证状态] 磁盘已挂载 ${hasRealSessions ? `${realSessionFiles.length} 个真实 .session 协议号` : '沙盒模拟模式'}`
     ].filter(Boolean));
 
-    // 采用 async 顺序独占队列，彻底消除 SQLite 凭证文件并发锁死的冲突！
+    // 3. 多号真并发线程池调度引擎 (每个账号独立协程循环，互不阻塞等待)
     (async () => {
       let runSuccessCount = 0;
       let runFailCount = 0;
       let lastErrorDetail = '';
+      let nextTaskQueueIndex = currentIndex;
 
-      // 1. 动态构建独立发件账号池 (仅匹配 .session 协议号凭证，支持按分组分流调度)
-      let initialAccountPool = hasRealSessions 
-        ? realSessionFiles.map((s) => {
-            const rawPhoneNum = s.fileName.replace('.session', '');
-            const matchedAcc = accounts.find(a => a.phone.replace(/[^0-9]/g, '').includes(rawPhoneNum));
-            return {
-              phone: matchedAcc ? matchedAcc.phone : `+${rawPhoneNum}`,
-              sessionFile: s.fileName,
-              groupTag: matchedAcc?.groupTag || '主力爆破A组'
-            };
-          })
-        : (accounts.length > 0 
-            ? accounts.map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
-            : [{ phone: '+55 41 99999-8888', sessionFile: undefined, groupTag: '主力爆破A组' }]);
-
-      if (massSendGroupFilter !== 'ALL') {
-        const filtered = initialAccountPool.filter(a => a.groupTag === massSendGroupFilter);
-        if (filtered.length > 0) {
-          initialAccountPool = filtered;
-        }
-      }
-      const accountPool = initialAccountPool;
-
-
-      // 辅助随机生成器：单号发送 10~20 条随机量触发休眠，休息 60~150 秒 (1~2.5分钟) 不固定
-      const getRandomThreshold = () => Math.floor(Math.random() * (20 - 10 + 1)) + 10;
-      const getRandomRestSec = () => Math.floor(Math.random() * (150 - 60 + 1)) + 60;
-
-      // 2. 初始化每个发件账号独立的风控追踪器与专属打字速度指纹 (0.88x ~ 1.22x)
-      const accountTracker = accountPool.map((acc, idx) => {
-        // 为每个协议号赋予独一无二的拟人操作手速特征，彻底破坏机械匀速
-        const rawDigits = acc.phone.replace(/\D/g, '');
-        const phoneSeed = parseInt(rawDigits.slice(-2) || '15', 10);
-        const typingPersonality = 0.88 + ((idx * 11 + phoneSeed) % 35) / 100;
+      // 线程安全原子任务取模器
+      const getNextTask = () => {
+        if (isAbortedRef.current) return null;
+        if (nextTaskQueueIndex >= rawLines.length) return null;
+        const taskIdx = nextTaskQueueIndex++;
         return {
-          ...acc,
-          continuousSent: 0,                   // 该号连续发件计数器
-          maxBeforeRest: getRandomThreshold(),  // 该号独立触发休眠的随机限额 (10~20)
-          cooldownUntil: 0,                    // 该号独立休眠截止时间戳 (ms)
-          typingFactor: parseFloat(typingPersonality.toFixed(2)) // 专属打字律动系数
+          taskIndex: taskIdx,
+          targetItem: rawLines[taskIdx],
+          cleanPhone: rawLines[taskIdx].replace(/\s*\(.*?\)/, '').trim()
         };
+      };
+
+      // 启动所有账号并发 Worker (模拟任意 N 位员工早鸟、正点、稍后陆续到岗，绝不同秒并发)
+      const workerPromises = accountTracker.map(async (acc, workerIdx) => {
+        const staggerSec = (acc.arrivalDelayMs / 1000).toFixed(1);
+        if (acc.arrivalDelayMs > 1500) {
+          setSimpleLogs(prev => [
+            ...prev,
+            `⏳ [员工 #${workerIdx + 1}/${accountTracker.length}: ${acc.phone.slice(-4)}] 性格:【${acc.personalityType}】| 拟人自然到岗延时 ${staggerSec}s (自适应错峰上班)...`
+          ]);
+        }
+        await interruptibleSleep(acc.arrivalDelayMs);
+
+        while (!isAbortedRef.current) {
+          // 账号独立休眠防风控 (发满 15 条微休 3~5 分钟)
+          if (Date.now() < acc.cooldownUntil) {
+            const waitMs = Math.max(1000, acc.cooldownUntil - Date.now());
+            await interruptibleSleep(Math.min(waitMs, 3000));
+            continue;
+          }
+
+          if (isAbortedRef.current) break;
+
+          const task = getNextTask();
+          if (!task || isAbortedRef.current) break; // 队列已空或收到停止信号
+
+          const { taskIndex, targetItem, cleanPhone } = task;
+          updateSentOffset(taskIndex + 1);
+
+          // 问候语轮换
+          let selectedGreeting = greetingText;
+          if (use50GreetingsRotate && greetingsList.length > 0) {
+            selectedGreeting = greetingsList[(greetingGlobalIndex + taskIndex) % greetingsList.length];
+          }
+          let msgToSend = sendStrategyMode === 'two_stage' ? selectedGreeting : massMessageText;
+          if (appendSenderTag) {
+            msgToSend += `\n\n(Enviado por: ${acc.phone})`;
+          }
+
+          const assignedProxy = brazilProxies[taskIndex % brazilProxies.length];
+          const proxyIp = assignedProxy.split(':')[0];
+
+          // 拟人真实打字中 (Typing) 动作：发信前 3~5 秒随机模拟
+          const typingDurationMs = Math.floor(Math.random() * 2000) + 3000;
+          const typingDurationSec = (typingDurationMs / 1000).toFixed(1);
+
+          setSimpleLogs(prev => [
+            ...prev,
+            `[✍️ 拟人打字中 ${typingDurationSec}s | 通道 #${workerIdx + 1} (${acc.phone.slice(-4)})] 正在准备发送 ➔ 目标 #${taskIndex + 1} (${targetItem})...`
+          ]);
+
+          await interruptibleSleep(typingDurationMs);
+          if (isAbortedRef.current) break;
+
+          try {
+            const resp = await fetch('/api/telethon/run-direct', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                targets: [cleanPhone],
+                message: msgToSend,
+                second_message: injectAntiBanDomain(followupLinkText || massMessageText),
+                third_message: blessingText,
+                enable_third_message: enableBlessing,
+                second_to_third_delay_min: blessingDelayMin,
+                second_to_third_delay_max: blessingDelayMax,
+                wait_for_reply: sendStrategyMode === 'two_stage',
+                listen_timeout: 0,
+                sender_phone: acc.phone,
+                session_file: acc.sessionFile,
+                proxy: assignedProxy,
+                avatar_photo_path: uploadedImages.length > 0 ? uploadedImages[taskIndex % uploadedImages.length] : (accounts.find(a => a.phone === acc.phone)?.avatarUrl || ''),
+                force_user_mode: true
+              })
+            });
+
+            if (isAbortedRef.current) break;
+
+            const resData = await resp.json();
+            const sessionLabel = acc.sessionFile ? `凭证: ${acc.sessionFile}` : '集群协议号';
+
+            if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {
+              runSuccessCount++;
+              const cleanLogText = `[云端后台 🇧🇷 IP:${proxyIp}] [通道 #${workerIdx + 1}: ${acc.phone}] ✨ 消息已送达 ➔ (${targetItem}) [${sessionLabel}]`;
+              setSimpleLogs(prev => [...prev, cleanLogText]);
+              if (sendStrategyMode === 'two_stage') {
+                setPendingReplyTargets(prev => Array.from(new Set([...prev, targetItem])));
+              }
+            } else {
+              runFailCount++;
+              const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
+              const errDetail = isUnregistered 
+                ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
+                : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号凭证鉴权失败');
+              lastErrorDetail = errDetail;
+              setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
+            }
+          } catch (err: any) {
+            if (isAbortedRef.current) break;
+            runFailCount++;
+            lastErrorDetail = `网络通信异常: ${err.message}`;
+            setSimpleLogs(prev => [...prev, `[云端 ❌ 网络异常] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${err.message}`]);
+          }
+
+          if (isAbortedRef.current) break;
+
+          // 单号连发量计数与独立微休判定 (发完 15 条自动微休 3~5 分钟)
+          acc.continuousSent += 1;
+          if (acc.continuousSent >= acc.maxBeforeRest && nextTaskQueueIndex < rawLines.length) {
+            const restSec = getRandomRestSec();
+            const restMin = (restSec / 60).toFixed(1);
+            acc.cooldownUntil = Date.now() + restSec * 1000;
+            const oldSent = acc.continuousSent;
+            acc.continuousSent = 0;
+            acc.maxBeforeRest = getRandomThreshold();
+            setSimpleLogs(prev => [
+              ...prev,
+              `☕ [🛡️ 通道 #${workerIdx + 1} 触发微批次保护] 账号 [${acc.phone}] 满 ${oldSent} 条，微休 ${restMin} 分钟 (${restSec}s) 防封！(其余 ${accountTracker.length - 1} 个通道正常并发)`
+            ]);
+          }
+
+          // 单号专属 45~65 秒高斯拟人随机打散延迟 (只阻塞本账号，不影响任何其它账号！)
+          let minBaseSec = 45.0;
+          let maxBaseSec = 65.0;
+          if (tgSendSpeedMode === 'conservative') {
+            minBaseSec = 45.0;
+            maxBaseSec = 65.0;
+          } else if (tgSendSpeedMode === 'balanced') {
+            minBaseSec = 30.0;
+            maxBaseSec = 50.0;
+          } else if (tgSendSpeedMode === 'turbo') {
+            minBaseSec = 15.0;
+            maxBaseSec = 30.0;
+          } else if (tgSendSpeedMode === 'custom') {
+            minBaseSec = Math.max(1.0, customSpeedMin);
+            maxBaseSec = Math.max(minBaseSec + 0.5, customSpeedMax);
+          }
+
+          const baseRandomSec = minBaseSec + Math.random() * (maxBaseSec - minBaseSec);
+          let delayedSec = baseRandomSec * (acc.typingFactor || 1.0);
+          if (enableTypingSimulation) {
+            delayedSec += (msgToSend.length / 30) * (0.06 + Math.random() * 0.12);
+          }
+          const actualDelaySec = parseFloat(delayedSec.toFixed(2));
+          const finalDelayMs = Math.round(delayedSec * 1000);
+
+          // 记录日志
+          const newLog: CampaignLog = {
+            id: `log-simple-${Date.now()}-${taskIndex}`,
+            campaignId: 'cmp-tg-fast',
+            accountId: accounts.find(a => a.phone === acc.phone)?.id || `acc-tg-${workerIdx + 1}`,
+            accountPhone: acc.phone,
+            targetPhone: targetItem,
+            platform: 'telegram',
+            messageText: sendStrategyMode === 'two_stage' ? greetingText : massMessageText,
+            status: 'success',
+            delaySec: actualDelaySec,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          setLogs(prev => [newLog, ...prev]);
+
+          // 更新发件数统计
+          setAccounts(prev => prev.map(a => a.phone === acc.phone ? { ...a, sentToday: a.sentToday + 1, totalSent: a.totalSent + 1 } : a));
+
+          if (nextTaskQueueIndex < rawLines.length && !isAbortedRef.current) {
+            await interruptibleSleep(finalDelayMs);
+          }
+        }
       });
 
-      const speedLabel = tgSendSpeedMode === 'conservative'
-        ? '🧑‍💼 真人业务员节奏 (45~60秒/条，15条约12~15分钟，带打字与喝水小憩)'
-        : (tgSendSpeedMode === 'balanced' 
-            ? '🛡️ 平稳波动防风控 (20~35秒/条 动态随机浮动)' 
-            : (tgSendSpeedMode === 'turbo'
-                ? '🚀 极速拟人变速 (5~12秒/条 动态随机浮动)'
-                : `🎛️ 自定义拟人区间 (${customSpeedMin}s ~ ${customSpeedMax}s 随机波动)`));
-
-      setSimpleLogs(prev => [
-        ...prev,
-        `⚡ 【多号高速轮流群发引擎启动】挂载 ${accountTracker.length} 个独立协议发件单元！`,
-        `   ├─ 轮发调度: 账号严格交替轮流发信，绝不同步阻塞等回复！`,
-        `   ├─ 拟人变速: ${speedLabel} (每条消息采用高斯浮点随机耗时 + 各号专属按键手速)`,
-        `   └─ 后台守护: 目标发送完毕后，由后台独立雷达自动巡检客户回复并秒级补发彩金，互不干扰！`
-      ]);
-
-      let poolIndex = currentIndex % accountTracker.length; // 轮询指针从上次断点轮换续跑
-
-      for (let i = currentIndex; i < rawLines.length; i++) {
-        const targetItem = rawLines[i];
-        const cleanPhone = targetItem.replace(/\s*\(.*?\)/, '');
-
-        // 更新记忆游标，实时存入 localStorage
-        updateSentOffset(i + 1);
-
-        // 3. 智能挑选当前处于非休眠状态的可用账号进行轮替
-        let selectedAcc = null;
-        let accIndexInPool = 0;
-        let now = Date.now();
-
-        for (let step = 0; step < accountTracker.length; step++) {
-          const candidateIdx = (poolIndex + step) % accountTracker.length;
-          const candidate = accountTracker[candidateIdx];
-          if (now >= candidate.cooldownUntil) {
-            selectedAcc = candidate;
-            accIndexInPool = candidateIdx;
-            poolIndex = (candidateIdx + 1) % accountTracker.length;
-            break;
-          }
-        }
-
-        // 4. 如果所有账号都处于独立休眠冷却中
-        if (!selectedAcc) {
-          let earliestAcc = accountTracker[0];
-          let earliestIdx = 0;
-          for (let step = 0; step < accountTracker.length; step++) {
-            if (accountTracker[step].cooldownUntil < earliestAcc.cooldownUntil) {
-              earliestAcc = accountTracker[step];
-              earliestIdx = step;
-            }
-          }
-          const waitMs = Math.max(1000, earliestAcc.cooldownUntil - Date.now());
-          const waitSec = Math.ceil(waitMs / 1000);
-
-          setSimpleLogs(prev => [
-            ...prev,
-            `⏳ 【所有发件号正处于独立拟人休眠中】等待最早账号 [${earliestAcc.phone}] 还剩 ${waitSec} 秒...`
-          ]);
-
-          await new Promise(r => setTimeout(r, waitMs));
-          selectedAcc = earliestAcc;
-          accIndexInPool = earliestIdx;
-          poolIndex = (earliestIdx + 1) % accountTracker.length;
-        }
-
-        const assignedSenderPhone = selectedAcc.phone;
-        const activeSessionFile = selectedAcc.sessionFile;
-
-        let selectedGreeting = greetingText;
-        if (use50GreetingsRotate && greetingsList.length > 0) {
-          selectedGreeting = greetingsList[(greetingGlobalIndex + i) % greetingsList.length];
-        }
-
-        let msgToSend = sendStrategyMode === 'two_stage' ? selectedGreeting : massMessageText;
-        if (appendSenderTag) {
-          msgToSend += `\n\n(Enviado por: ${assignedSenderPhone})`;
-        }
-
-        const assignedProxy = brazilProxies[i % brazilProxies.length];
-        const proxyIp = assignedProxy.split(':')[0];
-
-        setSimpleLogs(prev => [
-          ...prev,
-          `[推送中 ${i + 1}/${rawLines.length}] 🎯 [协议号 ${accIndexInPool + 1}/${accountTracker.length}: ${assignedSenderPhone}] ➔ 目标 (${targetItem})...`
-        ]);
-
-        try {
-          const resp = await fetch('/api/telethon/run-direct', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              targets: [cleanPhone],
-              message: msgToSend,
-              second_message: injectAntiBanDomain(followupLinkText || massMessageText),
-              third_message: blessingText,
-              enable_third_message: enableBlessing,
-              second_to_third_delay_min: blessingDelayMin,
-              second_to_third_delay_max: blessingDelayMax,
-              wait_for_reply: sendStrategyMode === 'two_stage',
-              listen_timeout: 0,
-              sender_phone: assignedSenderPhone,
-              session_file: activeSessionFile,
-              proxy: assignedProxy,
-              avatar_photo_path: uploadedImages.length > 0 ? uploadedImages[i % uploadedImages.length] : (accounts.find(a => a.phone === assignedSenderPhone)?.avatarUrl || ''),
-              force_user_mode: true
-            })
-          });
-
-          const resData = await resp.json();
-          const sessionLabel = activeSessionFile ? `凭证: ${activeSessionFile}` : '集群协议号';
-
-          if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {
-            runSuccessCount++;
-            if (sendStrategyMode === 'two_stage') {
-              const cleanLogText = `[云端后台 🇧🇷 IP:${proxyIp}] [协议号 ${accIndexInPool + 1}/${accountTracker.length}: ${assignedSenderPhone}] ✨ 问候已成功送达 ➔ (${targetItem} ➔ "${selectedGreeting.slice(0, 22)}...") [${sessionLabel}]`;
-              setSimpleLogs(prev => [...prev, cleanLogText]);
-              setPendingReplyTargets(prev => Array.from(new Set([...prev, targetItem])));
-            } else {
-              const cleanLogText = `[云端后台 🇧🇷 IP:${proxyIp}] [协议号 ${accIndexInPool + 1}/${accountTracker.length}: ${assignedSenderPhone}] ✨ 消息已送达 ➔ (${targetItem}) [${sessionLabel}]`;
-              setSimpleLogs(prev => [...prev, cleanLogText]);
-            }
-          } else {
-            runFailCount++;
-            const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
-            const errDetail = isUnregistered 
-              ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
-              : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号 .session 协议号文件鉴权失败或损坏');
-            
-            lastErrorDetail = errDetail;
-            const errorLogText = `[云端 ⚠️ 状态] [协议号 ${accIndexInPool + 1}/${accountTracker.length}: ${assignedSenderPhone}] (目标: ${targetItem}): ${errDetail}`;
-            setSimpleLogs(prev => [...prev, errorLogText]);
-          }
-        } catch (err: any) {
-          runFailCount++;
-          lastErrorDetail = `网络通信异常: ${err.message}`;
-          setSimpleLogs(prev => [...prev, `[云端 ❌ 网络异常] (目标: ${targetItem}): ${err.message}`]);
-        }
-
-        // 5. 更新选中账号的独立计数与休眠触发判定
-        selectedAcc.continuousSent += 1;
-
-        if (selectedAcc.continuousSent >= selectedAcc.maxBeforeRest && (i + 1) < rawLines.length) {
-          const restSec = getRandomRestSec(); // 60 ~ 150 秒不固定
-          selectedAcc.cooldownUntil = Date.now() + restSec * 1000;
-          const oldSentCount = selectedAcc.continuousSent;
-          selectedAcc.continuousSent = 0;
-          selectedAcc.maxBeforeRest = getRandomThreshold();
-
-          setSimpleLogs(prev => [
-            ...prev,
-            `☕ 【单号拟人独占休眠】账号 [${assignedSenderPhone}] 已连续发送 ${oldSentCount} 条，休眠 ${restSec}s！其它号继续无缝接力...`
-          ]);
-        }
-
-        // 6. 速率控制与非固定拟人抖动算法 (杜绝机器人固定匀速)
-        let minBaseSec = 45.0;
-        let maxBaseSec = 60.0;
-        if (tgSendSpeedMode === 'conservative') {
-          minBaseSec = 45.0;
-          maxBaseSec = 60.0;
-        } else if (tgSendSpeedMode === 'balanced') {
-          minBaseSec = 20.0;
-          maxBaseSec = 35.0;
-        } else if (tgSendSpeedMode === 'turbo') {
-          minBaseSec = 5.0;
-          maxBaseSec = 12.0;
-        } else if (tgSendSpeedMode === 'custom') {
-          minBaseSec = Math.max(1.0, customSpeedMin);
-          maxBaseSec = Math.max(minBaseSec + 0.5, customSpeedMax);
-        }
-
-        // 基础随机浮点数 (避免整数)
-        const baseRandomSec = minBaseSec + Math.random() * (maxBaseSec - minBaseSec);
-        // 单号专属手速系数调制 (例如 0.88x ~ 1.22x)
-        let delayedSec = baseRandomSec * (selectedAcc.typingFactor || 1.0);
-        // 动态字长打字耗时补偿
-        if (enableTypingSimulation) {
-          const charCompensation = (msgToSend.length / 30) * (0.06 + Math.random() * 0.12);
-          delayedSec += charCompensation;
-        }
-        // 偶发性人类视线微停顿 (每5~8条有 30% 几率出现 1.2s~2.8s 微停顿)
-        let isMicroPaused = false;
-        let pauseDurationSec = 0;
-        if (enableMicroPause && i > 0 && i % (Math.floor(Math.random() * 4) + 5) === 0) {
-          if (Math.random() < 0.35) {
-            pauseDurationSec = parseFloat((1.2 + Math.random() * 1.6).toFixed(2));
-            delayedSec += pauseDurationSec;
-            isMicroPaused = true;
-          }
-        }
-
-        const actualDelaySec = parseFloat(delayedSec.toFixed(2));
-        const finalDelayMs = Math.round(delayedSec * 1000);
-
-        // 添加共享全局日志 (记录真实的非整数浮点耗时)
-        const newLog: CampaignLog = {
-          id: `log-simple-${Date.now()}-${i}`,
-          campaignId: 'cmp-tg-fast',
-          accountId: accounts.find(a => a.phone === assignedSenderPhone)?.id || 'acc-tg-1',
-          accountPhone: assignedSenderPhone,
-          targetPhone: targetItem,
-          platform: 'telegram',
-          messageText: sendStrategyMode === 'two_stage' ? greetingText : massMessageText,
-          status: 'success',
-          delaySec: actualDelaySec,
-          timestamp: new Date().toLocaleTimeString()
-        };
-        setLogs(prev => [newLog, ...prev]);
-
-        // 更新发件数统计
-        setAccounts(prev => {
-          return prev.map((a) => {
-            if (a.phone === assignedSenderPhone) {
-              return {
-                ...a,
-                sentToday: a.sentToday + 1,
-                totalSent: a.totalSent + 1
-              };
-            }
-            return a;
-          });
-        });
-
-        if (i + 1 < rawLines.length) {
-          setSimpleLogs(prev => [
-            ...prev,
-            `[云端 🎲 拟人变速] 协议号 ${accIndexInPool + 1} (${assignedSenderPhone.slice(-4)}) ➔ 间隔 ${actualDelaySec}s [专属手速 ${selectedAcc.typingFactor}x${isMicroPaused ? ` | 人类视线微停顿 +${pauseDurationSec}s` : ''}]`
-          ]);
-          await new Promise(resolve => setTimeout(resolve, finalDelayMs));
-        }
-      }
+      // 等待所有并发 Worker 全部执行完毕
+      await Promise.all(workerPromises);
 
       setIsCampaignRunning(false);
+
+      if (isAbortedRef.current) {
+        setSimpleLogs(prev => [
+          ...prev,
+          `🛑 [任务终止完毕] 收到操作员停止指令，所有并发 Worker 已成功安全退出，未发出的任务已保存在队列中。`
+        ]);
+        return;
+      }
+
       const totalAttempted = rawLines.length - currentIndex;
 
       let summaryType: 'success' | 'warning' | 'failed' = 'success';
@@ -2765,7 +2796,7 @@ if __name__ == "__main__":
       } else {
         summaryType = 'success';
         summaryTitle = '🎉【群发任务 100% 成功送达】';
-        summaryReason = `全部 ${runSuccessCount} 条目标已由协议号轮流下发至 Telegram 网络！`;
+        summaryReason = `全部 ${runSuccessCount} 条目标已由 ${accountTracker.length} 个协议号多通道并行高速下发至 Telegram 网络！`;
         summarySuggestion = '客户回复后将由全网守护引擎自动感知并补发彩金！';
       }
 
@@ -2782,10 +2813,10 @@ if __name__ == "__main__":
 
       setSimpleLogs(prev => [
         ...prev,
-        `==================== 一键群发任务完成 ====================`,
+        `==================== 多号并发群发任务完成 ====================`,
         runSuccessCount === 0 
           ? `❌❌❌ 【群发失败警报】本次任务 0 条成功送达，失败 ${runFailCount} 条！主要原因: ${summaryReason}`
-          : `[完成] 名单 ${totalAttempted} 条已全部由协议号轮流发送完毕！成功送达: ${runSuccessCount} 条，失败: ${runFailCount} 条。`,
+          : `[完成] 名单 ${totalAttempted} 条已全部由 ${accountTracker.length} 个协议号通道并发发送完毕！成功送达: ${runSuccessCount} 条，失败: ${runFailCount} 条。`,
         `[后台守护就绪] 🤖 后台【客户主动回复雷达】持续全天候巡航，检测到客户回复将秒级自动补发第二条彩金！`
       ]);
     })();
@@ -2889,6 +2920,33 @@ if __name__ == "__main__":
           </div>
         </div>
       </div>
+
+      {/* 🚨 ACTIVE RUNNING CAMPAIGN EMERGENCY CONTROLLER BANNER */}
+      {isCampaignRunning && (
+        <div className="bg-gradient-to-r from-red-950 via-rose-900/90 to-red-950 border-2 border-red-500 rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
+            </span>
+            <div>
+              <h4 className="text-sm font-black text-white flex items-center gap-2">
+                🚨 群发任务正在多账号并发运行中 (高斯 45~65s + 拟人打字)
+              </h4>
+              <p className="text-xs text-rose-200 mt-0.5">
+                各协议号按员工性格自然错开到岗。若需中途停止，请点击右侧【一键紧急停跑】彻底终止所有线程及云端进程。
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleStopCampaign}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white hover:bg-rose-100 text-rose-700 font-extrabold text-xs shadow-xl flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 border border-white"
+          >
+            <Square className="w-4 h-4 fill-rose-700" /> 🛑 立即紧急停跑 (一键彻底熔断)
+          </button>
+        </div>
+      )}
 
       {/* 🚀 12-Pillar Commercial Matrix Suite Quick Action Grid */}
       <div className="space-y-3.5">
@@ -6091,7 +6149,7 @@ if __name__ == "__main__":
                         onChange={(e) => setUse50GreetingsRotate(e.target.checked)}
                         className="w-4 h-4 accent-emerald-500 rounded cursor-pointer shrink-0"
                       />
-                      <span>⚡ 开启 100 条问候语按顺序轮流发送</span>
+                      <span>⚡ 开启巴西本土问候语按顺序轮流发送 ({greetingsList.length} 条全库)</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer bg-slate-900 p-2.5 rounded-lg border border-slate-800 hover:border-sky-500/50 transition-all text-xs font-bold text-sky-300">
@@ -6758,13 +6816,12 @@ if __name__ == "__main__":
 
             {isCampaignRunning && (
               <button
-                onClick={() => {
-                  setIsCampaignRunning(false);
-                  setSimpleLogs(prev => [...prev, '[手动停止] 操作员停止了当前群发任务']);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1"
+                type="button"
+                onClick={handleStopCampaign}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 text-xs font-black flex items-center gap-1.5 shadow-md shadow-rose-950/60 cursor-pointer active:scale-95 transition-all"
+                title="立即紧急停止跑件 (终止并发与云端所有发信进程)"
               >
-                <Square className="w-3.5 h-3.5" /> 停止跑件
+                <Square className="w-3.5 h-3.5 fill-white" /> 🛑 紧急停止跑件
               </button>
             )}
 

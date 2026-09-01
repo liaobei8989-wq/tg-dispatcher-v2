@@ -475,24 +475,44 @@ async def run_worker(
         me_name = f"{getattr(me, 'first_name', '') or ''}".strip()
         worker_logs.append(f"✅ [Worker #{worker_id} 在线] 协议号: +{getattr(me, 'phone', clean_digits)} ({me_name})")
 
-        # Worker 专属员工手速系数 (例如员工A: 0.88x, 员工B: 1.12x, 模拟性格差异)
+        # 👤 Worker 专属员工性格档案 (模拟真人行为习惯：有的早到上班、有的稍迟进场、打字手速不同、喝水频率不同)
         try:
             worker_seed = int(clean_digits[-4:]) if clean_digits else worker_id * 137
         except Exception:
             worker_seed = worker_id * 137
         random.seed(worker_seed + int(datetime.now().strftime('%Y%m%d')))
-        worker_typing_factor = round(random.uniform(0.85, 1.15), 2)
+        
+        # 1. 员工性格分类 (动态适配任意 N 个账号的弹性矩阵)：
+        # 根据总 Worker 数量动态自适应离散步长，无论 10 个号、100 个号还是 500+ 个号均自动计算最平滑的错峰分布
+        stagger_step = max(0.15, min(1.8, 45.0 / max(total_workers, 1)))
+
+        personality_dice = random.random()
+        if personality_dice < 0.30:
+            employee_type = "积极早鸟型 (早到开工)"
+            arrival_delay = random.uniform(0.5, 3.0) + (worker_id % 10) * (stagger_step * 0.5)
+            typing_speed_base = random.uniform(0.85, 0.98) # 手速稍快
+            rest_threshold = random.randint(14, 16)
+        elif personality_dice < 0.80:
+            employee_type = "标准稳健型 (正点进场)"
+            arrival_delay = random.uniform(3.0, 15.0) + ((worker_id - 1) % max(total_workers, 1)) * stagger_step
+            typing_speed_base = random.uniform(0.98, 1.12) # 标准手速
+            rest_threshold = random.randint(13, 15)
+        else:
+            employee_type = "慢热从容型 (迟后就位)"
+            arrival_delay = random.uniform(15.0, 45.0) + ((worker_id - 1) % max(total_workers, 1)) * (stagger_step * 1.5)
+            typing_speed_base = random.uniform(1.12, 1.28) # 慢吞吞打字
+            rest_threshold = random.randint(12, 15)
+
+        worker_typing_factor = round(typing_speed_base, 2)
         random.seed() # reset seed
 
-        # 🚀 异步启动错峰机制 (Stagger Offset):
-        # 避免 100 个账号在 12:30:00 整秒瞬间同时发起网络请求与点开客户对话框
-        # 每个 Worker 自动分配 (worker_id - 1) * 0.35s + 随机抖动 (0.5 ~ 4.5s)，彻底离散化启动流量
-        if worker_id > 1 or total_workers > 1:
-            stagger_delay = round(((worker_id - 1) * 0.4) + random.uniform(0.6, 3.8), 2)
-            worker_logs.append(f"⏳ [Worker #{worker_id} 异步错峰就位] 注入随机离散延时 {stagger_delay}s (彻底消除同秒并发特征)...")
-            await asyncio.sleep(stagger_delay)
+        # 🚀 异步拟人到岗错峰机制 (Natural Human Arrival Stagger):
+        # 模拟真实 N 名员工陆续走进办公室、登录 TG 的自然过程，绝不同秒集中爆发
+        if arrival_delay > 0.5:
+            worker_logs.append(f"⏳ [Worker #{worker_id}/{total_workers} 拟人到岗中] 员工类型:【{employee_type}】| 预计就位延时: {arrival_delay:.1f}s (自然错峰打散，支持任意 N 账号矩阵弹性并发)...")
+            await asyncio.sleep(arrival_delay)
 
-        worker_logs.append(f"👤 [Worker #{worker_id} 员工性格装载] 拟人打字手速倍率: {worker_typing_factor}x | 目标基准间隔: {delay_min:.0f}~{delay_max:.0f}s (15条约12~15分钟)")
+        worker_logs.append(f"👤 [Worker #{worker_id}/{total_workers} 员工正式开工] 性格: {employee_type} | 专属手速: {worker_typing_factor}x | 连发 {rest_threshold} 条微休 | 单条间隔: 45~65s")
 
         for idx, target in enumerate(target_subset):
             parsed_greeting = parse_spintax(message_template)
@@ -510,8 +530,8 @@ async def run_worker(
                     parsed_third,
                     enable_third_message,
                     wait_for_reply,
-                    3.5,
-                    6.5,
+                    3.0,
+                    5.0,
                     worker_logs
                 )
                 success_count += 1
@@ -530,20 +550,20 @@ async def run_worker(
                 fail_count += 1
                 worker_logs.append(f"❌ [Worker #{worker_id}] 目标 {target}: {str(e)}")
 
-            # Worker 内部拟人安全抖动延时 (基准 45~60 秒，叠加员工专属手速系数与高斯抖动)
+            # Worker 内部拟人安全抖动延时 (45~65 秒随机打散，每发 15 条微休 3~5 分钟)
             if idx < len(target_subset) - 1:
-                # 检查是否触发单号微批次小憩 (每 5~7 封小憩 45~90 秒，模拟喝水/看消息)
-                if (idx + 1) % random.randint(5, 7) == 0:
-                    micro_rest = random.uniform(45.0, 90.0)
-                    worker_logs.append(f"☕ [Worker #{worker_id} 拟人小憩] 已连续接待 {idx+1} 位客户，员工稍作休息 {micro_rest:.1f}s (模拟真人喝水/查看资料)...")
+                # ☕ 单波内部微批次控制：发 15 条自动微休 3~5 分钟 (180~300秒)
+                if (idx + 1) % 15 == 0:
+                    micro_rest = random.uniform(180.0, 300.0)
+                    micro_min = micro_rest / 60.0
+                    worker_logs.append(f"☕ [Worker #{worker_id} 触发微批次保护] 已连续发送 15 位客户，自动微休 {micro_min:.1f} 分钟 ({micro_rest:.0f}s) 防封 (模拟真人小憩)...")
                     await asyncio.sleep(micro_rest)
                 else:
-                    # 正常单条真人打字思考间隔 (45 ~ 60s * typing_factor)
-                    base_jitter = random.uniform(delay_min, delay_max)
-                    # 动态高斯扰动 (±4秒)
-                    gaussian_offset = random.gauss(0, 2.0)
-                    real_delay = max(35.0, (base_jitter + gaussian_offset) * worker_typing_factor)
-                    worker_logs.append(f"⏳ [Worker #{worker_id} 拟人节奏] 准备下一个客户，间隔等待 {real_delay:.1f}s...")
+                    # 正常单条 45~65 秒高斯拟人随机打散延迟 (叠加员工手速系数与打字中模拟)
+                    base_jitter = random.uniform(45.0, 65.0)
+                    gaussian_offset = random.gauss(0, 2.5)
+                    real_delay = max(40.0, (base_jitter + gaussian_offset) * worker_typing_factor)
+                    worker_logs.append(f"⏳ [Worker #{worker_id} 拟人打散] 准备下一个客户，间隔等待 {real_delay:.1f}s...")
                     await asyncio.sleep(real_delay)
 
     except Exception as ge:

@@ -9,7 +9,7 @@ export const DEFAULT_THREE_WAVES = [
     brazilTime: '12:30',
     indonesiaTime: '22:30',
     enabled: true,
-    targetCountSuggestion: '2,000 ~ 3,000 条',
+    targetCountSuggestion: '2,000 ~ 2,500 条 (执行约25分钟 ➔ 强制深度休眠 5 小时)',
     fileName: '',
     dataText: '',
     targetList: [],
@@ -23,7 +23,7 @@ export const DEFAULT_THREE_WAVES = [
     brazilTime: '18:30',
     indonesiaTime: '04:30',
     enabled: true,
-    targetCountSuggestion: '3,000 ~ 5,000 条 (爆款首选)',
+    targetCountSuggestion: '2,200 ~ 2,600 条 (执行约22分钟 ➔ 强制休眠 90 分钟供接待进粉)',
     fileName: '',
     dataText: '',
     targetList: [],
@@ -37,7 +37,7 @@ export const DEFAULT_THREE_WAVES = [
     brazilTime: '20:30',
     indonesiaTime: '06:30',
     enabled: true,
-    targetCountSuggestion: '2,000 ~ 4,000 条',
+    targetCountSuggestion: '2,000 ~ 2,400 条 (执行约20分钟 ➔ 全天收工进入 15 小时夜间休眠)',
     fileName: '',
     dataText: '',
     targetList: [],
@@ -49,7 +49,7 @@ export const DEFAULT_THREE_WAVES = [
 
 export const DEFAULT_SCHEDULED_CONFIG: ScheduledCampaignConfig = {
   id: 'sched-brazil-evening-1900',
-  name: '🇧🇷 巴西黄金晚高峰自动群发 (印尼次日 05:00)',
+  name: '🇧🇷 巴西 3 波错峰极品防封排期 (全天 6,000~8,000 动态浮动)',
   enabled: true,
   recurring: true,
   targetTimeBrazil: '18:30',
@@ -57,7 +57,7 @@ export const DEFAULT_SCHEDULED_CONFIG: ScheduledCampaignConfig = {
   primaryTimezone: 'brazil',
   autoStopBrazilTime: '22:00',
   enableAutoStop: true,
-  speedMode: 'turbo',
+  speedMode: 'conservative',
   strategyMode: 'two_stage',
   batchLimitCount: 0,
   status: 'waiting',
@@ -234,7 +234,7 @@ export function convertIndonesiaToBrazil(indonesiaTimeStr: string): {
 /**
  * Calculate next execution timestamp and remaining countdown
  */
-export function calculateNextRunInfo(targetTimeBrazil: string = '19:00'): {
+export function calculateNextRunInfo(targetTimeBrazil: string = '19:00', lastExecutedAt?: string): {
   nextRunTimestampMs: number;
   remainingMs: number;
   remainingFormatted: string;
@@ -244,8 +244,8 @@ export function calculateNextRunInfo(targetTimeBrazil: string = '19:00'): {
 } {
   const now = new Date();
   
-  // Get current Brazil date and time
-  const brtStr = new Intl.DateTimeFormat('en-US', {
+  // Get current Brazil date and time in 24h format
+  const brtFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
@@ -254,25 +254,40 @@ export function calculateNextRunInfo(targetTimeBrazil: string = '19:00'): {
     minute: '2-digit',
     second: '2-digit',
     hour12: false
-  }).format(now);
+  });
+  const brtParts = brtFormatter.formatToParts(now);
+  const curH = parseInt(brtParts.find(p => p.type === 'hour')?.value || '0', 10);
+  const curM = parseInt(brtParts.find(p => p.type === 'minute')?.value || '0', 10);
+  const curS = parseInt(brtParts.find(p => p.type === 'second')?.value || '0', 10);
 
   const parts = (targetTimeBrazil || '19:00').split(':');
   const targetH = parseInt(parts[0], 10) || 19;
   const targetM = parseInt(parts[1], 10) || 0;
 
-  // Approximate ms offset from UTC for America/Sao_Paulo (UTC-3 = -3 * 3600 * 1000)
-  // Let's create an exact Date in Sao Paulo timezone
-  const [datePart, timePart] = brtStr.split(', ');
-  const [mm, dd, yyyy] = datePart.split('/');
-  const [curH, curM, curS] = timePart.split(':').map(n => parseInt(n, 10));
-
   const curBrtSecondsOfDay = curH * 3600 + curM * 60 + curS;
   const targetBrtSecondsOfDay = targetH * 3600 + targetM * 60;
 
   let secondsDiff = targetBrtSecondsOfDay - curBrtSecondsOfDay;
+  
+  // Check if it's currently due within the target minute (e.g. 0 to 59 seconds after trigger time)
+  const isWithinTriggerMinute = curH === targetH && curM === targetM;
+  
+  // Check if already executed in the last 2 minutes
+  let recentlyExecuted = false;
+  if (lastExecutedAt) {
+    try {
+      const lastMs = new Date(lastExecutedAt).getTime();
+      if (Date.now() - lastMs < 120000) {
+        recentlyExecuted = true;
+      }
+    } catch (e) {}
+  }
+
+  const isDueNow = isWithinTriggerMinute && !recentlyExecuted;
+
   let isNextDay = false;
-  if (secondsDiff <= 0) {
-    // Already passed today in Brazil, next run is tomorrow in Brazil (+24h)
+  if (secondsDiff < 0) {
+    // Target time already passed earlier today in Brazil
     secondsDiff += 24 * 3600;
     isNextDay = true;
   }
@@ -285,16 +300,56 @@ export function calculateNextRunInfo(targetTimeBrazil: string = '19:00'): {
   const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
 
   const remainingFormatted = `${String(hours).padStart(2, '0')}小时 ${String(minutes).padStart(2, '0')}分 ${String(seconds).padStart(2, '0')}秒`;
-
   const idInfo = convertBrazilToIndonesia(targetTimeBrazil);
 
   return {
     nextRunTimestampMs,
     remainingMs,
     remainingFormatted,
-    isDueNow: remainingMs < 2000,
+    isDueNow,
     brazilTargetStr: `${isNextDay ? '明日 ' : '今日 '}${targetTimeBrazil} BRT`,
     indonesiaTargetStr: `${idInfo.label} WIB`
+  };
+}
+
+/**
+ * Find the closest upcoming wave among all active waves
+ */
+export function findNextUpcomingWave(waves: any[] = []): {
+  nextWave: any | null;
+  dueWave: any | null;
+  countdown: ReturnType<typeof calculateNextRunInfo>;
+  activeWavesCount: number;
+} {
+  const activeWaves = waves.filter(w => w.enabled);
+  if (activeWaves.length === 0) {
+    const defaultInfo = calculateNextRunInfo('18:30');
+    return { nextWave: null, dueWave: null, countdown: defaultInfo, activeWavesCount: 0 };
+  }
+
+  let minRemainingMs = Infinity;
+  let nextWave: any = activeWaves[0];
+  let dueWave: any = null;
+  let bestCountdown = calculateNextRunInfo(activeWaves[0].brazilTime || '18:30');
+
+  for (const wave of activeWaves) {
+    const waveTime = wave.brazilTime || '18:30';
+    const info = calculateNextRunInfo(waveTime, wave.lastExecutedAt);
+    if (info.isDueNow && !dueWave) {
+      dueWave = wave;
+    }
+    if (info.remainingMs < minRemainingMs) {
+      minRemainingMs = info.remainingMs;
+      nextWave = wave;
+      bestCountdown = info;
+    }
+  }
+
+  return {
+    nextWave,
+    dueWave,
+    countdown: bestCountdown,
+    activeWavesCount: activeWaves.length
   };
 }
 
@@ -344,7 +399,30 @@ export function loadScheduledCampaignConfig(): ScheduledCampaignConfig {
 }
 
 /**
- * Save scheduled campaign config to localStorage
+ * Fetch scheduled campaign config directly from server disk (sessions/scheduled_campaign_config.json)
+ */
+export async function fetchScheduledCampaignConfigFromServer(): Promise<ScheduledCampaignConfig | null> {
+  try {
+    const res = await fetch('/api/scheduled/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.config) {
+        const waves = data.config.waves && Array.isArray(data.config.waves) && data.config.waves.length > 0
+          ? data.config.waves
+          : DEFAULT_THREE_WAVES;
+        const completeConfig = { ...DEFAULT_SCHEDULED_CONFIG, ...data.config, waves };
+        localStorage.setItem(SCHEDULED_STORAGE_KEY, JSON.stringify(completeConfig));
+        return completeConfig;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch scheduled config from server API:', e);
+  }
+  return null;
+}
+
+/**
+ * Save scheduled campaign config to localStorage and sync to server
  */
 export function saveScheduledCampaignConfig(config: ScheduledCampaignConfig): void {
   try {
@@ -352,4 +430,15 @@ export function saveScheduledCampaignConfig(config: ScheduledCampaignConfig): vo
   } catch (e) {
     console.error('Failed to save scheduled campaign config:', e);
   }
+
+  // Auto push to server-side daemon so VPS backend scheduled execution is 100% in sync
+  try {
+    fetch('/api/scheduled/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    }).catch(() => {});
+  } catch (e) {}
 }
+
+

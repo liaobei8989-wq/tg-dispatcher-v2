@@ -317,6 +317,43 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Reset daily sent counts for all accounts
+  const handleResetDailySent = () => {
+    if (window.confirm('确定要一键清零今日【已群发】计数吗？\n（不会删除账号与发件历史，仅将今日发信量重置为 0）')) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      localStorage.setItem('tg_last_sent_date', todayStr);
+      setAccounts(prev => {
+        const updated = prev.map(a => ({ ...a, sentToday: 0 }));
+        safeSaveAccountsToLocalStorage(updated);
+        saveAccountsToStorage(updated);
+        return updated;
+      });
+    }
+  };
+
+  // Check and automatically roll over / reset sentToday at 00:00 (daily rollover)
+  React.useEffect(() => {
+    const checkDailyMidnightReset = () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const lastRecordedDate = localStorage.getItem('tg_last_sent_date');
+      if (lastRecordedDate && lastRecordedDate !== todayStr) {
+        // A new calendar day has started -> Auto-reset today counter
+        localStorage.setItem('tg_last_sent_date', todayStr);
+        setAccounts(prev => {
+          const updated = prev.map(a => ({ ...a, sentToday: 0 }));
+          safeSaveAccountsToLocalStorage(updated);
+          saveAccountsToStorage(updated);
+          return updated;
+        });
+      } else if (!lastRecordedDate) {
+        localStorage.setItem('tg_last_sent_date', todayStr);
+      }
+    };
+    checkDailyMidnightReset();
+    const interval = setInterval(checkDailyMidnightReset, 60000); // check every minute
+    return () => clearInterval(interval);
+  }, []);
+
   // Reset all platform data to complete 0 state
   const handleResetAllToZero = async () => {
     try {
@@ -344,6 +381,7 @@ export default function App() {
         totalFollowupToday={totalFollowupToday}
         isCampaignRunning={isCampaignRunning}
         onResetAllToZero={handleResetAllToZero}
+        onResetDailySent={handleResetDailySent}
       />
 
       <main className="w-full max-w-[1840px] mx-auto px-2 sm:px-4 lg:px-6 py-5">

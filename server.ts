@@ -1247,17 +1247,36 @@ async function startServer() {
     return res.json({ success: true, message: "✅ 服务端定时调度配置已保存", config: newConfig });
   });
 
+  // 🛑 API: 紧急停止所有群发任务与底层 Python 进程
+  app.post("/api/campaign/stop", (req, res) => {
+    try {
+      try {
+        execSync(`pkill -f tg_dispatcher.py || true`);
+        execSync(`pkill -f tg_two_stage_sender.py || true`);
+      } catch (_) {}
+      isWaveExecuting = false;
+      console.log(`🛑 [Emergency Stop] 操作员手动触发了紧急停跑，已清理所有后台发信子进程`);
+      return res.json({ success: true, message: "所有群发进程已强制终结并终止" });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // API: 手动立即触发某个波次
   app.post("/api/scheduled/trigger-wave", async (req, res) => {
     const { waveId, targets, message, second_message, third_message } = req.body || {};
     console.log(`[Scheduled Wave Trigger] ⏰ 正在触发波次任务: ${waveId || '自定义波次'}`);
     
+    if (!targets || targets.length === 0) {
+      return res.status(400).json({ success: false, error: "待发目标名单为空，已取消执行，未向任何号码发信。" });
+    }
+
     // 执行真实多号并发群发
     const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
     if (fs.existsSync(pyDispatcherPath)) {
       try {
         const payloadStr = JSON.stringify({
-          targets: targets && targets.length > 0 ? targets : ["5511977228001", "5521981129002"],
+          targets: targets,
           message: message || "{Olá|Oi}! {Tudo bem|Como vai}? 👍",
           second_message: second_message || "🔥 500% Bônus exclusivo: {URL}",
           third_message: third_message || "🍀 Boa sorte amigo! 🎰💵",
@@ -1279,6 +1298,95 @@ async function startServer() {
     }
     return res.json({ success: true, message: "波次模拟已触发" });
   });
+
+  // ⏰ 24h 全天候服务端跨时区定时波次自动触发常驻守护线程
+  let isWaveExecuting = false;
+  setInterval(async () => {
+    try {
+      const schedConfig = loadServerSchedConfig();
+      if (!schedConfig.enabled || isWaveExecuting) return;
+
+      // 获取当前巴西圣保罗时间 (America/Sao_Paulo)
+      const now = new Date();
+      const brtTimeStr = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(now);
+      const brtDateStr = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now).replace(/\//g, '-');
+
+      const [curH, curM] = brtTimeStr.split(':').map(n => parseInt(n, 10));
+      const curMinutes = curH * 60 + curM;
+
+      const records = loadSchedExecRecords();
+      const waves = schedConfig.waves || DEFAULT_SERVER_WAVES;
+
+      for (const wave of waves) {
+        if (!wave.enabled) continue;
+        const [targetH, targetM] = (wave.brazilTime || '18:30').split(':').map((n: string) => parseInt(n, 10));
+        const targetMinutes = targetH * 60 + targetM;
+
+        // 判定条件：当前时间在设定时间的 0 ~ 15 分钟窗口内，且今天尚未执行
+        const recordKey = `wave_${wave.id}_${brtDateStr}`;
+        const isWithinTriggerWindow = curMinutes >= targetMinutes && curMinutes <= targetMinutes + 15;
+
+        if (isWithinTriggerWindow && !records[recordKey]) {
+          console.log(`⏰ [Server Wave Scheduler] 🎯 巴西时间 ${brtTimeStr} 触发波次任务: ${wave.name} (${wave.brazilTime})`);
+          
+          let waveTargets = wave.targetList && wave.targetList.length > 0 ? wave.targetList : [];
+          if (waveTargets.length === 0 && wave.dataText) {
+            waveTargets = wave.dataText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+          }
+          
+          // 如果数据包被删除或为空，绝不注入假数据，直接标记并跳过
+          if (waveTargets.length === 0) {
+            console.log(`⚠️ [Server Wave Scheduler] 波次 ${wave.name} 待发数据包为空 (已被清空或未导入)，安全跳过本次执行。`);
+            saveSchedExecRecord(recordKey);
+            continue;
+          }
+
+          isWaveExecuting = true;
+          saveSchedExecRecord(recordKey);
+
+          // 准备派发目标与文案
+          const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
+          if (fs.existsSync(pyDispatcherPath)) {
+            try {
+              const payloadStr = JSON.stringify({
+                targets: waveTargets,
+                message: "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
+                second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: https://brazilgo888.com/vip",
+                third_message: "🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥",
+                wait_for_reply: true,
+                delay_min: 45.0,
+                delay_max: 65.0
+              });
+
+              execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
+                timeout: 300000,
+                encoding: 'utf-8'
+              });
+              console.log(`✅ [Server Wave Scheduler] 波次 ${wave.name} 派发完成！`);
+            } catch (err: any) {
+              console.error(`❌ [Server Wave Scheduler] 波次执行失败:`, err.message);
+            }
+          }
+          isWaveExecuting = false;
+          break;
+        }
+      }
+    } catch (e: any) {
+      console.warn("⚠️ [Server Wave Scheduler Error]:", e.message);
+      isWaveExecuting = false;
+    }
+  }, 10000);
+
 
   // API: Real Telegram MTProto Profile & Avatar Synchronizer Endpoint
   app.post("/api/telegram/update-profiles-mtproto", async (req, res) => {
@@ -2513,93 +2621,6 @@ Return ONLY a JSON array with this schema:
       isScannerRunning = false;
     }
   }, 60000);
-
-  // =========================================================================
-  // ⏰ 24h 全天候服务端跨时区定时波次自动触发守护线程 (Server Wave Campaign Daemon)
-  // =========================================================================
-  let isWaveExecuting = false;
-  setInterval(async () => {
-    try {
-      const schedConfig = loadServerSchedConfig();
-      if (!schedConfig.enabled || isWaveExecuting) return;
-
-      // 获取当前巴西圣保罗时间 (America/Sao_Paulo)
-      const now = new Date();
-      const brtTimeStr = new Intl.DateTimeFormat('zh-CN', {
-        timeZone: 'America/Sao_Paulo',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      }).format(now);
-      const brtDateStr = new Intl.DateTimeFormat('zh-CN', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(now).replace(/\//g, '-');
-
-      const [curH, curM] = brtTimeStr.split(':').map(n => parseInt(n, 10));
-      const curMinutes = curH * 60 + curM;
-
-      const records = loadSchedExecRecords();
-      const waves = schedConfig.waves || DEFAULT_SERVER_WAVES;
-
-      for (const wave of waves) {
-        if (!wave.enabled) continue;
-        const [targetH, targetM] = (wave.brazilTime || '18:30').split(':').map((n: string) => parseInt(n, 10));
-        const targetMinutes = targetH * 60 + targetM;
-
-        // 判定条件：当前时间在设定时间的 0 ~ 15 分钟窗口内，且今天尚未执行
-        const recordKey = `wave_${wave.id}_${brtDateStr}`;
-        const isWithinTriggerWindow = curMinutes >= targetMinutes && curMinutes <= targetMinutes + 15;
-
-        if (isWithinTriggerWindow && !records[recordKey]) {
-          console.log(`⏰ [Server Wave Scheduler] 🎯 巴西时间 ${brtTimeStr} 触发波次任务: ${wave.name} (${wave.brazilTime})`);
-          isWaveExecuting = true;
-          saveSchedExecRecord(recordKey);
-
-          // 准备派发目标与文案
-          const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
-          if (fs.existsSync(pyDispatcherPath)) {
-            try {
-              // 自动从缓存或默认数据池中获取波次目标
-              let waveTargets = wave.targetList && wave.targetList.length > 0
-                ? wave.targetList
-                : [];
-              
-              if (waveTargets.length === 0) {
-                // 如果该波次未单独载入号码，自动获取系统健康号码或生成高转化目标
-                waveTargets = ["5511977228001", "5521981129002", "5531976543210", "5541999998888"];
-              }
-
-              const payloadStr = JSON.stringify({
-                targets: waveTargets,
-                message: wave.dataText || "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
-                second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: {URL}",
-                third_message: "🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥",
-                wait_for_reply: true,
-                delay_min: 45.0,
-                delay_max: 60.0
-              });
-
-              execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
-                timeout: 300000,
-                encoding: 'utf-8'
-              });
-              console.log(`✅ [Server Wave Scheduler] 波次 ${wave.name} 派发完成！`);
-            } catch (err: any) {
-              console.error(`❌ [Server Wave Scheduler] 波次执行失败:`, err.message);
-            }
-          }
-          isWaveExecuting = false;
-          break;
-        }
-      }
-    } catch (e: any) {
-      console.warn("⚠️ [Server Wave Scheduler Error]:", e.message);
-      isWaveExecuting = false;
-    }
-  }, 10000); // 每 10 秒常驻巡检一次
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
