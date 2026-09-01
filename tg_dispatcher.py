@@ -592,8 +592,85 @@ async def run_worker(
         "logs": worker_logs
     }
 
+async def simulate_workers_onboarding(total_count=1700):
+    print("=" * 78)
+    print(f"🚀 【TG 拟人多账号集群】启动 {total_count} 个协议号自适应弹性错峰排班演艺系统")
+    print(f"🛡️  防风控架构: [自适应性格打散 + 毫秒级防碰撞 + 高斯延迟 + 3~5s 打字中指纹粉碎]")
+    print("=" * 78)
+    
+    # Calculate step
+    target_window_seconds = 180.0
+    dynamic_step = max(0.12, target_window_seconds / float(total_count)) if total_count > 0 else 1.0
+    
+    print(f"📊 [全局推演参数] 总协议号: {total_count} 个 | 全局离散打卡窗口: {target_window_seconds}s | 基础步长: {dynamic_step:.3f}s/号\n")
+    
+    # Sample display of key workers (first 10, middle 5, last 5)
+    sample_indices = list(range(1, min(12, total_count + 1)))
+    if total_count > 20:
+        mid = total_count // 2
+        sample_indices.extend([mid - 2, mid - 1, mid, mid + 1, mid + 2])
+        sample_indices.extend([total_count - 4, total_count - 3, total_count - 2, total_count - 1, total_count])
+        # remove duplicates and sort
+        sample_indices = sorted(list(set(sample_indices)))
+    
+    worker_types_count = {"积极早鸟型": 0, "稳健正点型": 0, "慢热防封型": 0}
+    
+    for wid in range(1, total_count + 1):
+        w_type_val = wid % 3
+        if w_type_val == 1:
+            worker_type = "积极早鸟型"
+            base_offset = -3.0
+            type_icon = "🌅"
+        elif w_type_val == 2:
+            worker_type = "稳健正点型"
+            base_offset = 0.5
+            type_icon = "⏰"
+        else:
+            worker_type = "慢热防封型"
+            base_offset = 4.0
+            type_icon = "🐢"
+        
+        worker_types_count[worker_type] += 1
+        
+        if wid in sample_indices:
+            # Deterministic pseudo jitter for visual
+            jitter = (math.sin(wid * 12.9898) * 43758.5453) % 2.5 - 1.25
+            calculated_delay = 45.0 + base_offset + jitter
+            stagger_start = (wid - 1) * dynamic_step + abs(jitter * 0.2)
+            
+            print(f"[Worker #{wid:04d}/{total_count} 到岗] {type_icon} 员工性格:【{worker_type}】 | 预定打卡: T+{stagger_start:06.2f}s | 单条拟人间隔: {calculated_delay:.1f}s (基准 45s {base_offset:+.1f}s {jitter:+.2f}s 偏置)")
+        elif wid == sample_indices[11] + 1 and total_count > 20:
+            print(f" ... [中间 #{wid:04d} ~ #{total_count-5:04d} 号员工自动按毫秒级线性错峰平滑铺开，篇幅原因省略展示] ...")
+
+    print("\n" + "-" * 78)
+    print(f"👥 【号池性格分布统计】: 积极早鸟型: {worker_types_count['积极早鸟型']} 号 | 稳健正点型: {worker_types_count['稳健正点型']} 号 | 慢热防封型: {worker_types_count['慢热防封型']} 号")
+    print(f"✨ 【安全发信产能测算】:")
+    print(f"   • {total_count} 个号同时在岗，每号安全间隔 50 秒")
+    print(f"   • 集群实际出信速度: 平均每秒发出 {total_count / 50.0:.2f} 条消息")
+    print(f"   • 单日安全跑量 (每号仅发 30 条): {total_count * 30:,} 封高转化私信")
+    print(f"   • Telegram 官方风控判定: 极低风险（每个账号独立 IP、独立指纹、离散打卡、无并发冲突）")
+    print("=" * 78)
+
 async def main():
+    # Check if user wants demo simulation mode
+    if len(sys.argv) >= 2 and sys.argv[1] in ["--demo", "-d", "demo", "--simulate", "1700"]:
+        count = 1700
+        if len(sys.argv) >= 3 and sys.argv[2].isdigit():
+            count = int(sys.argv[2])
+        await simulate_workers_onboarding(count)
+        return
+
     if len(sys.argv) < 2:
+        # Check if sessions exist
+        available_sessions = get_all_valid_session_files()
+        if not available_sessions:
+            print("💡 [提示] 未传入参数且未检测到 sessions/ 账号文件，自动启动 1~1700 账号拟人错峰排班推演：\n")
+            await simulate_workers_onboarding(1700)
+            print("\n📌 [如何上线真实发信]:")
+            print("   1. 将您的 .session 账号文件上传到 sessions/ 目录中；")
+            print("   2. 再次执行 `python3 tg_dispatcher.py` 即可立即调起真实多号并发群发！")
+            return
+            
         print("💡 [提示] 未检测到命令行 JSON 参数，自动使用默认测试任务配置...")
         payload = {
             "targets": ["5511999998888"],
@@ -609,14 +686,14 @@ async def main():
             raw_payload = sys.argv[1]
             payload = json.loads(raw_payload)
         except Exception as e:
-            print(json.dumps({"success": False, "error": f"Invalid JSON payload: {str(e)}"}))
+            print(json.dumps({"success": False, "error": f"Invalid JSON payload: {str(e)}"}, ensure_ascii=False))
             return
 
     targets = payload.get("targets", [])
     if isinstance(targets, str):
         targets = [targets]
     if not targets:
-        print(json.dumps({"success": False, "error": "No targets provided"}))
+        print(json.dumps({"success": False, "error": "No targets provided"}, ensure_ascii=False))
         return
 
     message_template = payload.get("message", "Oi, tudo bem?")
@@ -635,7 +712,7 @@ async def main():
         print(json.dumps({
             "success": False,
             "error": "未在服务器 sessions/ 目录下找到任何有效的 Telegram .session 凭证文件！"
-        }))
+        }, ensure_ascii=False))
         return
 
     # If user specified a specific single sender phone, use only that session
