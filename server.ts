@@ -438,8 +438,9 @@ async function startServer() {
 
       const getAccountMeta = (rawPhone: string, idx: number, userJsonMeta?: any) => {
         const isTop5 = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone) || idx < 5;
-        const targetDefaultDay = isTop5 ? 7 : 3;
-        const createdAt = userJsonMeta?.createdAt || '2026-08-31';
+        const todayStr = new Date().toISOString().split('T')[0];
+        const targetDefaultDay = isTop5 ? 7 : 1;
+        const createdAt = userJsonMeta?.createdAt || todayStr;
         const baseDay = userJsonMeta?.baseWarmupDay !== undefined 
           ? userJsonMeta.baseWarmupDay 
           : (userJsonMeta?.warmupDay && userJsonMeta.warmupDay !== 16 && userJsonMeta.warmupDay !== 8 ? userJsonMeta.warmupDay : targetDefaultDay);
@@ -743,6 +744,54 @@ async function startServer() {
         message: `🏷️ 成功将 ${updatedCount} 个账号凭证配置划入【${targetTag}】并永久存入磁盘`,
         updatedCount,
         groupTag: targetTag
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // API: Update Account Warmup Days in companion JSON files
+  app.post("/api/telegram/update-warmup-days", (req, res) => {
+    try {
+      const { phone, phones, warmupDay, todayStr, all } = req.body || {};
+      const targetDay = Math.max(1, parseInt(warmupDay !== undefined ? warmupDay : '1', 10));
+      const targetDate = todayStr || new Date().toISOString().split('T')[0];
+      const rootDir = process.cwd();
+      const searchDirs = [sessionsDir, rootDir];
+
+      const targetPhones: string[] = [];
+      if (phones && Array.isArray(phones)) {
+        phones.forEach(p => targetPhones.push(String(p).replace(/\D/g, '')));
+      } else if (phone) {
+        targetPhones.push(String(phone).replace(/\D/g, ''));
+      }
+
+      let updatedCount = 0;
+      searchDirs.forEach(dir => {
+        if (!fs.existsSync(dir)) return;
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.includes('package') && !f.includes('tsconfig') && !f.includes('metadata') && f !== 'account_proxies.json' && f !== 'scheduled_campaign_config.json' && f !== 'scheduled_execution_records.json');
+        files.forEach(f => {
+          const digits = f.replace('.json', '').replace(/\D/g, '');
+          if (!all && targetPhones.length > 0 && !targetPhones.includes(digits)) return;
+          try {
+            const filePath = path.join(dir, f);
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const data = JSON.parse(raw);
+            data.warmupDay = targetDay;
+            data.baseWarmupDay = targetDay;
+            data.createdAt = targetDate;
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+            updatedCount++;
+          } catch (e) {}
+        });
+      });
+
+      return res.json({
+        success: true,
+        message: `📅 成功将 ${updatedCount} 个账号养号天数统一设为第 ${targetDay} 天`,
+        updatedCount,
+        warmupDay: targetDay,
+        createdAt: targetDate
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });

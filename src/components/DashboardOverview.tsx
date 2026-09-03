@@ -231,10 +231,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   const cleanPhone = (acc.phone || '').replace(/\D/g, '');
                   const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
                   const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
-                  const defaultDay = isTop5 ? 7 : 3;
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const defaultDay = isTop5 ? 7 : 1;
                   const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8 || !acc.warmupDay;
                   const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
-                  const effectiveCreatedAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+                  const effectiveCreatedAt = hasCorruptDay ? todayStr : (acc.createdAt || todayStr);
                   const currentDay = hasCorruptDay ? defaultDay : calculateWarmupDays(effectiveCreatedAt, baseDay);
                   const effectiveProxy = getDedicatedProxyForPhone(acc.phone) || acc.proxy || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
                   return (

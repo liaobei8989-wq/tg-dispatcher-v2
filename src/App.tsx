@@ -46,10 +46,11 @@ export default function App() {
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
               const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-              const defaultDay = isTop5 ? 7 : 3;
+              const todayStr = new Date().toISOString().split('T')[0];
+              const defaultDay = isTop5 ? 7 : 1;
               const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8 || !acc.warmupDay;
               const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
-              const createdAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+              const createdAt = hasCorruptDay ? todayStr : (acc.createdAt || todayStr);
               const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
               const isMature = validWarmupDay >= 4;
               const rawGroup = acc.groupTag;
@@ -108,10 +109,11 @@ export default function App() {
                 const existing = prevMap.get(cp);
                 const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
-                const defaultDay = isTop5 ? 7 : 3;
+                const todayStr = new Date().toISOString().split('T')[0];
+                const defaultDay = isTop5 ? 7 : 1;
                 const hasCorruptDay = (existing?.warmupDay === 16 || existing?.warmupDay === 8 || acc.warmupDay === 16 || acc.warmupDay === 8);
-                const baseDay = hasCorruptDay ? defaultDay : (existing?.baseWarmupDay || acc.baseWarmupDay || defaultDay);
-                const createdAt = hasCorruptDay ? '2026-08-31' : (existing?.createdAt || acc.createdAt || '2026-08-31');
+                const baseDay = hasCorruptDay ? defaultDay : (existing?.baseWarmupDay !== undefined ? existing.baseWarmupDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (existing?.warmupDay || acc.warmupDay || defaultDay)));
+                const createdAt = hasCorruptDay ? todayStr : (existing?.createdAt || acc.createdAt || todayStr);
                 const dynamicWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
                 const isMature = dynamicWarmupDay >= 4;
                 const rawGroup = existing?.groupTag || acc.groupTag;
@@ -154,10 +156,11 @@ export default function App() {
           if (!uniqueMap.has(cleanPhone)) {
             const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
             const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-            const defaultDay = isTop5 ? 7 : 3;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const defaultDay = isTop5 ? 7 : 1;
             const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;
-            const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay || acc.warmupDay || defaultDay);
-            const createdAt = hasCorruptDay ? '2026-08-31' : (acc.createdAt || '2026-08-31');
+            const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (acc.warmupDay || defaultDay));
+            const createdAt = hasCorruptDay ? todayStr : (acc.createdAt || todayStr);
             const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
             const isMature = validWarmupDay >= 4;
             const rawGroup = acc.groupTag;

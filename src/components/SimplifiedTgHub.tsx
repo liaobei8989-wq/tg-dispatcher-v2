@@ -589,7 +589,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           ...a,
           warmupDay: targetDay,
           baseWarmupDay: targetDay,
-          createdAt: todayStr
+          createdAt: todayStr,
+          status: (targetDay >= 4 ? 'active' : 'warming') as any,
+          dailyLimit: targetDay === 1 ? 15 : targetDay === 2 ? 30 : targetDay === 3 ? 60 : 120
         };
       }
       return a;
@@ -602,6 +604,86 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       ...prev,
       `[🔥 养号天数更新] 账号 [${acc.phone || acc.alias}] 已更新为: 第 ${targetDay} 天 (明天将自动滚动至第 ${targetDay + 1} 天)`
     ]);
+
+    // Push to server companion json files
+    if (targetClean) {
+      fetch('/api/telegram/update-warmup-days', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: targetClean, warmupDay: targetDay, todayStr })
+      }).catch(() => {});
+    }
+  };
+
+  const handleBatchUpdateWarmupDays = (fixedDay?: number, scope: 'selected' | 'all' = 'selected') => {
+    const isSelectedScope = scope === 'selected' && selectedAccountIds.length > 0;
+    const targetAccounts = isSelectedScope
+      ? distinctTgAccounts.filter(a => selectedAccountIds.includes(a.id))
+      : distinctTgAccounts;
+
+    if (targetAccounts.length === 0) {
+      alert('当前没有可操作的账号！');
+      return;
+    }
+
+    let targetDay = fixedDay;
+    if (targetDay === undefined) {
+      const scopeDesc = isSelectedScope ? `勾选的 ${targetAccounts.length} 个账号` : `当前全部 ${targetAccounts.length} 个账号`;
+      const input = prompt(
+        `【批量修改养号天数】\n\n🎯 操作对象: ${scopeDesc}\n\n请输入目标养号天数（例如刚购买的新号填 1，成熟老号填 7）：`,
+        "1"
+      );
+      if (input === null) return;
+      const parsed = parseInt(input.trim(), 10);
+      if (isNaN(parsed) || parsed < 1) {
+        alert('请输入有效的正整数天数（例如 1、2、7 等）！');
+        return;
+      }
+      targetDay = parsed;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetPhones = targetAccounts.map(a => (a.phone || a.id).replace(/\D/g, '')).filter(Boolean);
+    const targetCleanSet = new Set(targetPhones);
+
+    const updated = accounts.map(a => {
+      const aClean = (a.phone || a.id).replace(/\D/g, '');
+      if (targetCleanSet.has(aClean) || (isSelectedScope && selectedAccountIds.includes(a.id))) {
+        return {
+          ...a,
+          warmupDay: targetDay!,
+          baseWarmupDay: targetDay!,
+          createdAt: todayStr,
+          status: (targetDay! >= 4 ? 'active' : 'warming') as any,
+          dailyLimit: targetDay! === 1 ? 15 : targetDay! === 2 ? 30 : targetDay! === 3 ? 60 : 120
+        };
+      }
+      return a;
+    });
+
+    setAccounts(updated);
+    safeSaveAccountsToLocalStorage(updated);
+    saveAccountsToStorage(updated);
+
+    const scopeName = isSelectedScope ? `已勾选的 ${targetAccounts.length} 个账号` : `全部 ${targetAccounts.length} 个协议号`;
+    setSimpleLogs(prev => [
+      ...prev,
+      `[📅 批量天数修改] 成功将 ${scopeName} 统一修改为: 第 ${targetDay} 天 (明天将自动滚动至第 ${targetDay! + 1} 天)，并已持久化存入服务器！`
+    ]);
+
+    // Push to server companion json files
+    fetch('/api/telegram/update-warmup-days', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phones: targetPhones,
+        warmupDay: targetDay,
+        todayStr,
+        all: !isSelectedScope
+      })
+    }).catch(() => {});
+
+    alert(`✅ 批量修改成功！已将 ${scopeName} 统一设置为【第 ${targetDay} 天】！`);
   };
 
   const handleBatchAssignGroup = (groupTag: string) => {
@@ -3617,6 +3699,15 @@ if __name__ == "__main__":
                 🌐 批量导入代理IP池 (1:1自动绑定与顺延)
               </button>
               <button
+                type="button"
+                onClick={() => handleBatchUpdateWarmupDays(undefined, selectedAccountIds.length > 0 ? 'selected' : 'all')}
+                className="px-3 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-600/80 text-amber-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="一键批量修改所有账号或所选账号的养号天数（如刚购买的新号一键设为第1天）"
+              >
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                📅 批量改天数 {selectedAccountIds.length > 0 ? `(${selectedAccountIds.length}个)` : ''}
+              </button>
+              <button
                 onClick={() => {
                   const input = prompt("【批量统一设置 2FA 二级密码】\n\n请输入新的 2FA 二级密码（将一键应用到当前所有账号，例如: 548508）：", "548508");
                   if (input !== null && input.trim()) {
@@ -3855,6 +3946,22 @@ if __name__ == "__main__":
                 >
                   🛡️ 仅选养号B组
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleBatchUpdateWarmupDays(1, selectedAccountIds.length > 0 ? 'selected' : 'all')}
+                  className="px-2 py-0.5 rounded bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1"
+                  title={selectedAccountIds.length > 0 ? `一键将选中的 ${selectedAccountIds.length} 个刚买新号全部设为第1天` : `一键将当前全部 ${distinctTgAccounts.length} 个刚买新号设为第1天`}
+                >
+                  🌱 一键全设第1天 (新买)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBatchUpdateWarmupDays(undefined, selectedAccountIds.length > 0 ? 'selected' : 'all')}
+                  className="px-2 py-0.5 rounded bg-amber-950/40 hover:bg-amber-950/70 border border-amber-500/50 text-amber-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1"
+                  title={selectedAccountIds.length > 0 ? `批量自定义所选 ${selectedAccountIds.length} 个账号天数` : `批量自定义全部 ${distinctTgAccounts.length} 个账号天数`}
+                >
+                  📅 批量自定义天数
+                </button>
                 {selectedAccountIds.length > 0 && (
                   <button
                     type="button"
@@ -3945,6 +4052,24 @@ if __name__ == "__main__":
                     className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-500/60 text-amber-200 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                   >
                     <Lock className="w-3.5 h-3.5 text-amber-400" /> 设2FA
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleBatchUpdateWarmupDays(undefined, 'selected')}
+                    className="px-2.5 py-1 bg-amber-900/90 hover:bg-amber-800 border border-amber-500/80 text-amber-100 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm"
+                    title={`批量修改选中的 ${selectedAccountIds.length} 个账号的养号天数`}
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-amber-300" /> 批量改天数 ({selectedAccountIds.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleBatchUpdateWarmupDays(1, 'selected')}
+                    className="px-2 py-1 bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/80 text-emerald-200 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm"
+                    title={`一键将选中的 ${selectedAccountIds.length} 个刚买新号设为第1天`}
+                  >
+                    🌱 设第1天 (刚买)
                   </button>
 
                   <button
