@@ -84,7 +84,7 @@ export function loadAllTelegramAccounts(): TelegramAccountConfig[] {
   const rootDir = process.cwd();
   const accounts: TelegramAccountConfig[] = [];
   const addedPhones = new Set<string>();
-  const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+  const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
   const systemIgnore = new Set(['package.json', 'package-lock.json', 'tsconfig.json', 'metadata.json', 'bun.lock', 'stats.json']);
 
   const scanDir = (dir: string) => {

@@ -125,7 +125,6 @@ const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
   '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
   '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
   '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-  '5586995118207': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
   '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
 };
 
@@ -620,44 +619,59 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     }).catch(() => {});
   };
 
-  // 一键彻底删除单个账号及服务器磁盘关联的 .session / .json 凭证
+  // 一键彻底删除单个账号及服务器磁盘关联的 .session / .json 凭证 (0秒即时响应)
   const handleDeleteAccountAndFiles = async (acc: AccountSession) => {
     const cleanPhone = (acc.phone || acc.id).replace(/\D/g, '');
     const displayName = acc.alias || acc.phone || cleanPhone;
-    if (!confirm(`确定要彻底删除账号 [${displayName}] 吗？\n\n此操作将同时从服务器磁盘物理销毁关联的 .session / .json 协议文件，不可恢复。`)) return;
+    if (!confirm(`确定要删除账号 [${displayName}] 吗？\n\n确认后将立即从列表移除并在后台彻底销毁磁盘凭证。`)) return;
 
+    // 1. 立即执行乐观更新 (0毫秒响应，卡片瞬间消失)
+    setAccounts(prev => {
+      const filtered = prev.filter(a => {
+        const cp = (a.phone || a.id).replace(/\D/g, '');
+        return a.id !== acc.id && cp !== cleanPhone;
+      });
+      safeSaveAccountsToLocalStorage(filtered);
+      saveAccountsToStorage(filtered);
+      return filtered;
+    });
+
+    setUploadedSessions(prev => prev.filter(f => !f.fileName.includes(cleanPhone)));
+    removeFileFromLocalBackup(`${cleanPhone}.session`);
+    removeFileFromLocalBackup(`${cleanPhone}.json`);
+
+    // 2. 存入持久化黑名单，防止任何缓存恢复
     try {
-      const res = await fetch('/api/telegram/delete-account-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          fileNames: [`${cleanPhone}.session`, `${cleanPhone}.json`, `${cleanPhone}.session-journal`]
-        })
-      });
-      const data = await res.json();
+      const rawBlacklist = localStorage.getItem('tg_deleted_files_blacklist_v2');
+      const bl: string[] = rawBlacklist ? JSON.parse(rawBlacklist) : [];
+      if (!bl.includes(cleanPhone)) bl.push(cleanPhone);
+      if (!bl.includes(`${cleanPhone}.session`)) bl.push(`${cleanPhone}.session`);
+      if (!bl.includes(`${cleanPhone}.json`)) bl.push(`${cleanPhone}.json`);
+      localStorage.setItem('tg_deleted_files_blacklist_v2', JSON.stringify(bl));
+    } catch (_) {}
 
-      setAccounts(prev => {
-        const filtered = prev.filter(a => {
-          const cp = (a.phone || a.id).replace(/\D/g, '');
-          return a.id !== acc.id && cp !== cleanPhone;
-        });
-        safeSaveAccountsToLocalStorage(filtered);
-        saveAccountsToStorage(filtered);
-        return filtered;
-      });
+    setSimpleLogs(prev => [
+      ...prev,
+      `🗑️ [秒级删除] 账号 ${displayName} 已立即移除！正在后台销毁磁盘凭证...`
+    ]);
 
-      removeFileFromLocalBackup(`${cleanPhone}.session`);
-      removeFileFromLocalBackup(`${cleanPhone}.json`);
-
+    // 3. 后台静默销毁服务器物理文件
+    fetch('/api/telegram/delete-account-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: cleanPhone,
+        fileNames: [`${cleanPhone}.session`, `${cleanPhone}.json`, `${cleanPhone}.session-journal`]
+      })
+    }).then(r => r.json()).then(data => {
       setSimpleLogs(prev => [
         ...prev,
-        `🗑️ [账号与凭证彻底销毁] 已成功移除账号 ${displayName}，并从服务器磁盘擦除 ${data.count || 0} 个协议凭证文件！`
+        `✅ [磁盘擦除完成] 账号 ${displayName} 关联凭证已彻底销毁 (${data.count || 0} 个文件)`
       ]);
-      fetchUploadedSessions();
-    } catch (err: any) {
-      alert(`删除出错: ${err.message}`);
-    }
+      fetchUploadedSessions(false);
+    }).catch(err => {
+      console.error('Delete files error:', err);
+    });
   };
 
   // 批量清理封号及限制死号并物理销毁其磁盘文件
@@ -1196,18 +1210,17 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           const accData = await accRes.json();
           if (accData.success && Array.isArray(accData.accounts) && accData.accounts.length > 0) {
             setAccounts(prev => {
-              const uniqueMap = new Map<string, AccountSession>();
+              const prevMap = new Map<string, AccountSession>();
               prev.forEach(a => {
                 const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
-                if (cp) uniqueMap.set(cp, a);
+                if (cp) prevMap.set(cp, a);
               });
-              accData.accounts.forEach((acc: AccountSession) => {
+              const list: AccountSession[] = accData.accounts.map((acc: AccountSession) => {
                 const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-                if (cp && !uniqueMap.has(cp)) {
-                  uniqueMap.set(cp, acc);
-                }
+                const existing = cp ? prevMap.get(cp) : undefined;
+                return existing ? { ...acc, ...existing } : acc;
               });
-              return Array.from(uniqueMap.values());
+              return list;
             });
           }
         } catch (e) {}
@@ -1284,7 +1297,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   useEffect(() => {
     fetchUploadedSessions();
-    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     // Auto-clean any invalid accounts and ensure disk accounts are synced
     setAccounts(prev => {
       const map = new Map<string, AccountSession>();
@@ -1304,7 +1317,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   // Compute distinct TG accounts
   const distinctTgAccounts = React.useMemo(() => {
     const map = new Map<string, AccountSession>();
-    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     accounts.filter(a => a.platform === 'telegram').forEach(acc => {
       const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
       if (clean && clean.length >= 8 && !obsoletePhones.has(clean)) {

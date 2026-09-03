@@ -35,7 +35,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const uniqueMap = new Map<string, AccountSession>();
-          const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+          const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
           const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
 
           parsed.forEach((acc: AccountSession, idx: number) => {
@@ -83,7 +83,7 @@ export default function App() {
 
   // Async hydration from server API and IndexedDB on initial load
   React.useEffect(() => {
-    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
 
     // 1. Fetch live accounts from server sessions directory
@@ -92,22 +92,20 @@ export default function App() {
       .then(data => {
         if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
           setAccounts(prev => {
-            const uniqueMap = new Map<string, AccountSession>();
-            // Keep existing modified details if valid & not obsolete
+            const prevMap = new Map<string, AccountSession>();
             prev.forEach((a, idx) => {
               const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
               if (cp && !obsoletePhones.has(cp)) {
-                uniqueMap.set(cp, {
-                  ...a,
-                  proxy: BRAZIL_DEDICATED_PROXIES_MAP[cp] || a.proxy || getDedicatedProxyForPhone(cp, idx)
-                });
+                prevMap.set(cp, a);
               }
             });
-            // Merge server accounts
+
+            const uniqueMap = new Map<string, AccountSession>();
+            // Strictly base on server-side disk accounts
             data.accounts.forEach((acc: AccountSession, idx: number) => {
               const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
               if (cp && !obsoletePhones.has(cp)) {
-                const existing = uniqueMap.get(cp);
+                const existing = prevMap.get(cp);
                 const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
                 const defaultDay = isTop5 ? 7 : 3;

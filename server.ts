@@ -113,6 +113,10 @@ async function startServer() {
           lower === "metadata.json" ||
           lower === "stats.json" ||
           lower === "account_proxies.json" ||
+          lower === "inbox_conversations.json" ||
+          lower === "replied_chats.json" ||
+          lower === "scheduled_campaign_config.json" ||
+          lower === "scheduled_execution_records.json" ||
           lower === "bun.lock" ||
           lower === "vite.config.ts" ||
           lower === "server.ts"
@@ -152,7 +156,7 @@ async function startServer() {
 
       // Scan sessions/ folder for legitimate session and json files
       filesInSessions
-        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f))
+        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /^\+?\d{6,16}/.test(f))
         .forEach(f => {
         const fullPath = path.join(sessionsDir, f);
         try {
@@ -269,15 +273,15 @@ async function startServer() {
       const rootDirFiles = fs.readdirSync(rootDir);
       const allFiles = Array.from(new Set([...files, ...rootDirFiles]));
 
-      const jsonFiles = allFiles.filter(f => f.endsWith(".json") && !f.startsWith("auto_") && f !== "package.json" && f !== "package-lock.json" && f !== "tsconfig.json" && f !== "metadata.json" && f !== "stats.json" && !f.toLowerCase().includes("2fa"));
-      const sessionFiles = allFiles.filter(f => f.endsWith(".session"));
+      const jsonFiles = allFiles.filter(f => f.endsWith(".json") && !f.startsWith("auto_") && f !== "package.json" && f !== "package-lock.json" && f !== "tsconfig.json" && f !== "metadata.json" && f !== "stats.json" && !f.toLowerCase().includes("2fa") && /^\+?\d{6,16}/.test(f));
+      const sessionFiles = allFiles.filter(f => f.endsWith(".session") && !f.toLowerCase().includes("2fa") && /^\+?\d{6,16}/.test(f));
       
       const accountsList: any[] = [];
       const processedPhones = new Set<string>();
       const defaultNames = ['Ana Silva', 'Beatriz Santos', 'Camila Oliveira', 'Fernanda Lima', 'Juliana Costa'];
       const defaultAvatars = ['', '', '', ''];
 
-      const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
+      const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
 
       // Fallback 60-proxy pool
       const DEFAULT_60_PROXIES = [
@@ -939,6 +943,19 @@ async function startServer() {
             execSync(`python3 "${pyScript}" delete "${cleanPhone}"`, { timeout: 3000 });
           }
         } catch (_) {}
+
+        // Clean up from account_proxies.json
+        try {
+          const proxyJsonPath = path.join(rootDir, "account_proxies.json");
+          if (fs.existsSync(proxyJsonPath)) {
+            const raw = fs.readFileSync(proxyJsonPath, "utf8");
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && parsed[cleanPhone]) {
+              delete parsed[cleanPhone];
+              fs.writeFileSync(proxyJsonPath, JSON.stringify(parsed, null, 2), "utf8");
+            }
+          }
+        } catch (_) {}
       });
 
       const uniqueDeleted = Array.from(new Set(deletedFiles));
@@ -1001,7 +1018,6 @@ async function startServer() {
       '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
       '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
       '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-      '5586995118207': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
       '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
     };
     const proxyJsonPath = path.join(rootDir, "account_proxies.json");
