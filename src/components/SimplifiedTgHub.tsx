@@ -52,7 +52,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { AccountSession, CampaignLog, ScheduledCampaignConfig } from '../types';
-import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays } from '../data/mockAccounts';
+import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, BRAZIL_PROXIES_POOL } from '../data/mockAccounts';
 import { PRESET_TEMPLATES } from '../data/presetTemplates';
 import { PRESET_BLESSING_TEMPLATES, DEFAULT_BLESSING_SPINTAX, BlessingTemplate } from '../data/blessingTemplates';
 import { parseSpintax } from '../utils/spintax';
@@ -1406,7 +1406,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     if (extractedPhones.size > 0) {
       const newPhones = Array.from(extractedPhones);
       
-      // 读取已保存的代理池
+      // 读取已保存的代理池，若为空则默认使用完整的 60 个巴西原生住宅代理池
       let customProxyPool: string[] = [];
       try {
         const rawPool = localStorage.getItem('tg_custom_proxy_pool');
@@ -1418,24 +1418,38 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         }
       } catch (_) {}
 
+      if (customProxyPool.length === 0) {
+        customProxyPool = BRAZIL_PROXIES_POOL;
+      }
+
       setAccounts(prev => {
         const existingPhones = new Set(prev.map(a => a.phone?.replace(/\D/g, '')));
-        const existingUsedProxies = new Set(prev.map(a => a.proxy).filter(Boolean));
+        const existingUsedIps = new Set(
+          prev.map(a => a.proxy ? a.proxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0] : '').filter(Boolean)
+        );
         const updated = [...prev];
 
-        // 找出代理池中尚未被任何账号占用的空闲代理 IP
-        const availablePoolProxies = customProxyPool.filter(p => !existingUsedProxies.has(p));
+        // 找出代理池中尚未被任何账号占用的空闲独享代理 IP (根据真实 IP 地址比对排重)
+        const availablePoolProxies = customProxyPool.filter(p => {
+          const ip = p.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+          return !existingUsedIps.has(ip);
+        });
+
+        let availableCursor = 0;
 
         newPhones.forEach((phone, idx) => {
           if (!existingPhones.has(phone)) {
-            // 优先从自定义代理池中顺延取未使用的 IP (例如第 11~20 个)
+            // 严格分配未被使用的空闲代理 IP
             let assignedProxy = '';
-            if (availablePoolProxies.length > idx) {
-              assignedProxy = availablePoolProxies[idx];
-            } else if (customProxyPool.length > 0) {
-              assignedProxy = customProxyPool[(prev.length + idx) % customProxyPool.length];
+            if (availableCursor < availablePoolProxies.length) {
+              assignedProxy = availablePoolProxies[availableCursor];
+              const assignedIp = assignedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+              existingUsedIps.add(assignedIp);
+              availableCursor++;
+            } else if (BRAZIL_DEDICATED_PROXIES_MAP[phone]) {
+              assignedProxy = BRAZIL_DEDICATED_PROXIES_MAP[phone];
             } else {
-              assignedProxy = BRAZIL_DEDICATED_PROXIES_MAP[phone] || brazilProxies[idx % brazilProxies.length];
+              assignedProxy = customProxyPool[idx % customProxyPool.length];
             }
 
             const aliasName = `TG-BR-${phone.slice(-4)} (${BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length]})`;
@@ -1469,8 +1483,33 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       });
       setSimpleLogs(prev => [
         ...prev,
-        `🎉 [新账号自动入库] 已自动识别 ${newPhones.length} 个巴西 TG 协议号 (+${newPhones.join(', +')}) 并顺延从代理池绑定独享代理 IP！`
+        `🎉 [新账号自动入库] 已自动识别 ${newPhones.length} 个巴西 TG 协议号 (+${newPhones.join(', +')}) 并严格分配独享未占用的空闲代理 IP！`
       ]);
+
+      // 自动将最新分配的新账号-IP映射保存至服务端 account_proxies.json
+      setTimeout(() => {
+        try {
+          fetch('/api/telegram/get-accounts')
+            .then(r => r.json())
+            .then(accData => {
+              if (accData.success && Array.isArray(accData.accounts)) {
+                const currentMappings: Record<string, string> = {};
+                accData.accounts.forEach((a: any) => {
+                  const clean = a.phone ? a.phone.replace(/\D/g, '') : '';
+                  if (clean && a.proxy) {
+                    currentMappings[clean] = a.proxy.replace(/^(socks5:\/\/|http:\/\/)/i, '');
+                  }
+                });
+                fetch('/api/proxies/save-mapping', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ mappings: currentMappings })
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        } catch (_) {}
+      }, 500);
     }
 
     setSessionUploadStatus(`🎉 成功挂载并永久保存 ${successCount} 个协议文件 (包含 .session / .json)！已绑定 5 组巴西独享 IP！`);

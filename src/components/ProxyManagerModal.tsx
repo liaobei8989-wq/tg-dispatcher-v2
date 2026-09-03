@@ -280,6 +280,16 @@ export const ProxyManagerModal: React.FC<ProxyManagerModalProps> = ({
       });
       const data = await res.json();
       if (data.success) {
+        // Sync proxy pool format to localStorage
+        try {
+          const poolLines = proxies.map(p => {
+            return p.username && p.password
+              ? `${p.ip}:${p.port}:${p.username}:${p.password}`
+              : `${p.ip}:${p.port}`;
+          });
+          localStorage.setItem('tg_custom_proxy_pool', JSON.stringify(poolLines));
+        } catch (_) {}
+
         setSaveSuccessMsg('✅ 已成功将全部 60 个独立 IP 与 1号1IP 专属映射持久化写入 VPS (account_proxies.json & proxies.txt)！');
         setTimeout(() => setSaveSuccessMsg(''), 4500);
       }

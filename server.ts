@@ -320,6 +320,33 @@ async function startServer() {
       const BRAZIL_DEDICATED_PROXIES = accountProxiesMap;
       const BRAZIL_BACKUP_PROXIES = proxiesPool.length > 0 ? proxiesPool : Object.values(accountProxiesMap);
 
+      // Track used proxies across all accounts to guarantee 100% 1-Account-1-IP isolation
+      const usedProxyIps = new Set<string>();
+      Object.values(BRAZIL_DEDICATED_PROXIES).forEach(pStr => {
+        const ip = String(pStr).split(':')[0];
+        if (ip) usedProxyIps.add(ip);
+      });
+
+      // Helper to allocate an unused IP from the 60-proxy pool
+      const allocateUnusedProxy = (phone: string): string => {
+        if (BRAZIL_DEDICATED_PROXIES[phone]) {
+          return BRAZIL_DEDICATED_PROXIES[phone];
+        }
+        for (const candidate of BRAZIL_BACKUP_PROXIES) {
+          const cIp = candidate.split(':')[0];
+          if (!usedProxyIps.has(cIp)) {
+            usedProxyIps.add(cIp);
+            BRAZIL_DEDICATED_PROXIES[phone] = candidate;
+            // Write back to account_proxies.json
+            try {
+              fs.writeFileSync(proxyJsonPath, JSON.stringify(BRAZIL_DEDICATED_PROXIES, null, 2), "utf8");
+            } catch (e) {}
+            return candidate;
+          }
+        }
+        return BRAZIL_BACKUP_PROXIES[0] || '';
+      };
+
       const formatPhoneDisplay = (rawPhone: string) => {
         if (rawPhone.startsWith('55') && rawPhone.length === 13) {
           return `+${rawPhone.slice(0, 2)} ${rawPhone.slice(2, 4)} ${rawPhone.slice(4, 9)}-${rawPhone.slice(9)}`;
@@ -381,12 +408,10 @@ async function startServer() {
           const formattedPhone = formatPhoneDisplay(rawPhone);
           const matchedSessionFile = sessionFiles.find(sf => sf.includes(rawPhone)) || `${rawPhone}.session`;
           
-          let proxyStr = BRAZIL_DEDICATED_PROXIES[rawPhone] || '';
-          if (!proxyStr && data.proxy && data.proxy.addr) {
+          let proxyStr = allocateUnusedProxy(rawPhone);
+          if (data.proxy && data.proxy.addr) {
+            // If explicit proxy is declared in json and not yet in pool
             proxyStr = `${data.proxy.addr}:${data.proxy.port}:${data.proxy.username || ''}:${data.proxy.password || ''}`;
-          }
-          if (!proxyStr) {
-            proxyStr = BRAZIL_BACKUP_PROXIES[idx % BRAZIL_BACKUP_PROXIES.length];
           }
 
           const meta = getAccountMeta(rawPhone, idx, data);
@@ -429,7 +454,7 @@ async function startServer() {
 
         processedPhones.add(rawPhone);
         const formattedPhone = formatPhoneDisplay(rawPhone);
-        const assignedProxy = BRAZIL_DEDICATED_PROXIES[rawPhone] || BRAZIL_BACKUP_PROXIES[(accountsList.length + idx) % BRAZIL_BACKUP_PROXIES.length];
+        const assignedProxy = allocateUnusedProxy(rawPhone);
 
         // Auto-create companion json if missing
         const companionJsonPath = path.join(sessionsDir, `${rawPhone}.json`);
