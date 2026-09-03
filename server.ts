@@ -2943,8 +2943,36 @@ Return ONLY a JSON array with this schema:
       }
     });
   } else {
-    app.use(express.static(distPath));
+    // Ensure index.html is never aggressively cached so new deployment hashes take effect immediately
+    app.use((req, res, next) => {
+      if (req.path === '/' || req.path === '/index.html' || !req.path.includes('.')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      next();
+    });
+
+    app.use(express.static(distPath, {
+      maxAge: '1h',
+      setHeaders: (res, pathStr) => {
+        if (pathStr.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      }
+    }));
+
+    // Prevent missing /assets/ or JS/CSS requests from falling through to index.html (which causes MIME type white screens)
+    app.get(['/assets/*', '/*.js', '/*.css'], (req, res) => {
+      res.status(404).send('Asset not found');
+    });
+
     app.get("*", (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
