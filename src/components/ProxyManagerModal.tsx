@@ -297,66 +297,82 @@ export const ProxyManagerModal: React.FC<ProxyManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-6 text-slate-100 my-8">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
+        {/* Fixed Header */}
+        <div className="shrink-0 p-4 sm:p-5 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 shrink-0">
               <Globe2 className="w-6 h-6" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold flex items-center gap-2 text-slate-100">
-                1 账号 1 独立 IP 隔离与设备指纹防护池
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30">
-                  共 {proxies.length} 个独立原生出口 (10 已绑 + 50 待用)
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold flex items-center gap-2 text-slate-100 flex-wrap">
+                <span>1 账号 1 独立 IP 隔离与设备指纹防护池</span>
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30 whitespace-nowrap">
+                  共 {proxies.length} 个独立出口 ({assignedCount} 已绑 + {availableCount} 待用)
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">
-                每个 Telegram 号独占 1 个巴西原生住宅住宅 IP 与手机设备指纹，完全物理隔离，防封防关联
+              <p className="text-xs text-slate-400 truncate">
+                每个 Telegram 号独占 1 个巴西原生住宅 IP 与手机设备指纹，完全物理隔离，防封防关联
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Status notice */}
-        {saveSuccessMsg && (
-          <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs font-semibold text-emerald-300 flex items-center gap-2 animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{saveSuccessMsg}</span>
-          </div>
-        )}
-
-        {/* Stats Badges */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">代理池总量 (VPS)</div>
-              <div className="text-lg font-mono font-bold text-slate-100">{proxies.length} <span className="text-xs text-slate-400 font-normal">个 IP</span></div>
-            </div>
-            <Server className="w-6 h-6 text-cyan-400/60" />
-          </div>
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">当前已绑定账号</div>
-              <div className="text-lg font-mono font-bold text-cyan-400">{assignedCount} <span className="text-xs text-slate-400 font-normal">个 (10老号)</span></div>
-            </div>
-            <Shield className="w-6 h-6 text-emerald-400/60" />
-          </div>
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] text-slate-400 font-medium">空闲待分配 (新购号就绪)</div>
-              <div className="text-lg font-mono font-bold text-emerald-400">{availableCount} <span className="text-xs text-slate-400 font-normal">个 (新买50号即插即用)</span></div>
-            </div>
-            <Zap className="w-6 h-6 text-amber-400/60" />
+          
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                handleSaveToDisk();
+                onClose();
+              }}
+              className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow-md shadow-cyan-500/20 flex items-center gap-1.5 transition-all"
+              title="立即保存并关闭"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>保存配置</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
+
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* Status notice */}
+          {saveSuccessMsg && (
+            <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs font-semibold text-emerald-300 flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{saveSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* Stats Badges */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-slate-400 font-medium">代理池总量 (VPS)</div>
+                <div className="text-lg font-mono font-bold text-slate-100">{proxies.length} <span className="text-xs text-slate-400 font-normal">个 IP</span></div>
+              </div>
+              <Server className="w-6 h-6 text-cyan-400/60" />
+            </div>
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-slate-400 font-medium">当前已绑定账号</div>
+                <div className="text-lg font-mono font-bold text-cyan-400">{assignedCount} <span className="text-xs text-slate-400 font-normal">个 (10老号)</span></div>
+              </div>
+              <Shield className="w-6 h-6 text-emerald-400/60" />
+            </div>
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-slate-400 font-medium">空闲待分配 (新购号就绪)</div>
+                <div className="text-lg font-mono font-bold text-emerald-400">{availableCount} <span className="text-xs text-slate-400 font-normal">个 (新买50号即插即用)</span></div>
+              </div>
+              <Zap className="w-6 h-6 text-amber-400/60" />
+            </div>
+          </div>
 
         {/* Device Fingerprint Simulator Bar */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
@@ -546,12 +562,13 @@ export const ProxyManagerModal: React.FC<ProxyManagerModalProps> = ({
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800 pt-4 gap-3">
+        {/* Fixed Sticky Footer */}
+        <div className="shrink-0 p-4 border-t border-slate-800 bg-slate-900/95 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 z-10">
           <div className="text-xs text-slate-400 flex items-center gap-1.5">
             <Shield className="w-4 h-4 text-cyan-400 shrink-0" />
-            <span>1号1IP 物理隔离已就绪：50个新购买账号登录时将自动按序分配专属 IP</span>
+            <span>1号1IP 物理隔离：共 {proxies.length} 个 IP (已绑 {assignedCount} / 待分配 {availableCount})</span>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
@@ -567,9 +584,10 @@ export const ProxyManagerModal: React.FC<ProxyManagerModalProps> = ({
                 handleSaveToDisk();
                 onClose();
               }}
-              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition-all"
+              className="px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/25 flex items-center gap-2 transition-all cursor-pointer"
             >
-              保存并完成配置
+              <Check className="w-4 h-4" />
+              <span>保存并完成配置</span>
             </button>
           </div>
         </div>
