@@ -17,6 +17,7 @@ import {
   Smile,
   Check,
   Copy,
+  Trash2,
   DollarSign
 } from 'lucide-react';
 import { InboxConversation, InboxMessage, AccountSession } from '../types';
@@ -43,12 +44,31 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts }) => {
       const data = await res.json();
       if (data.success && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
-        if (!selectedConvId && data.conversations.length > 0) {
-          setSelectedConvId(data.conversations[0].id);
+        if (data.conversations.length > 0) {
+          if (!selectedConvId || !data.conversations.some((c: any) => c.id === selectedConvId)) {
+            setSelectedConvId(data.conversations[0].id);
+          }
+        } else {
+          setSelectedConvId('');
         }
       }
     } catch (e) {
       console.error('Failed to fetch inbox conversations:', e);
+    }
+  };
+
+  const handleClearInbox = async () => {
+    if (!window.confirm('确认清空收件箱中的全部会话？清空后将完全重置，仅记录后续真实进线的客户。')) return;
+    try {
+      const res = await fetch('/api/inbox/conversations', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setConversations([]);
+        setSelectedConvId('');
+        setAiSuggestions([]);
+      }
+    } catch (e) {
+      console.error('Failed to clear inbox:', e);
     }
   };
 
@@ -176,13 +196,21 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={fetchConversations}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>刷新会话流</span>
+          </button>
+          <button
+            onClick={handleClearInbox}
+            className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="清空模拟数据，仅展示真实客户消息"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>一键清空收件箱</span>
           </button>
         </div>
       </div>
@@ -405,8 +433,20 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts }) => {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">
-              请在左侧选择需要查看的会话
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shadow-lg shadow-teal-500/10">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <div className="space-y-1.5 max-w-sm">
+                <h4 className="text-sm font-bold text-slate-100">收件箱当前为纯净真实状态</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  模拟演示数据已完全清空。当真实客户在 Telegram App 上回复任何矩阵账号时，系统底层 MTProto 协议将实时同步并自动呈现在此处，支持一键葡萄牙语接待与 PIX 转化。
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-teal-400 font-mono bg-teal-950/40 px-3 py-1.5 rounded-lg border border-teal-800/40">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>真机进线监听就绪</span>
+              </div>
             </div>
           )}
         </div>

@@ -1675,6 +1675,51 @@ async function startServer() {
     }
   });
 
+  // API: TG 账号三级真实健康与官方 @SpamBot 深度体检引擎 (支持一键真机穿透)
+  app.post("/api/telegram/real-health-check", async (req, res) => {
+    try {
+      let pyScript = path.join(process.cwd(), "tg_health_detector.py");
+      if (!fs.existsSync(pyScript)) {
+        pyScript = path.join(process.cwd(), "public", "tg_health_detector.py");
+      }
+      if (!fs.existsSync(pyScript)) {
+        return res.status(404).json({ success: false, error: "未找到 tg_health_detector.py 脚本" });
+      }
+
+      const child = spawn("python3", [pyScript, "--json"], {
+        cwd: process.cwd(),
+        env: { ...process.env, PYTHONUNBUFFERED: "1" }
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        try {
+          const trimmed = stdout.trim();
+          const jsonStart = trimmed.lastIndexOf("{");
+          if (jsonStart !== -1) {
+            const parsed = JSON.parse(trimmed.slice(jsonStart));
+            return res.json(parsed);
+          }
+          return res.json({ success: false, raw: stdout, error: stderr });
+        } catch (err: any) {
+          return res.status(500).json({ success: false, error: err.message, raw: stdout });
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // API: TG 目标数据智能清洗与注册/隐私权限预检引擎
   app.post("/api/telegram/scrub-targets", async (req, res) => {
     const { targets } = req.body || {};
@@ -2131,125 +2176,27 @@ Requirements:
     if (fs.existsSync(inboxStoragePath)) {
       try {
         const raw = fs.readFileSync(inboxStoragePath, 'utf8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
-
-    // Default authentic Brazilian conversations seed
-    return [
-      {
-        id: 'conv-5511998765432',
-        customerPhone: '+55 11 99876-5432',
-        customerUsername: '@marcos_silva_sp',
-        customerName: 'Marcos Silva',
-        customerAvatar: '',
-        assignedAccountPhone: '+55 86 99442-8117',
-        assignedAccountAlias: 'TG-BR-5586994428117 (Ana)',
-        stage: 'replied_interested',
-        tag: 'asking_bonus',
-        unreadCount: 1,
-        lastMessageText: 'Oi! Como funciona o bônus de R$ 50? Precisa depositar quanto?',
-        lastMessageTime: '10分钟前',
-        notes: '询问首次充值赠金与最低充值门槛，意向高',
-        messages: [
-          {
-            id: 'm1',
-            conversationId: 'conv-5511998765432',
-            senderType: 'system_phase1',
-            senderName: 'Ana (系统破冰)',
-            text: 'Oi, tudo bem? Vi você lá no grupo de apostas, passei pra te dar um salve! 😊',
-            timestamp: '09:15',
-            status: 'read'
-          },
-          {
-            id: 'm2',
-            conversationId: 'conv-5511998765432',
-            senderType: 'customer',
-            senderName: 'Marcos Silva',
-            text: 'Opa, tudo bem! Vocês têm bônus de cadastro?',
-            timestamp: '09:20',
-            status: 'read'
-          },
-          {
-            id: 'm3',
-            conversationId: 'conv-5511998765432',
-            senderType: 'system_phase2',
-            senderName: 'Ana (福利推送)',
-            text: '🔥 Temos sim! Bônus de 200% no primeiro depósito via PIX em brazilgo888.com. Cai na hora na conta!',
-            timestamp: '09:21',
-            status: 'delivered'
-          },
-          {
-            id: 'm4',
-            conversationId: 'conv-5511998765432',
-            senderType: 'customer',
-            senderName: 'Marcos Silva',
-            text: 'Oi! Como funciona o bônus de R$ 50? Precisa depositar quanto?',
-            timestamp: '09:35',
-            status: 'unread'
-          }
-        ]
-      },
-      {
-        id: 'conv-5521988223344',
-        customerPhone: '+55 21 98822-3344',
-        customerUsername: '@rodrigo_rio77',
-        customerName: 'Rodrigo Costa',
-        customerAvatar: '',
-        assignedAccountPhone: '+55 86 99458-1839',
-        assignedAccountAlias: 'TG-BR-5586994581839 (Beatriz)',
-        stage: 'converting',
-        tag: 'asking_pix',
-        unreadCount: 0,
-        lastMessageText: 'Show de bola, já fiz o PIX de R$ 100 aqui pelo link!',
-        lastMessageTime: '25分钟前',
-        notes: '已完成 PIX 充值，准备进入 VIP 频道',
-        messages: [
-          {
-            id: 'm10',
-            conversationId: 'conv-5521988223344',
-            senderType: 'system_phase1',
-            senderName: 'Beatriz (系统破冰)',
-            text: 'Olá! Tudo bem? Vi seu comentário no canal VIP! 👋',
-            timestamp: '08:40',
-            status: 'read'
-          },
-          {
-            id: 'm11',
-            conversationId: 'conv-5521988223344',
-            senderType: 'customer',
-            senderName: 'Rodrigo Costa',
-            text: 'E aí Beatriz, o saque cai no PIX no mesmo minuto?',
-            timestamp: '08:45',
-            status: 'read'
-          },
-          {
-            id: 'm12',
-            conversationId: 'conv-5521988223344',
-            senderType: 'operator',
-            senderName: '客服运营',
-            text: 'Sim Rodrigo! O saque é 100% automático via PIX 24h por dia pelo link oficial brazilgo888.com 🚀',
-            timestamp: '08:48',
-            status: 'read'
-          },
-          {
-            id: 'm13',
-            conversationId: 'conv-5521988223344',
-            senderType: 'customer',
-            senderName: 'Rodrigo Costa',
-            text: 'Show de bola, já fiz o PIX de R$ 100 aqui pelo link!',
-            timestamp: '09:10',
-            status: 'read'
-          }
-        ]
-      }
-    ];
+    // Clean production state: return empty list to only capture authentic Telegram customer messages
+    return [];
   }
 
   app.get("/api/inbox/conversations", (req, res) => {
     try {
       const list = getInboxConversations();
       res.json({ success: true, conversations: list, count: list.length });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete("/api/inbox/conversations", (req, res) => {
+    try {
+      fs.writeFileSync(inboxStoragePath, JSON.stringify([]), 'utf8');
+      res.json({ success: true, message: "聚合收件箱已完全清空，仅接收真实客户进线" });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
