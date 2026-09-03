@@ -279,6 +279,70 @@ async function startServer() {
 
       const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
 
+      // Fallback 60-proxy pool
+      const DEFAULT_60_PROXIES = [
+        '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+        '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+        '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+        '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+        '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+        '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+        '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+        '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+        '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+        '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+        '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
+        '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.28.25:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.30.11:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.30.68:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.28.245:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.19:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.28.13:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.30.220:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.184:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.31.110:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.31.46:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.28.23:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.119:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.36:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.253:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.243:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.28.236:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.29.245:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.0.215:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.1.54:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.3.105:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.0.59:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.0.160:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.2.172:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.2.252:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.1.147:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.2.23:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.0.181:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.3.145:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.2.3:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.2.173:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.3.93:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.3.13:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.0.224:12323:14abdb1a0db2e:cb8f30f1a9',
+        '144.225.1.200:12323:14abdb1a0db2e:cb8f30f1a9'
+      ];
+
       // Load 60-proxy pool from proxies.txt or fallback
       let proxiesPool: string[] = [];
       const proxiesTxtPath = path.join(rootDir, "proxies.txt");
@@ -288,63 +352,56 @@ async function startServer() {
           proxiesPool = rawTxt.split("\n").map(l => l.trim()).filter(Boolean);
         } catch (e) {}
       }
+      if (proxiesPool.length === 0) {
+        proxiesPool = DEFAULT_60_PROXIES;
+      }
 
-      // Load 1:1 dedicated proxies dynamically from account_proxies.json or fallback list
-      let accountProxiesMap: Record<string, string> = {
-        '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-        '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-        '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-        '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-        '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-        '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-        '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-        '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-        '5586995118207': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-        '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
-      };
+      // Load 1:1 dedicated proxies dynamically from account_proxies.json or initial map
+      let accountProxiesMap: Record<string, string> = {};
       const proxyJsonPath = path.join(rootDir, "account_proxies.json");
       if (fs.existsSync(proxyJsonPath)) {
         try {
           const raw = fs.readFileSync(proxyJsonPath, "utf8");
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === "object") {
-            accountProxiesMap = { ...accountProxiesMap, ...parsed };
+            accountProxiesMap = { ...parsed };
           }
         } catch (e) {}
       }
 
-      if (proxiesPool.length === 0) {
-        proxiesPool = Object.values(accountProxiesMap);
-      }
-
-      const BRAZIL_DEDICATED_PROXIES = accountProxiesMap;
-      const BRAZIL_BACKUP_PROXIES = proxiesPool.length > 0 ? proxiesPool : Object.values(accountProxiesMap);
-
-      // Track used proxies across all accounts to guarantee 100% 1-Account-1-IP isolation
+      // Track uniquely used IPs to guarantee 100% 1-Account-1-IP isolation
+      const phoneToProxy = new Map<string, string>();
       const usedProxyIps = new Set<string>();
-      Object.values(BRAZIL_DEDICATED_PROXIES).forEach(pStr => {
+
+      // First pass: register already valid unique mappings
+      Object.entries(accountProxiesMap).forEach(([phone, pStr]) => {
         const ip = String(pStr).split(':')[0];
-        if (ip) usedProxyIps.add(ip);
+        if (ip && !usedProxyIps.has(ip)) {
+          usedProxyIps.add(ip);
+          phoneToProxy.set(phone, pStr);
+        }
       });
+
+      let proxyMapUpdated = false;
 
       // Helper to allocate an unused IP from the 60-proxy pool
       const allocateUnusedProxy = (phone: string): string => {
-        if (BRAZIL_DEDICATED_PROXIES[phone]) {
-          return BRAZIL_DEDICATED_PROXIES[phone];
+        if (phoneToProxy.has(phone)) {
+          return phoneToProxy.get(phone)!;
         }
-        for (const candidate of BRAZIL_BACKUP_PROXIES) {
+        for (const candidate of proxiesPool) {
           const cIp = candidate.split(':')[0];
           if (!usedProxyIps.has(cIp)) {
             usedProxyIps.add(cIp);
-            BRAZIL_DEDICATED_PROXIES[phone] = candidate;
-            // Write back to account_proxies.json
-            try {
-              fs.writeFileSync(proxyJsonPath, JSON.stringify(BRAZIL_DEDICATED_PROXIES, null, 2), "utf8");
-            } catch (e) {}
+            phoneToProxy.set(phone, candidate);
+            accountProxiesMap[phone] = candidate;
+            proxyMapUpdated = true;
             return candidate;
           }
         }
-        return BRAZIL_BACKUP_PROXIES[0] || '';
+        const fallback = proxiesPool[0] || '';
+        phoneToProxy.set(phone, fallback);
+        return fallback;
       };
 
       const formatPhoneDisplay = (rawPhone: string) => {
@@ -409,9 +466,23 @@ async function startServer() {
           const matchedSessionFile = sessionFiles.find(sf => sf.includes(rawPhone)) || `${rawPhone}.session`;
           
           let proxyStr = allocateUnusedProxy(rawPhone);
-          if (data.proxy && data.proxy.addr) {
-            // If explicit proxy is declared in json and not yet in pool
-            proxyStr = `${data.proxy.addr}:${data.proxy.port}:${data.proxy.username || ''}:${data.proxy.password || ''}`;
+          
+          // Normalize proxy parts (addr, port, username, password)
+          const pParts = proxyStr.split(':');
+          const pObj = {
+            addr: pParts[0] || '',
+            port: parseInt(pParts[1] || '12323', 10),
+            username: pParts[2] || '',
+            password: pParts[3] || '',
+            proxy_type: 'socks5'
+          };
+
+          // If json file didn't have the clean proxy or had outdated proxy, sync it to disk
+          if (!data.proxy || data.proxy.addr !== pObj.addr) {
+            data.proxy = pObj;
+            try {
+              fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+            } catch (_) {}
           }
 
           const meta = getAccountMeta(rawPhone, idx, data);
@@ -509,6 +580,12 @@ async function startServer() {
           groupTag: companionData.groupTag || meta.groupTag
         });
       });
+
+      if (proxyMapUpdated) {
+        try {
+          fs.writeFileSync(proxyJsonPath, JSON.stringify(accountProxiesMap, null, 2), 'utf-8');
+        } catch (_) {}
+      }
 
       res.json({
         success: true,

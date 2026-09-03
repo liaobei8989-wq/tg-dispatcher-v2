@@ -133,8 +133,69 @@ BRAZIL_PROXY_POOL = [
     '200.152.154.182:12323:14a5a773a873a:4d841434c6',
     '200.152.153.188:12323:14a5a773a873a:4d841434c6',
     '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-    '200.152.155.148:12323:14a5a773a873a:4d841434c6'
+    '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+    '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
+    '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.28.25:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.30.11:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.30.68:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.28.245:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.19:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.28.13:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.30.220:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.184:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.31.110:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.31.46:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.28.23:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.119:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.36:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.253:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.243:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.28.236:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.29.245:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.0.215:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.1.54:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.3.105:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.0.59:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.0.160:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.2.172:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.2.252:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.1.147:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.2.23:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.0.181:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.3.145:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.2.3:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.2.173:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.3.93:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.3.13:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.0.224:12323:14abdb1a0db2e:cb8f30f1a9',
+    '144.225.1.200:12323:14abdb1a0db2e:cb8f30f1a9'
 ]
+
+# Load dynamic proxy pool from proxies.txt if exists
+try:
+    _ptxt = os.path.join(os.getcwd(), "proxies.txt")
+    if os.path.exists(_ptxt):
+        with open(_ptxt, "r", encoding="utf-8") as _pf:
+            _lines = [l.strip() for l in _pf.readlines() if l.strip()]
+            if len(_lines) > 0:
+                BRAZIL_PROXY_POOL = _lines
+except Exception:
+    pass
 
 def load_account_proxies_map():
     # 优先从多路径读取已绑定的代理映射文件
@@ -142,7 +203,9 @@ def load_account_proxies_map():
         os.path.join(os.getcwd(), "sessions", "account_proxies.json"),
         os.path.join(os.getcwd(), "account_proxies.json"),
         "/root/tg-dispatcher/sessions/account_proxies.json",
-        "/root/tg-dispatcher/account_proxies.json"
+        "/root/tg-dispatcher/account_proxies.json",
+        "/root/tg-dispatcher-v2/sessions/account_proxies.json",
+        "/root/tg-dispatcher-v2/account_proxies.json"
     ]:
         if os.path.exists(p):
             try:
@@ -156,7 +219,17 @@ def load_account_proxies_map():
 
 def get_proxy_for_account(session_basename: str, json_cfg: dict = None) -> tuple:
     """智能代理分配器：确保 100% 走独立巴西代理 IP，绝对不漏网走 VPS 原生 IP"""
-    # 1. 检查 json_cfg 中自带的 proxy
+    # 1. 优先检查 account_proxies.json 权威独立映射
+    proxy_map = load_account_proxies_map()
+    clean_phone = re.sub(r'[^0-9]', '', session_basename)
+    
+    proxy_str = proxy_map.get(clean_phone) or proxy_map.get(session_basename)
+    if proxy_str:
+        parsed = parse_proxy_str(proxy_str)
+        if parsed:
+            return parsed
+
+    # 2. 检查 json_cfg 中自带的 proxy
     if json_cfg and isinstance(json_cfg.get("proxy"), dict):
         p = json_cfg["proxy"]
         if p.get("addr") and p.get("port"):
@@ -165,19 +238,9 @@ def get_proxy_for_account(session_basename: str, json_cfg: dict = None) -> tuple
             if parsed:
                 return parsed
 
-    # 2. 检查 account_proxies.json 映射
-    proxy_map = load_account_proxies_map()
-    clean_phone = re.sub(r'[^0-9]', '', session_basename)
-    
-    proxy_str = proxy_map.get(session_basename) or proxy_map.get(clean_phone)
-    if proxy_str:
-        parsed = parse_proxy_str(proxy_str)
-        if parsed:
-            return parsed
-
-    # 3. 自动从巴西独立代理池中按手机号 Hash 唯一分配空闲独享代理（绝不走 VPS 直连）
+    # 3. 自动从巴西 60 个独立代理池中按手机号 Hash 唯一分配空闲独享代理（绝不走 VPS 直连）
     try:
-        idx = int(clean_phone[-4:]) % len(BRAZIL_PROXY_POOL) if clean_phone else 0
+        idx = int(clean_phone[-4:]) % len(BRAZIL_PROXY_POOL) if (clean_phone and clean_phone[-4:].isdigit()) else 0
     except Exception:
         idx = hash(session_basename) % len(BRAZIL_PROXY_POOL)
     
