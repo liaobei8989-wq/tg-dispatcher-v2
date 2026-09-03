@@ -424,21 +424,25 @@ export async function fetchScheduledCampaignConfigFromServer(): Promise<Schedule
 /**
  * Save scheduled campaign config to localStorage and sync to server
  */
-export function saveScheduledCampaignConfig(config: ScheduledCampaignConfig): void {
+export async function saveScheduledCampaignConfig(config: ScheduledCampaignConfig): Promise<boolean> {
   try {
     localStorage.setItem(SCHEDULED_STORAGE_KEY, JSON.stringify(config));
   } catch (e) {
-    console.error('Failed to save scheduled campaign config:', e);
+    console.error('Failed to save scheduled campaign config to localStorage:', e);
   }
 
   // Auto push to server-side daemon so VPS backend scheduled execution is 100% in sync
   try {
-    fetch('/api/scheduled/config', {
+    const res = await fetch('/api/scheduled/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config)
-    }).catch(() => {});
-  } catch (e) {}
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Sync scheduled config to server failed (offline or network lag):', e);
+    return false;
+  }
 }
 
 

@@ -703,6 +703,7 @@ async def main():
     enable_third_message = payload.get("enable_third_message", True)
     wait_for_reply = payload.get("wait_for_reply", True)
     sender_phone = payload.get("sender_phone", "")
+    target_group_tag = payload.get("group_tag") or payload.get("targetGroupTag") or "ALL"
     custom_proxy = payload.get("proxy", "")
     delay_min = float(payload.get("delay_min", 45.0))
     delay_max = float(payload.get("delay_max", 60.0))
@@ -722,6 +723,36 @@ async def main():
         found = find_session_file(sender_phone)
         if found:
             assigned_sessions = [found]
+    elif target_group_tag and str(target_group_tag).strip().upper() != 'ALL':
+        # Filter sessions by groupTag configured in companion JSON files
+        group_matched_sessions = []
+        clean_target_tag = str(target_group_tag).strip()
+        for s_file in available_sessions:
+            basename = os.path.basename(s_file)
+            phone_digits = re.sub(r'[^0-9]', '', basename)
+            companion_json = find_json_config(phone_digits)
+            session_group = companion_json.get("groupTag") or companion_json.get("group_tag")
+            if not session_group:
+                # Default mapping rule if groupTag is not explicitly recorded
+                is_b = phone_digits.startswith('55869948') or phone_digits.startswith('55869949') or phone_digits.startswith('55869951')
+                session_group = '新买养号B组' if is_b else '主力爆破A组'
+            
+            # Match normalized group tags
+            if (clean_target_tag in session_group) or (session_group in clean_target_tag) or \
+               ('B' in clean_target_tag.upper() and 'B' in session_group.upper()) or \
+               ('A' in clean_target_tag.upper() and 'A' in session_group.upper() and 'B' not in clean_target_tag.upper() and 'B' not in session_group.upper()):
+                group_matched_sessions.append(s_file)
+        
+        if group_matched_sessions:
+            assigned_sessions = group_matched_sessions
+        else:
+            print(json.dumps({
+                "success": False,
+                "error": f"⚠️【发件分组隔离拦截】未在服务器 sessions/ 目录下找到属于【{clean_target_tag}】的 Telegram 发件协议号凭证！系统已主动终止群发，防止跨分组误用其他账号。",
+                "logs": [f"❌ 分组拦截: 指定发件分组 [{clean_target_tag}] 没有可用协议号，已阻止跨组发送。"]
+            }, ensure_ascii=False))
+            return
+    
     if not assigned_sessions:
         assigned_sessions = available_sessions
 

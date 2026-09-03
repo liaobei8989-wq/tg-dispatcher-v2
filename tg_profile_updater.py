@@ -200,29 +200,41 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
         except Exception:
             pass
 
-        # 3. Upload User Avatar Photo (STRICT: ONLY if user explicitly uploaded a local image/base64; NEVER use network URLs or automatic fallbacks)
-        avatar_src = avatar_base64 or item_data.get("avatarUrl")
+        # 3. Upload User Avatar Photo (STRICT: ONLY if user explicitly uploaded a local image/base64; NEVER use network URLs)
+        avatar_src = avatar_base64 or item_data.get("avatarUrl") or item_data.get("avatar")
         
-        # Strictly reject any network HTTP/HTTPS URLs - only process local base64 images or local files
         if avatar_src and isinstance(avatar_src, str) and not avatar_src.startswith("http"):
             try:
                 img_data = None
-                if avatar_src.startswith("data:image") or len(avatar_src) > 500:
-                    clean_b64 = re.sub(r'^data:image/\w+;base64,', '', avatar_src)
-                    img_data = base64.b64decode(clean_b64)
+                if "," in avatar_src and ("base64" in avatar_src or avatar_src.startswith("data:")):
+                    clean_b64 = avatar_src.split(",", 1)[1].strip()
+                elif avatar_src.startswith("data:"):
+                    clean_b64 = re.sub(r'^data:[^;]+;base64,', '', avatar_src).strip()
+                elif len(avatar_src) > 200 and not os.path.exists(avatar_src):
+                    clean_b64 = avatar_src.strip()
                 elif os.path.exists(avatar_src):
                     with open(avatar_src, "rb") as f_img:
                         img_data = f_img.read()
+                    clean_b64 = None
+                else:
+                    clean_b64 = None
+
+                if clean_b64:
+                    clean_b64 = re.sub(r'\s+', '', clean_b64)
+                    missing_padding = len(clean_b64) % 4
+                    if missing_padding:
+                        clean_b64 += '=' * (4 - missing_padding)
+                    img_data = base64.b64decode(clean_b64)
 
                 if img_data and len(img_data) > 200:
                     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
                         tf.write(img_data)
                         tmp_img_path = tf.name
 
-                    logs.append(f"🖼️ [{session_basename}] 正在向 Telegram 官方 CDN 上传您上传的自定义头像 ({(len(img_data)/1024):.1f} KB)...")
+                    logs.append(f"🖼️ [{session_basename}] 正在向 Telegram 官方 CDN 上传高画质头像 ({(len(img_data)/1024):.1f} KB)...")
                     uploaded_file = await client.upload_file(tmp_img_path)
                     await client(UploadProfilePhotoRequest(file=uploaded_file))
-                    logs.append(f"🎉 [{session_basename}] 自定义头像已成功写入 Telegram 官方服务器！")
+                    logs.append(f"🎉 [{session_basename}] 真实头像已成功写入 Telegram 官方服务器！")
                     try:
                         os.unlink(tmp_img_path)
                     except Exception:
@@ -240,6 +252,26 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
                 except Exception as ue:
                     logs.append(f"ℹ️ [{session_basename}] Username 提示: {str(ue)}")
 
+        # 5. Update local companion JSON file so metadata stays permanently in sync
+        clean_phone = re.sub(r'[^0-9]', '', session_basename)
+        companion_json_path = os.path.join(os.path.dirname(session_path), f"{clean_phone}.json")
+        if not os.path.exists(companion_json_path):
+            companion_json_path = os.path.join(os.getcwd(), "sessions", f"{clean_phone}.json")
+
+        if os.path.exists(companion_json_path):
+            try:
+                with open(companion_json_path, "r", encoding="utf-8") as f_cj:
+                    cdata = json.load(f_cj)
+                if first_name: cdata["first_name"] = first_name
+                if last_name is not None: cdata["last_name"] = last_name
+                if about: cdata["about"] = about
+                if username: cdata["username"] = username
+                if avatar_src: cdata["avatar"] = avatar_src
+                with open(companion_json_path, "w", encoding="utf-8") as f_cj:
+                    json.dump(cdata, f_cj, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+
         return True
     except Exception as e:
         logs.append(f"❌ [{session_basename}] 物理更新异常: {str(e)}")
@@ -252,12 +284,18 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
 
 async def main():
     items = []
+    logs = []
     if len(sys.argv) > 1:
+        arg_val = sys.argv[1]
         try:
-            payload = json.loads(sys.argv[1])
+            if os.path.exists(arg_val) and os.path.isfile(arg_val):
+                with open(arg_val, 'r', encoding='utf-8') as pf:
+                    payload = json.load(pf)
+            else:
+                payload = json.loads(arg_val)
             items = payload.get("items", []) if isinstance(payload, dict) else payload
-        except Exception:
-            pass
+        except Exception as pe:
+            logs.append(f"⚠️ Payload 参数解析提示: {str(pe)}")
 
     # Discover sessions across all common directories
     script_dir = os.path.dirname(os.path.abspath(__file__))

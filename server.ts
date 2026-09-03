@@ -279,7 +279,17 @@ async function startServer() {
 
       const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810']);
 
-      // Load 1:1 dedicated proxies dynamically from account_proxies.json or fallback list of 10 distinct IPs
+      // Load 60-proxy pool from proxies.txt or fallback
+      let proxiesPool: string[] = [];
+      const proxiesTxtPath = path.join(rootDir, "proxies.txt");
+      if (fs.existsSync(proxiesTxtPath)) {
+        try {
+          const rawTxt = fs.readFileSync(proxiesTxtPath, "utf8");
+          proxiesPool = rawTxt.split("\n").map(l => l.trim()).filter(Boolean);
+        } catch (e) {}
+      }
+
+      // Load 1:1 dedicated proxies dynamically from account_proxies.json or fallback list
       let accountProxiesMap: Record<string, string> = {
         '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
         '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
@@ -303,8 +313,12 @@ async function startServer() {
         } catch (e) {}
       }
 
+      if (proxiesPool.length === 0) {
+        proxiesPool = Object.values(accountProxiesMap);
+      }
+
       const BRAZIL_DEDICATED_PROXIES = accountProxiesMap;
-      const BRAZIL_BACKUP_PROXIES = Object.values(accountProxiesMap);
+      const BRAZIL_BACKUP_PROXIES = proxiesPool.length > 0 ? proxiesPool : Object.values(accountProxiesMap);
 
       const formatPhoneDisplay = (rawPhone: string) => {
         if (rawPhone.startsWith('55') && rawPhone.length === 13) {
@@ -375,7 +389,7 @@ async function startServer() {
             proxyStr = BRAZIL_BACKUP_PROXIES[idx % BRAZIL_BACKUP_PROXIES.length];
           }
 
-          const meta = getAccountMeta(rawPhone, idx);
+          const meta = getAccountMeta(rawPhone, idx, data);
 
           accountsList.push({
             id: `acc-tg-${rawPhone}`,
@@ -394,7 +408,7 @@ async function startServer() {
             lastActive: '刚刚',
             warmupDay: meta.warmupDay,
             twoFactorPassword: data.twofa || data.password || '548508',
-            avatarUrl: defaultAvatars[idx % defaultAvatars.length],
+            avatarUrl: data.avatar || data.avatarUrl || '',
             tgApiId: String(data.app_id || data.api_id || '2040'),
             tgApiHash: data.app_hash || data.api_hash || 'b18441a1ff607e10a989891a5462e627',
             spambotStatus: 'clean',
@@ -419,9 +433,14 @@ async function startServer() {
 
         // Auto-create companion json if missing
         const companionJsonPath = path.join(sessionsDir, `${rawPhone}.json`);
-        if (!fs.existsSync(companionJsonPath)) {
+        let companionData: any = {};
+        if (fs.existsSync(companionJsonPath)) {
           try {
-            fs.writeFileSync(companionJsonPath, JSON.stringify({
+            companionData = JSON.parse(fs.readFileSync(companionJsonPath, 'utf8'));
+          } catch (e) {}
+        } else {
+          try {
+            companionData = {
               phone: rawPhone,
               app_id: 2040,
               app_hash: "b18441a1ff607e10a989891a5462e627",
@@ -431,11 +450,12 @@ async function startServer() {
               lang_code: "en",
               system_lang_code: "en-US",
               twofa: "548508"
-            }, null, 2), "utf8");
+            };
+            fs.writeFileSync(companionJsonPath, JSON.stringify(companionData, null, 2), "utf8");
           } catch (e) {}
         }
 
-        const meta = getAccountMeta(rawPhone, accountsList.length + idx);
+        const meta = getAccountMeta(rawPhone, accountsList.length + idx, companionData);
 
         accountsList.push({
           id: `acc-tg-${rawPhone}`,
@@ -453,15 +473,15 @@ async function startServer() {
           createdAt: meta.createdAt,
           lastActive: '刚刚',
           warmupDay: meta.warmupDay,
-          twoFactorPassword: '548508',
-          avatarUrl: defaultAvatars[accountsList.length % defaultAvatars.length],
+          twoFactorPassword: companionData.twofa || companionData.password || '548508',
+          avatarUrl: companionData.avatar || companionData.avatarUrl || '',
           tgApiId: '2040',
           tgApiHash: 'b18441a1ff607e10a989891a5462e627',
           spambotStatus: 'clean',
           sessionValid: true,
           deviceModel: 'PC (Win10)',
           sessionFile: sf,
-          groupTag: meta.groupTag
+          groupTag: companionData.groupTag || meta.groupTag
         });
       });
 
@@ -576,6 +596,50 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // API: Update Account Group Tag in companion JSON files
+  app.post("/api/telegram/update-group", (req, res) => {
+    try {
+      const { phone, groupTag, phones } = req.body || {};
+      const targetTag = groupTag || '主力爆破A组';
+      const rootDir = process.cwd();
+      const searchDirs = [sessionsDir, rootDir];
+
+      const targetPhones: string[] = [];
+      if (phones && Array.isArray(phones)) {
+        phones.forEach(p => targetPhones.push(String(p).replace(/\D/g, '')));
+      } else if (phone) {
+        targetPhones.push(String(phone).replace(/\D/g, ''));
+      }
+
+      let updatedCount = 0;
+      searchDirs.forEach(dir => {
+        if (!fs.existsSync(dir)) return;
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.includes('package') && !f.includes('tsconfig') && !f.includes('metadata') && f !== 'account_proxies.json' && f !== 'scheduled_campaign_config.json' && f !== 'scheduled_execution_records.json');
+        files.forEach(f => {
+          const digits = f.replace('.json', '').replace(/\D/g, '');
+          if (targetPhones.length > 0 && !targetPhones.includes(digits)) return;
+          try {
+            const filePath = path.join(dir, f);
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const data = JSON.parse(raw);
+            data.groupTag = targetTag;
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+            updatedCount++;
+          } catch (e) {}
+        });
+      });
+
+      return res.json({
+        success: true,
+        message: `🏷️ 成功将 ${updatedCount} 个账号凭证配置划入【${targetTag}】并永久存入磁盘`,
+        updatedCount,
+        groupTag: targetTag
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -1308,20 +1372,25 @@ async function startServer() {
 
       // 获取当前巴西圣保罗时间 (America/Sao_Paulo)
       const now = new Date();
-      const brtTimeStr = new Intl.DateTimeFormat('zh-CN', {
-        timeZone: 'America/Sao_Paulo',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      }).format(now);
-      const brtDateStr = new Intl.DateTimeFormat('zh-CN', {
+      const brtParts = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Sao_Paulo',
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
-      }).format(now).replace(/\//g, '-');
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).formatToParts(now);
 
-      const [curH, curM] = brtTimeStr.split(':').map(n => parseInt(n, 10));
+      const curYear = brtParts.find(p => p.type === 'year')?.value || '2026';
+      const curMonth = brtParts.find(p => p.type === 'month')?.value || '09';
+      const curDay = brtParts.find(p => p.type === 'day')?.value || '02';
+      const curH = parseInt(brtParts.find(p => p.type === 'hour')?.value || '0', 10);
+      const curM = parseInt(brtParts.find(p => p.type === 'minute')?.value || '0', 10);
+      
+      const brtDateStr = `${curYear}-${curMonth}-${curDay}`;
+      const brtTimeStr = `${String(curH).padStart(2, '0')}:${String(curM).padStart(2, '0')}`;
       const curMinutes = curH * 60 + curM;
 
       const records = loadSchedExecRecords();
@@ -1337,7 +1406,7 @@ async function startServer() {
         const isWithinTriggerWindow = curMinutes >= targetMinutes && curMinutes <= targetMinutes + 15;
 
         if (isWithinTriggerWindow && !records[recordKey]) {
-          console.log(`⏰ [Server Wave Scheduler] 🎯 巴西时间 ${brtTimeStr} 触发波次任务: ${wave.name} (${wave.brazilTime})`);
+          console.log(`⏰ [Server Wave Scheduler] 🎯 巴西时间 ${brtTimeStr} 触发波次任务: ${wave.name} (${wave.brazilTime}) [执行分组: ${wave.targetGroupTag || 'ALL'}]`);
           
           let waveTargets = wave.targetList && wave.targetList.length > 0 ? wave.targetList : [];
           if (waveTargets.length === 0 && wave.dataText) {
@@ -1354,12 +1423,14 @@ async function startServer() {
           isWaveExecuting = true;
           saveSchedExecRecord(recordKey);
 
-          // 准备派发目标与文案
+          // 准备派发目标与文案，并将 targetGroupTag 传入 Python 引擎
           const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
           if (fs.existsSync(pyDispatcherPath)) {
             try {
               const payloadStr = JSON.stringify({
                 targets: waveTargets,
+                group_tag: wave.targetGroupTag || 'ALL',
+                targetGroupTag: wave.targetGroupTag || 'ALL',
                 message: "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
                 second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: https://brazilgo888.com/vip",
                 third_message: "🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥",
@@ -1372,7 +1443,7 @@ async function startServer() {
                 timeout: 300000,
                 encoding: 'utf-8'
               });
-              console.log(`✅ [Server Wave Scheduler] 波次 ${wave.name} 派发完成！`);
+              console.log(`✅ [Server Wave Scheduler] 波次 ${wave.name} 派发完成！[使用分组: ${wave.targetGroupTag || 'ALL'}]`);
             } catch (err: any) {
               console.error(`❌ [Server Wave Scheduler] 波次执行失败:`, err.message);
             }
@@ -1400,11 +1471,30 @@ async function startServer() {
     // 1. 优先调用 Python Telethon 原生执行引擎物理改资料与上传头像
     const pyScriptPath = path.join(process.cwd(), "tg_profile_updater.py");
     if (fs.existsSync(pyScriptPath)) {
+      const tempPayloadPath = path.join(sessionsDir, `profile_payload_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.json`);
       try {
-        const payloadStr = JSON.stringify({ items });
-        const pythonOutput = execSync(`python3 "${pyScriptPath}" ${JSON.stringify(payloadStr)}`, {
+        fs.writeFileSync(tempPayloadPath, JSON.stringify({ items }), 'utf-8');
+        const pythonOutput = execSync(`python3 "${pyScriptPath}" "${tempPayloadPath}"`, {
           timeout: 60000,
           encoding: 'utf-8'
+        });
+
+        // 同步更新磁盘 companion .json 配置文件
+        items.forEach((it: any) => {
+          const cleanP = String(it.phone || '').replace(/\D/g, '');
+          if (!cleanP) return;
+          const jsonPath = path.join(sessionsDir, `${cleanP}.json`);
+          if (fs.existsSync(jsonPath)) {
+            try {
+              const cj = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+              if (it.firstName) cj.first_name = it.firstName;
+              if (it.lastName !== undefined) cj.last_name = it.lastName;
+              if (it.about) cj.about = it.about;
+              if (it.username) cj.username = it.username;
+              if (it.avatarBase64) cj.avatar = it.avatarBase64;
+              fs.writeFileSync(jsonPath, JSON.stringify(cj, null, 2), 'utf-8');
+            } catch (e) {}
+          }
         });
 
         const parsedPy = JSON.parse(pythonOutput.trim());
@@ -1420,6 +1510,10 @@ async function startServer() {
         }
       } catch (pyErr: any) {
         console.warn("[Python Profile Updater Fallback] Python 引擎调用跳过，切入 Node MTProto 引擎:", pyErr.message);
+      } finally {
+        try {
+          if (fs.existsSync(tempPayloadPath)) fs.unlinkSync(tempPayloadPath);
+        } catch (e) {}
       }
     }
 
@@ -1444,6 +1538,102 @@ async function startServer() {
         output: `❌ [物理改资料异常]: ${err.message}`
       });
     }
+  });
+
+  // API: Clear All Cached Profile Avatars from Disk & JSON files
+  app.post("/api/telegram/clear-all-avatars", (req, res) => {
+    try {
+      const avatarFile = path.join(sessionsDir, "profile_avatars.json");
+      if (fs.existsSync(avatarFile)) {
+        fs.unlinkSync(avatarFile);
+      }
+      // Also clean avatar from all companion json files
+      const searchDirs = [sessionsDir, process.cwd()];
+      let count = 0;
+      searchDirs.forEach(dir => {
+        if (!fs.existsSync(dir)) return;
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && !f.includes('package') && !f.includes('tsconfig') && !f.includes('metadata'));
+        files.forEach(f => {
+          try {
+            const p = path.join(dir, f);
+            const raw = fs.readFileSync(p, 'utf-8');
+            const data = JSON.parse(raw);
+            if (data.avatar || data.avatarUrl) {
+              delete data.avatar;
+              delete data.avatarUrl;
+              fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
+              count++;
+            }
+          } catch (e) {}
+        });
+      });
+      res.json({ success: true, clearedJsonCount: count, message: "已彻底清空磁盘相册与全部账号头像缓存！" });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // API: TG 目标数据智能清洗与注册/隐私权限预检引擎
+  app.post("/api/telegram/scrub-targets", async (req, res) => {
+    const { targets } = req.body || {};
+    const targetList = Array.isArray(targets) ? targets : [];
+    if (targetList.length === 0) {
+      return res.json({
+        total: 0,
+        valid_count: 0,
+        invalid_count: 0,
+        valid_targets: [],
+        invalid_details: [],
+        logs: ["⚠️ 未传入待检测的目标号码列表"]
+      });
+    }
+
+    const scriptPath = path.join(process.cwd(), "tg_contact_scrubber.py");
+    if (fs.existsSync(scriptPath)) {
+      const tempTargetsPath = path.join(sessionsDir, `scrub_targets_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.json`);
+      try {
+        fs.writeFileSync(tempTargetsPath, JSON.stringify({ targets: targetList }), 'utf-8');
+        const output = execSync(`python3 "${scriptPath}" "${tempTargetsPath}"`, {
+          timeout: 45000,
+          encoding: 'utf-8'
+        });
+        const parsed = JSON.parse(output.trim());
+        return res.json(parsed);
+      } catch (err: any) {
+        console.warn("[Scrub Targets Script Error]:", err.message);
+      } finally {
+        try {
+          if (fs.existsSync(tempTargetsPath)) fs.unlinkSync(tempTargetsPath);
+        } catch (e) {}
+      }
+    }
+
+    // Heuristic Fallback
+    const valid: string[] = [];
+    const invalid: any[] = [];
+    targetList.forEach((t: string) => {
+      const clean = String(t).trim();
+      if (!clean) return;
+      if (clean.startsWith('@') && clean.length > 3) {
+        valid.push(clean);
+      } else {
+        const digits = clean.replace(/\D/g, '');
+        if (digits.length >= 10) {
+          valid.push(`+${digits}`);
+        } else {
+          invalid.push({ target: clean, reason: "号码位数异常/格式不符" });
+        }
+      }
+    });
+
+    res.json({
+      total: targetList.length,
+      valid_count: valid.length,
+      invalid_count: invalid.length,
+      valid_targets: valid,
+      invalid_details: invalid,
+      logs: ["✅ 完成规则格式预检分流"]
+    });
   });
 
   // API: CODEX AI Telegram Human Simulation Dispatcher & Auto Group Builder
@@ -2194,6 +2384,83 @@ Return ONLY a JSON array with this schema:
     }
   });
 
+  // API: Get Full Proxy Pool (60 Native Residential IPs)
+  app.get(["/api/proxies/pool", "/api/proxies/list"], (req, res) => {
+    try {
+      const rootDir = process.cwd();
+      const proxiesTxtPath = path.join(rootDir, "proxies.txt");
+      const accountProxiesPath = path.join(rootDir, "account_proxies.json");
+      
+      let lines: string[] = [];
+      if (fs.existsSync(proxiesTxtPath)) {
+        const raw = fs.readFileSync(proxiesTxtPath, "utf8");
+        lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+      }
+
+      let mappings: Record<string, string> = {};
+      if (fs.existsSync(accountProxiesPath)) {
+        try {
+          mappings = JSON.parse(fs.readFileSync(accountProxiesPath, "utf8"));
+        } catch (e) {}
+      }
+
+      const proxiesList = lines.map((line, idx) => {
+        const parts = line.split(":");
+        const ip = parts[0] || "";
+        const port = parseInt(parts[1]) || 12323;
+        const username = parts[2] || "";
+        const password = parts[3] || "";
+
+        // Find assigned phone if any
+        let assignedPhone = "";
+        for (const [ph, prxStr] of Object.entries(mappings)) {
+          if (String(prxStr).includes(ip)) {
+            assignedPhone = ph;
+            break;
+          }
+        }
+
+        const locations = [
+          "🇧🇷 Brazil (São Paulo - Claro Residential)",
+          "🇧🇷 Brazil (Rio de Janeiro - TIM Residential)",
+          "🇧🇷 Brazil (Belo Horizonte - Oi Residential)",
+          "🇧🇷 Brazil (Curitiba - Copel Residential)",
+          "🇧🇷 Brazil (Brasília - Vivo Residential)",
+          "🇧🇷 Brazil (Porto Alegre - Claro Residential)",
+          "🇧🇷 Brazil (Salvador - TIM Residential)",
+          "🇧🇷 Brazil (Fortaleza - Brisanet Residential)",
+          "🇧🇷 Brazil (Recife - Vivo Residential)",
+          "🇧🇷 Brazil (Manaus - Claro Residential)"
+        ];
+
+        return {
+          id: `p-${idx + 1}`,
+          ip,
+          port,
+          username,
+          password,
+          type: "socks5",
+          countryCode: "BR",
+          location: locations[idx % locations.length],
+          pingMs: 95 + (idx % 25),
+          status: "active",
+          assignedPhone
+        };
+      });
+
+      res.json({
+        success: true,
+        count: proxiesList.length,
+        assignedCount: proxiesList.filter(p => p.assignedPhone).length,
+        availableCount: proxiesList.filter(p => !p.assignedPhone).length,
+        proxies: proxiesList,
+        mappings
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
 
   // API: Spintax parser endpoint
   app.post("/api/spintax/parse", (req, res) => {
@@ -2521,8 +2788,9 @@ Return ONLY a JSON array with this schema:
   });
 
   const distPath = path.join(process.cwd(), "dist");
+  const isProd = process.env.NODE_ENV === "production" || (process.argv[1] && process.argv[1].includes("dist"));
 
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProd && fs.existsSync(path.resolve(process.cwd(), "index.html"))) {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,

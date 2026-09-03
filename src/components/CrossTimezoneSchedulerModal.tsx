@@ -42,7 +42,8 @@ import {
   addMinutesToTime,
   addHoursToTime,
   DEFAULT_SCHEDULED_CONFIG,
-  DEFAULT_THREE_WAVES
+  DEFAULT_THREE_WAVES,
+  fetchScheduledCampaignConfigFromServer
 } from '../utils/timezoneScheduler';
 
 interface CrossTimezoneSchedulerModalProps {
@@ -80,6 +81,19 @@ export const CrossTimezoneSchedulerModal: React.FC<CrossTimezoneSchedulerModalPr
     ? config.waves 
     : DEFAULT_THREE_WAVES;
 
+  // Sync latest config from server & localStorage whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const localCfg = loadScheduledCampaignConfig();
+      setConfig(localCfg);
+      fetchScheduledCampaignConfigFromServer().then(serverCfg => {
+        if (serverCfg) {
+          setConfig(serverCfg);
+        }
+      });
+    }
+  }, [isOpen]);
+
   // Ticking clocks & countdown effect (updates every 1 second)
   useEffect(() => {
     const timer = setInterval(() => {
@@ -92,30 +106,34 @@ export const CrossTimezoneSchedulerModal: React.FC<CrossTimezoneSchedulerModalPr
   // Handle uploading independent data for a wave
   const handleWaveFileUpload = (waveId: string, file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const content = (e.target?.result as string) || '';
       const lines = content
         .split('\n')
         .map(l => l.trim())
         .filter(l => l.length > 0 && !l.startsWith('#'));
       
-      const updatedWaves = waves.map(w => {
-        if (w.id === waveId) {
-          return {
-            ...w,
-            fileName: file.name,
-            dataText: content,
-            targetList: lines,
-            sentOffset: 0
-          };
-        }
-        return w;
+      setConfig(prev => {
+        const currentWaves = prev.waves && prev.waves.length === 3 ? prev.waves : DEFAULT_THREE_WAVES;
+        const updatedWaves = currentWaves.map(w => {
+          if (w.id === waveId) {
+            return {
+              ...w,
+              fileName: file.name,
+              dataText: content,
+              targetList: lines,
+              sentOffset: 0
+            };
+          }
+          return w;
+        });
+
+        const updatedConfig = { ...prev, waves: updatedWaves };
+        saveScheduledCampaignConfig(updatedConfig);
+        return updatedConfig;
       });
 
-      const updatedConfig = { ...config, waves: updatedWaves };
-      setConfig(updatedConfig);
-      saveScheduledCampaignConfig(updatedConfig);
-      setSaveSuccessToast(`✅ 已为【${updatedWaves.find(w => w.id === waveId)?.name}】成功装载数据包：${file.name}（共 ${lines.length} 条号码）！`);
+      setSaveSuccessToast(`✅ 已为波次成功装载数据包：${file.name}（共 ${lines.length} 条号码，已一次性永久保存）！`);
       setTimeout(() => setSaveSuccessToast(''), 3500);
     };
     reader.readAsText(file, 'UTF-8');
@@ -128,20 +146,23 @@ export const CrossTimezoneSchedulerModal: React.FC<CrossTimezoneSchedulerModalPr
       .map(l => l.trim())
       .filter(l => l.length > 0 && !l.startsWith('#'));
 
-    const updatedWaves = waves.map(w => {
-      if (w.id === waveId) {
-        return {
-          ...w,
-          dataText: newText,
-          targetList: lines
-        };
-      }
-      return w;
-    });
+    setConfig(prev => {
+      const currentWaves = prev.waves && prev.waves.length === 3 ? prev.waves : DEFAULT_THREE_WAVES;
+      const updatedWaves = currentWaves.map(w => {
+        if (w.id === waveId) {
+          return {
+            ...w,
+            dataText: newText,
+            targetList: lines
+          };
+        }
+        return w;
+      });
 
-    const updatedConfig = { ...config, waves: updatedWaves };
-    setConfig(updatedConfig);
-    saveScheduledCampaignConfig(updatedConfig);
+      const updatedConfig = { ...prev, waves: updatedWaves };
+      saveScheduledCampaignConfig(updatedConfig);
+      return updatedConfig;
+    });
   };
 
   // Clear data for a wave

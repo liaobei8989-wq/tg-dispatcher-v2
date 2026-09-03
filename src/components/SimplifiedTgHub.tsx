@@ -565,7 +565,16 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setAccounts(updated);
     safeSaveAccountsToLocalStorage(updated);
     saveAccountsToStorage(updated);
-    setSimpleLogs(prev => [...prev, `[🏷️ 分组调整] 账号 [${targetClean || accId}] 已成功划入【${groupTag}】`]);
+    setSimpleLogs(prev => [...prev, `[🏷️ 分组调整] 账号 [${targetClean || accId}] 已成功划入【${groupTag}】并同步服务器凭证配置！`]);
+
+    // Push to server companion json files
+    if (targetClean) {
+      fetch('/api/telegram/update-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: targetClean, groupTag })
+      }).catch(() => {});
+    }
   };
 
   const handleUpdateWarmupDays = (acc: AccountSession, newDay: number) => {
@@ -601,7 +610,14 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setAccounts(updated);
     safeSaveAccountsToLocalStorage(updated);
     saveAccountsToStorage(updated);
-    setSimpleLogs(prev => [...prev, `[🏷️ 批量分组] 已将全部 ${distinctTgAccounts.length} 个协议号统一划入【${groupTag}】`]);
+    setSimpleLogs(prev => [...prev, `[🏷️ 批量分组] 已将全部 ${distinctTgAccounts.length} 个协议号统一划入【${groupTag}】并同步服务器磁盘！`]);
+
+    const allPhones = distinctTgAccounts.map(a => a.phone.replace(/\D/g, '')).filter(Boolean);
+    fetch('/api/telegram/update-group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phones: allPhones, groupTag })
+    }).catch(() => {});
   };
 
   // 一键彻底删除单个账号及服务器磁盘关联的 .session / .json 凭证
@@ -869,6 +885,34 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       await clearProfileImagesDB();
     } catch (_) {}
     setProfileSuccessMsg('🗑️ 已成功清空图库中的所有照片！');
+  };
+
+  // Completely wipe all gallery photos, server disk avatars, and reset accounts avatarUrl to empty
+  const handleWipeAllAvatarsAndGallery = async () => {
+    if (!confirm('确定要彻底清空图库中的全部照片，并重置所有账号的头像为初始空白状态吗？\n（将同步清除服务器磁盘相册与全部账号的头像缓存）')) {
+      return;
+    }
+    setUploadedImages([]);
+    setSelectedImageIndices([]);
+    try {
+      await clearProfileImagesDB();
+      await fetch('/api/telegram/clear-all-avatars', { method: 'POST' }).catch(() => {});
+    } catch (_) {}
+
+    // Reset account avatarUrls
+    const resetAccs = accounts.map(a => ({
+      ...a,
+      avatarUrl: ''
+    }));
+    setAccounts(resetAccs);
+    safeSaveAccountsToLocalStorage(resetAccs);
+    saveAccountsToStorage(resetAccs);
+
+    setProfileSuccessMsg('🗑️ 已彻底清空全部相册照片，并已重置所有账号头像为初始空白！系统内无任何残留网络照片。');
+    setSimpleLogs(prev => [
+      ...prev,
+      `[相册与头像清空 🗑️] 已彻底清除图库与服务端磁盘上的所有头像缓存照片，所有账号头像已重置为空白状态。`
+    ]);
   };
 
   // Smart deduplication
@@ -1871,6 +1915,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const handleBatchAssignGroupToSelected = (groupTag: string) => {
     if (selectedAccountIds.length === 0) return;
     const selectedSet = new Set(selectedAccountIds);
+    const targetAccountsList = accounts.filter(a => selectedSet.has(a.id));
+    const targetPhones = targetAccountsList.map(a => a.phone.replace(/\D/g, '')).filter(Boolean);
+
     const updated = accounts.map(a => {
       if (selectedSet.has(a.id)) {
         return { ...a, groupTag };
@@ -1880,7 +1927,15 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setAccounts(updated);
     safeSaveAccountsToLocalStorage(updated);
     saveAccountsToStorage(updated);
-    setSimpleLogs(prev => [...prev, `[🏷️ 批量分组] 已成功将选中的 ${selectedAccountIds.length} 个账号划入【${groupTag}】`]);
+    setSimpleLogs(prev => [...prev, `[🏷️ 批量分组] 已成功将选中的 ${selectedAccountIds.length} 个账号划入【${groupTag}】并同步服务器磁盘凭证！`]);
+
+    if (targetPhones.length > 0) {
+      fetch('/api/telegram/update-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phones: targetPhones, groupTag })
+      }).catch(err => console.warn('Server group sync error:', err));
+    }
   };
 
   const handleBatchDeleteSelectedAccounts = async () => {
@@ -2497,24 +2552,34 @@ if __name__ == "__main__":
     // 1. 动态构建独立发件账号池 (匹配 .session 协议号凭证，支持按分组分流)
     let initialAccountPool = hasRealSessions 
       ? realSessionFiles.map((s) => {
-          const rawPhoneNum = s.fileName.replace('.session', '');
-          const matchedAcc = accounts.find(a => a.phone.replace(/[^0-9]/g, '').includes(rawPhoneNum));
+          const rawPhoneNum = s.fileName.replace('.session', '').replace(/\D/g, '');
+          const matchedAcc = distinctTgAccounts.find(a => {
+            const cleanAccP = a.phone.replace(/\D/g, '');
+            return cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP);
+          });
           return {
             phone: matchedAcc ? matchedAcc.phone : `+${rawPhoneNum}`,
             sessionFile: s.fileName,
             groupTag: matchedAcc?.groupTag || '主力爆破A组'
           };
         })
-      : (accounts.length > 0 
-          ? accounts.map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
+      : (distinctTgAccounts.length > 0 
+          ? distinctTgAccounts.map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
           : [{ phone: '+55 41 99999-8888', sessionFile: undefined, groupTag: '主力爆破A组' }]);
 
     const activeFilter = currentWave?.targetGroupTag || massSendGroupFilter;
     if (activeFilter && activeFilter !== 'ALL') {
-      const filtered = initialAccountPool.filter(a => a.groupTag === activeFilter);
-      if (filtered.length > 0) {
-        initialAccountPool = filtered;
+      const targetNorm = normalizeGroupTag(activeFilter);
+      const filtered = initialAccountPool.filter(a => normalizeGroupTag(a.groupTag) === targetNorm);
+      
+      if (filtered.length === 0) {
+        const errorMsg = `⚠️【发件分组隔离拦截】当前选中的【${activeFilter}】没有可用的在线发件协议号！\n\n系统已主动拦截本次群发任务，防止误用其他分组（如【${targetNorm === '新买养号B组' ? '主力爆破A组' : '新买养号B组'}】）账号。\n\n请在账号列表中将发件号划入【${activeFilter}】，或将发件分组切换为【全部账号】后再开始群发。`;
+        alert(errorMsg);
+        setSimpleLogs(prev => [...prev, `[🚫 分组隔离拦截] ${errorMsg.replace(/\n\n/g, ' | ')}`]);
+        setIsCampaignRunning(false);
+        return;
       }
+      initialAccountPool = filtered;
     }
     const accountPool = initialAccountPool;
 
@@ -5150,14 +5215,24 @@ if __name__ == "__main__":
                       </button>
 
                       {uploadedImages.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleClearAllImages}
-                          className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium flex items-center gap-1 cursor-pointer"
-                          title="清空全部照片"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> 清空图库
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleClearAllImages}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1 cursor-pointer transition-all"
+                            title="清空当前已加载的相册照片"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> 清空相册
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleWipeAllAvatarsAndGallery}
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            title="彻底清空全部相册并重置所有账号头像为初始空白（清除系统全部网络与磁盘缓存照片）"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-400" /> 彻底清除全部头像与相册
+                          </button>
+                        </div>
                       )}
 
                       <button

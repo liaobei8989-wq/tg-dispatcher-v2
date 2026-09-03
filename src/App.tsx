@@ -15,6 +15,7 @@ import { SimplifiedTgHub } from './components/SimplifiedTgHub';
 import { LeadScraperHub } from './components/LeadScraperHub';
 import { WebInboxHub } from './components/WebInboxHub';
 import { ProxyManagerModal } from './components/ProxyManagerModal';
+import { ProxyHubView } from './components/ProxyHubView';
 
 import { AccountSession, AntiBanSettings, CampaignLog, AccountStatus, ScrubbedContact } from './types';
 import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, getDedicatedProxyForPhone, BRAZIL_DEDICATED_PROXIES_MAP } from './data/mockAccounts';
@@ -413,44 +414,11 @@ export default function App() {
         )}
 
         {activeTab === 'proxy_manager' && (
-          <div className="space-y-6">
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-                  🌐 1 账号 1 独立 IP 代理池与指纹防护中心
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  南美高匿原生住宅代理与移动端设备硬件指纹（Samsung S24, iPhone 15 等），实现账号物理级隔离。
-                </p>
-              </div>
-              <button
-                onClick={() => setShowProxyModal(true)}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-md shadow-cyan-500/20"
-              >
-                + 打开代理与指纹配置弹窗
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {accounts.map((acc) => (
-                <div key={acc.id} className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-300">
-                      {acc.alias?.[0] || 'TG'}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-100">{acc.alias} ({acc.phone})</div>
-                      <div className="text-[11px] font-mono text-cyan-400 mt-0.5">
-                        {acc.proxy || '200.160.43.132:12323 (巴西住宅代理)'}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                    🟢 隔离生效中
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ProxyHubView
+            accounts={accounts}
+            onOpenProxyModal={() => setShowProxyModal(true)}
+            onUpdateAccountProxy={handleUpdateAccountProxy}
+          />
         )}
 
         {activeTab === 'dashboard' && (
