@@ -1840,7 +1840,17 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           const cleanPhone = (res.phone || '').replace(/\D/g, '');
           if (!cleanPhone) continue;
 
-          if (res.health_score >= 90 || res.can_send_today) {
+          const isTimeout = /超时|timeout|连接异常|timed out/i.test(res.spambot_status || '') || /超时|timeout|连接异常/i.test(res.auth_status || '');
+          if (isTimeout) {
+            newMap[cleanPhone] = {
+              status: 'timeout',
+              label: '🌐 代理超时 (非死号)',
+              details: res.restriction_detail || '代理 IP 响应缓慢或连接超时，账号本身安全无损，切勿销毁凭证！',
+              badgeBg: 'bg-slate-900/90',
+              badgeText: 'text-amber-300',
+              badgeBorder: 'border-amber-500/50'
+            };
+          } else if (res.health_score >= 90 || res.can_send_today) {
             newMap[cleanPhone] = {
               status: 'healthy',
               label: '🟢 100% 完全健康 (无限制)',
@@ -4174,6 +4184,16 @@ if __name__ == "__main__":
                     🧹 清空勾选
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountHealthMap({});
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-950/50 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1"
+                  title="一键消除网络/代理超时误报，将所有账号恢复为健康状态"
+                >
+                  🟢 清除超时误报 (一键全绿)
+                </button>
               </div>
 
               {/* Status & Primary Trigger */}
@@ -4570,7 +4590,8 @@ if __name__ == "__main__":
                 const hasSession = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.session'));
                 const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
                 const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
-                const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
+                const isTimeout = healthInfo.status === 'timeout' || /超时|timeout/i.test(healthInfo.label || '') || /超时|timeout/i.test(healthInfo.details || '');
+                const isBannedOrRestricted = !isTimeout && (healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk');
                 const effectiveGroup = normalizeGroupTag(acc.groupTag);
                 const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                 const isSelected = selectedAccountIds.includes(acc.id);
@@ -4583,6 +4604,8 @@ if __name__ == "__main__":
                         ? 'bg-purple-950/40 border-purple-500 shadow-md shadow-purple-500/20'
                         : isBannedOrRestricted
                         ? 'bg-rose-950/30 border-rose-800/80'
+                        : isTimeout
+                        ? 'bg-amber-950/20 border-amber-700/60 shadow-sm'
                         : hasSession
                         ? 'bg-slate-950/95 border-emerald-500/50 shadow-sm hover:border-emerald-400'
                         : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
@@ -4729,8 +4752,8 @@ if __name__ == "__main__":
                       </div>
                     </div>
 
-                    {/* Prominent delete button if banned */}
-                    {isBannedOrRestricted && (
+                    {/* Prominent delete button ONLY if truly banned (NOT timeout) */}
+                    {isBannedOrRestricted && (healthInfo.status === 'banned' || acc.status === 'banned') && (
                       <button
                         type="button"
                         onClick={() => handleDeleteAccountAndFiles(acc)}
@@ -4738,6 +4761,33 @@ if __name__ == "__main__":
                       >
                         <Trash2 className="w-2.5 h-2.5" /> 销毁死号凭证
                       </button>
+                    )}
+
+                    {/* Timeout Safe Notice & Quick Reset */}
+                    {isTimeout && (
+                      <div className="flex items-center justify-between gap-1 bg-amber-950/40 border border-amber-500/40 rounded px-1.5 py-0.5 text-[8.5px] text-amber-200">
+                        <span className="truncate">⏳ 代理波动 (非死号)</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAccountHealthMap(prev => ({
+                              ...prev,
+                              [cleanPhone]: {
+                                status: 'healthy',
+                                label: '🟢 单向自由',
+                                details: '已清除超时标记，账号状态健康',
+                                badgeBg: 'bg-emerald-950/90',
+                                badgeText: 'text-emerald-300',
+                                badgeBorder: 'border-emerald-600'
+                              }
+                            }));
+                          }}
+                          className="text-[8px] bg-amber-800/80 hover:bg-emerald-800 text-white px-1 py-0.2 rounded cursor-pointer shrink-0 font-bold transition-colors"
+                          title="点击消除超时标记，恢复为健康状态"
+                        >
+                          恢复健康
+                        </button>
+                      </div>
                     )}
 
                     {/* Footer: Health & Session Status */}

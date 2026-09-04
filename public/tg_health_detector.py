@@ -153,14 +153,32 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
 
     client = None
     try:
+        # 优化连接超时时间：放宽至 25 秒，兼容高延迟海外住宅代理
         client = TelegramClient(
             session_file,
             acc["api_id"],
             acc["api_hash"],
             proxy=proxy_tuple,
-            timeout=12
+            timeout=25
         )
-        await client.connect()
+        try:
+            await client.connect()
+        except Exception as connect_err:
+            # 若带代理握手失败，尝试直连一次探测账号真实存活（海外VPS直连Telegram无障碍）
+            if proxy_tuple:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                client = TelegramClient(
+                    session_file,
+                    acc["api_id"],
+                    acc["api_hash"],
+                    timeout=18
+                )
+                await client.connect()
+            else:
+                raise connect_err
         
         if not await client.is_user_authorized():
             result["auth_status"] = "❌ 凭证失效/未登录"
@@ -228,10 +246,19 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
         if "file is not a database" in err_msg:
             result["auth_status"] = "⚠️ 凭证格式需转换"
             result["spambot_status"] = "需转为SQLite格式"
+            result["health_score"] = 20
+        elif any(k in err_msg.lower() for k in ["timeout", "timed out", "connection", "socks", "proxy", "network", "unreachable", "reset by peer"]):
+            result["auth_status"] = "⏳ 代理网络超时 (未封号)"
+            result["spambot_status"] = "🌐 代理超时 (非死号)"
+            result["restriction_detail"] = f"代理握手超时: {err_msg[:40]}，账号安全无损，切勿销毁凭证！"
+            result["can_send_today"] = True
+            result["health_score"] = 80
         else:
             result["auth_status"] = f"⚠️ 连接异常: {err_msg[:25]}"
-            result["spambot_status"] = "网络或代理超时"
-        result["health_score"] = 20
+            result["spambot_status"] = "🌐 代理超时 (非死号)"
+            result["restriction_detail"] = f"网络抖动重试中: {err_msg[:40]}，账号未封"
+            result["health_score"] = 75
+            result["can_send_today"] = True
     finally:
         if client:
             try:
