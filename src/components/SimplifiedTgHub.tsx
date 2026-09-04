@@ -2911,10 +2911,16 @@ if __name__ == "__main__":
           await interruptibleSleep(typingDurationMs);
           if (isAbortedRef.current) break;
 
+          setSimpleLogs(prev => [
+            ...prev,
+            `[📡 正在握手 TG 云端 | 通道 #${workerIdx + 1} (${acc.phone.slice(-4)})] 正在通过巴西代理 (${proxyIp}) 发信 ➔ 目标 #${taskIndex + 1} (${cleanPhone})...`
+          ]);
+
           try {
             const resp = await fetch('/api/telethon/run-direct', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(45000),
               body: JSON.stringify({
                 targets: [cleanPhone],
                 message: msgToSend,

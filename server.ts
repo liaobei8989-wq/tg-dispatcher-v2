@@ -1,7 +1,9 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { spawn, execSync } from "child_process";
+import { spawn, execSync, exec } from "child_process";
+import { promisify } from "util";
+const execAsync = promisify(exec);
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import JSZip from "jszip";
@@ -1221,9 +1223,10 @@ async function startServer() {
         // 动态计算超时时间：每目标预留 25 秒，基础保障 180 秒 (3分钟)，防止被系统强杀截断
         const dynamicTimeout = Math.max(180000, (targetList.length || 1) * 25000);
 
-        const pythonOutput = execSync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
+        const { stdout: pythonOutput } = await execAsync(`python3 "${pyDispatcherPath}" '${payloadStr.replace(/'/g, "'\\''")}'`, {
           timeout: dynamicTimeout,
-          encoding: 'utf-8'
+          encoding: 'utf-8',
+          maxBuffer: 10 * 1024 * 1024
         });
 
         const parsedPy = JSON.parse(pythonOutput.trim());
