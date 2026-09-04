@@ -1743,9 +1743,10 @@ async function startServer() {
     }
   });
 
-  // API: TG 账号三级真实健康与官方 @SpamBot 深度体检引擎 (支持一键真机穿透)
+  // API: TG 账号三级真实健康与官方 @SpamBot 深度体检引擎 (支持按分组与选定账号精准穿透)
   app.post("/api/telegram/real-health-check", async (req, res) => {
     try {
+      const { phones } = req.body || {};
       let pyScript = path.join(process.cwd(), "tg_health_detector.py");
       if (!fs.existsSync(pyScript)) {
         pyScript = path.join(process.cwd(), "public", "tg_health_detector.py");
@@ -1754,7 +1755,20 @@ async function startServer() {
         return res.status(404).json({ success: false, error: "未找到 tg_health_detector.py 脚本" });
       }
 
-      const child = spawn("python3", [pyScript, "--json"], {
+      const args = [pyScript, "--json"];
+      if (Array.isArray(phones) && phones.length > 0) {
+        const cleanPhones = phones.map((p: any) => String(p).replace(/\D/g, '')).filter(Boolean).join(',');
+        if (cleanPhones) {
+          args.push(`--phones=${cleanPhones}`);
+        }
+      } else if (typeof phones === 'string' && phones.trim()) {
+        const cleanPhones = phones.replace(/[^\d,]/g, '');
+        if (cleanPhones) {
+          args.push(`--phones=${cleanPhones}`);
+        }
+      }
+
+      const child = spawn("python3", args, {
         cwd: process.cwd(),
         env: { ...process.env, PYTHONUNBUFFERED: "1" }
       });
@@ -1773,13 +1787,16 @@ async function startServer() {
       child.on("close", (code) => {
         try {
           const trimmed = stdout.trim();
-          const jsonStart = trimmed.lastIndexOf("{");
-          if (jsonStart !== -1) {
-            const parsed = JSON.parse(trimmed.slice(jsonStart));
+          const jsonStart = trimmed.indexOf("{");
+          const jsonEnd = trimmed.lastIndexOf("}");
+          if (jsonStart !== -1 && jsonEnd > jsonStart) {
+            const jsonStr = trimmed.slice(jsonStart, jsonEnd + 1);
+            const parsed = JSON.parse(jsonStr);
             return res.json(parsed);
           }
           return res.json({ success: false, raw: stdout, error: stderr });
         } catch (err: any) {
+          console.error("[Health Check JSON Parse Error]:", err.message, "stdout snippet:", stdout.slice(0, 300));
           return res.status(500).json({ success: false, error: err.message, raw: stdout });
         }
       });

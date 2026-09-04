@@ -338,6 +338,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const [showAccountSanitizerModal, setShowAccountSanitizerModal] = useState<boolean>(false);
   const [showChannelWarmupModal, setShowChannelWarmupModal] = useState<boolean>(false);
   const [showFloodWaitBackoffModal, setShowFloodWaitBackoffModal] = useState<boolean>(false);
+  const [showHealthScopeModal, setShowHealthScopeModal] = useState<boolean>(false);
+  const [healthScopeType, setHealthScopeType] = useState<'selected' | 'group' | 'view' | 'all'>('all');
+  const [healthTargetGroup, setHealthTargetGroup] = useState<string>('主力爆破A组');
 
   // Sub-modal states inside TG群发按键
   const [activeSubModal, setActiveSubModal] = useState<'none' | 'warmup' | 'profile' | 'mass_send'>('none');
@@ -435,10 +438,13 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const [twoFaBatchResult, setTwoFaBatchResult] = useState<string>('');
 
   // 🏷️ 账号分组与标签分流调度 State
-  const PRESET_GROUPS = ['主力爆破A组', '新买养号B组', '备用储备C组', '测试组'];
+  const PRESET_GROUPS = ['主力爆破A组', '新买养号B组', '备用储备C组', '测试组', '⚠️ 风控隔离组'];
   const normalizeGroupTag = (tag?: string): string => {
     if (!tag) return '主力爆破A组';
     const t = tag.trim();
+    if (t.includes('隔离') || t.includes('受限') || t.includes('风控') || t.includes('双向') || t.includes('冷冻') || t.includes('封禁')) {
+      return '⚠️ 风控隔离组';
+    }
     if (t === '新进拓展B组' || t === '新进养号B组' || t === '养号B组' || t === 'B组' || t.includes('B组') || t.includes('养号')) {
       return '新买养号B组';
     }
@@ -456,6 +462,23 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   const getGroupColor = (grp?: string) => {
     const norm = normalizeGroupTag(grp);
+    if (norm === '⚠️ 风控隔离组') {
+      return {
+        name: '⚠️ 风控隔离组',
+        shortName: '受限隔离组',
+        icon: '⚠️',
+        textColor: 'text-amber-400',
+        textBright: 'text-amber-300',
+        bgSubtle: 'bg-amber-950/50',
+        borderColor: 'border-amber-500/60',
+        selectClass: 'bg-amber-950/80 border-amber-500/70 text-amber-300 font-bold focus:border-amber-400 shadow-sm shadow-amber-950/50',
+        tabActive: 'bg-gradient-to-r from-amber-600 to-orange-600 text-slate-950 font-black shadow-md shadow-amber-600/30 border border-amber-400',
+        tabInactive: 'bg-amber-950/30 text-amber-400/90 hover:text-amber-200 hover:bg-amber-950/60 border border-amber-800/40',
+        badgeClass: 'bg-amber-950/80 text-amber-300 border border-amber-500/60',
+        quickBtn: 'bg-amber-950/40 hover:bg-amber-950/70 border border-amber-500/50 text-amber-300',
+        optionText: 'text-amber-400'
+      };
+    }
     if (norm === '主力爆破A组') {
       return {
         name: '主力爆破A组',
@@ -495,16 +518,16 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         name: '备用储备C组',
         shortName: '储备C组',
         icon: '📦',
-        textColor: 'text-amber-400',
-        textBright: 'text-amber-300',
-        bgSubtle: 'bg-amber-950/50',
-        borderColor: 'border-amber-500/60',
-        selectClass: 'bg-amber-950/80 border-amber-500/70 text-amber-300 font-bold focus:border-amber-400 shadow-sm shadow-amber-950/50',
-        tabActive: 'bg-gradient-to-r from-amber-600 to-yellow-600 text-slate-950 font-black shadow-md shadow-amber-600/30 border border-amber-400',
-        tabInactive: 'bg-amber-950/30 text-amber-400/90 hover:text-amber-200 hover:bg-amber-950/60 border border-amber-800/40',
-        badgeClass: 'bg-amber-950/80 text-amber-300 border border-amber-500/60',
-        quickBtn: 'bg-amber-950/40 hover:bg-amber-950/70 border border-amber-500/50 text-amber-300',
-        optionText: 'text-amber-400'
+        textColor: 'text-emerald-400',
+        textBright: 'text-emerald-300',
+        bgSubtle: 'bg-emerald-950/50',
+        borderColor: 'border-emerald-500/60',
+        selectClass: 'bg-emerald-950/80 border-emerald-500/70 text-emerald-300 font-bold focus:border-emerald-400 shadow-sm shadow-emerald-950/50',
+        tabActive: 'bg-gradient-to-r from-emerald-600 to-teal-600 text-slate-950 font-black shadow-md shadow-emerald-600/30 border border-emerald-400',
+        tabInactive: 'bg-emerald-950/30 text-emerald-400/90 hover:text-emerald-200 hover:bg-emerald-950/60 border border-emerald-800/40',
+        badgeClass: 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/60',
+        quickBtn: 'bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-500/50 text-emerald-300',
+        optionText: 'text-emerald-400'
       };
     }
     // 测试组
@@ -526,6 +549,50 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   };
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('ALL');
   const [massSendGroupFilter, setMassSendGroupFilter] = useState<string>('ALL');
+
+  // 🛡️ 账号受限自动熔断隔离开关 (体检/发信一旦检测到双向受限/封号，立即自动退出养号B组与群发队列，移至【⚠️ 风控隔离组】)
+  const [autoQuarantineRestricted, setAutoQuarantineRestricted] = useState<boolean>(() => {
+    const saved = localStorage.getItem('tg_auto_quarantine_restricted');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const toggleAutoQuarantine = (val: boolean) => {
+    setAutoQuarantineRestricted(val);
+    localStorage.setItem('tg_auto_quarantine_restricted', String(val));
+    setSimpleLogs(prev => [
+      ...prev,
+      `🛡️ [风控防护开关] 账号受限自动隔离熔断已${val ? '【开启】(受限账号将自动移出B组养号与群发队列)' : '【关闭】'}`
+    ]);
+  };
+
+  // 执行自动隔离移组核心函数
+  const quarantineAccounts = (phones: string[], reason: string) => {
+    const phoneSet = new Set(phones.map(p => p.replace(/\D/g, '')));
+    if (phoneSet.size === 0) return;
+
+    setAccounts(prev => {
+      const updated = prev.map(acc => {
+        const clean = (acc.phone || acc.id).replace(/\D/g, '');
+        if (phoneSet.has(clean)) {
+          return {
+            ...acc,
+            groupTag: '⚠️ 风控隔离组',
+            status: 'restricted' as const
+          };
+        }
+        return acc;
+      });
+      safeSaveAccountsToLocalStorage(updated);
+      saveAccountsToStorage(updated);
+      return updated;
+    });
+
+    setSimpleLogs(prev => [
+      ...prev,
+      `🛡️ [风控自动隔离熔断] 检测到 ${phoneSet.size} 个账号触发 Telegram 限制 (${reason})！`,
+      `⚠️ 已自动将这 ${phoneSet.size} 个账号从【新买养号B组】/原发信分组移出，转入【⚠️ 风控隔离组】冷冻保护，自动退出群发与养号队列！`
+    ]);
+  };
 
   // 📱 账号视图模式、高密搜索与翻页控制 State
   const [accountViewMode, setAccountViewMode] = useState<'grid' | 'table'>('grid');
@@ -1197,7 +1264,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const [simpleLogs, setSimpleLogs] = useState<string[]>([
     '系统就绪，支持一键改资料、定时养号与高速群发',
     `已加载 ${initialTgCount} 个有效 TG 协议 Session 账号`,
-    '已绑定 5 个巴西原生 SOCKS5 代理 IP (200.160.* / 200.239.*) 护航 +55 协议号防封'
+    `已绑定 ${initialTgCount} 组【1号1专属独立IP】(200.152.* / 144.225.* 等) 严格隔离护航 +55 协议号防封`
   ]);
 
   // Server Session Files Management & Browser Persistence
@@ -1607,7 +1674,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       }, 500);
     }
 
-    setSessionUploadStatus(`🎉 成功挂载并永久保存 ${successCount} 个协议文件 (包含 .session / .json)！已绑定 5 组巴西独享 IP！`);
+    setSessionUploadStatus(`🎉 成功挂载并永久保存 ${successCount} 个协议文件 (包含 .session / .json)！已为全部账号绑定 1号1独立原生 IP！`);
     setIsUploadingSession(false);
     fetchUploadedSessions();
   };
@@ -1722,17 +1789,44 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   }>>({});
 
   // Run Real SpamBot & Account Health Inspection (Connected to Server Telethon Engine)
-  const handleRunSpamBotCheck = async () => {
+  const handleRunSpamBotCheck = async (targetAccounts?: AccountSession[], scopeLabel?: string) => {
+    // 智能决定本次待体检账号列表
+    let accountsToCheck: AccountSession[] = [];
+    let scopeDesc = '';
+
+    if (targetAccounts && targetAccounts.length > 0) {
+      accountsToCheck = targetAccounts;
+      scopeDesc = scopeLabel || `${accountsToCheck.length} 个指定账号`;
+    } else if (selectedAccountIds.length > 0) {
+      accountsToCheck = distinctTgAccounts.filter(a => selectedAccountIds.includes(a.id));
+      scopeDesc = scopeLabel || `已选中的 ${accountsToCheck.length} 个账号`;
+    } else if (selectedGroupFilter !== 'ALL') {
+      accountsToCheck = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === selectedGroupFilter);
+      scopeDesc = scopeLabel || `【${selectedGroupFilter}】组 (${accountsToCheck.length}个号)`;
+    } else {
+      accountsToCheck = distinctTgAccounts;
+      scopeDesc = scopeLabel || `全部 ${accountsToCheck.length} 个账号`;
+    }
+
+    if (accountsToCheck.length === 0) {
+      alert('未找到需要检测的协议账号！');
+      return;
+    }
+
+    const phones = accountsToCheck.map(a => (a.phone || a.id).replace(/\D/g, '')).filter(Boolean);
+
     setIsCheckingHealth(true);
+    setShowHealthScopeModal(false);
     setSimpleLogs(prev => [
       ...prev,
-      `[SpamBot 智能健康度体检] 正在唤醒服务器 Telethon 底层引擎，启动 @SpamBot 真实风控与会话握手穿透检测...`
+      `[SpamBot 智能健康度体检 | 范围: ${scopeDesc}] 正在唤醒服务器 Telethon 底层引擎，针对 ${phones.length} 个账号启动穿透检测 (已自动跳过无需检测的健康号)...`
     ]);
 
     try {
       const response = await fetch('/api/telegram/real-health-check', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phones })
       });
 
       if (!response.ok) {
@@ -1776,11 +1870,28 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           }
         }
 
-        setAccountHealthMap(newMap);
+        // 合并保留已有检测结果，不冲掉之前51个健康号！
+        setAccountHealthMap(prev => ({ ...prev, ...newMap }));
+
+        // 🛡️ 账号受限自动熔断隔离：若开启自动隔离，将受限制/失效账号立即移出原分组(B组)，转入【⚠️ 风控隔离组】
+        const restrictedPhones: string[] = [];
+        for (const [phone, info] of Object.entries(newMap)) {
+          if (info.status === 'restricted' || info.status === 'banned') {
+            restrictedPhones.push(phone);
+          }
+        }
+
+        if (autoQuarantineRestricted && restrictedPhones.length > 0) {
+          quarantineAccounts(restrictedPhones, '体检侦测到双向限制/凭证异常');
+        }
+
         setSimpleLogs(prev => [
           ...prev,
-          `🎉 [真实体检完成] 共完成 ${data.total} 个账号穿透检测！`,
-          `🟢 100%健康自由发信: ${data.clean_count} 个 | 🟡 官方受限冷却: ${data.limited_count} 个 | 🔴 凭证失效: ${data.dead_count} 个`
+          `🎉 [真实体检完成 | ${scopeDesc}] 共完成 ${data.total} 个账号穿透检测！`,
+          `🟢 100%健康自由发信: ${data.clean_count} 个 | 🟡 官方受限冷却: ${data.limited_count} 个 | 🔴 凭证失效: ${data.dead_count} 个`,
+          ...(autoQuarantineRestricted && restrictedPhones.length > 0 
+            ? [`🛡️ [自动熔断已生效] 已将 ${restrictedPhones.length} 个受限账号自动退出【新买养号B组】/原队列，移入【⚠️ 风控隔离组】冷冻保护！`] 
+            : [])
         ]);
         setIsCheckingHealth(false);
         return;
@@ -1793,9 +1904,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       ]);
     }
 
-    // Fallback if backend python unavailable
+    // Fallback if backend python unavailable (仅对本次检测的账号进行安全降级标记，保留其他已有状态)
     const fallbackMap: Record<string, any> = {};
-    for (const acc of distinctTgAccounts) {
+    for (const acc of accountsToCheck) {
       const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
       fallbackMap[cleanPhone] = {
         status: 'healthy',
@@ -1806,10 +1917,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         badgeBorder: 'border-emerald-600'
       };
     }
-    setAccountHealthMap(fallbackMap);
+    setAccountHealthMap(prev => ({ ...prev, ...fallbackMap }));
     setSimpleLogs(prev => [
       ...prev,
-      `[体检完成] 已完成全部 ${distinctTgAccounts.length} 个协议号基础状态核验！`
+      `[体检完成 | ${scopeDesc}] 已完成 ${accountsToCheck.length} 个协议号基础状态核验！`
     ]);
     setIsCheckingHealth(false);
   };
@@ -2780,6 +2891,32 @@ if __name__ == "__main__":
       }
       initialAccountPool = filtered;
     }
+
+    // 🛡️ 自动剔除受限制账号 / 隔离组账号 (熔断防护，受限号自动退出群发任务)
+    if (autoQuarantineRestricted) {
+      const beforeCount = initialAccountPool.length;
+      initialAccountPool = initialAccountPool.filter(a => {
+        const cleanP = a.phone.replace(/\D/g, '');
+        const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+        const health = accountHealthMap[cleanP];
+        const isRestricted = health && (health.status === 'restricted' || health.status === 'banned');
+        return !isQuarantined && !isRestricted;
+      });
+      const removedCount = beforeCount - initialAccountPool.length;
+      if (removedCount > 0) {
+        setSimpleLogs(prev => [
+          ...prev,
+          `🛡️ [群发安全熔断] 已自动将 ${removedCount} 个【受限/风控隔离】账号退出群发任务，仅由健康的 ${initialAccountPool.length} 个账号执行发信！`
+        ]);
+      }
+    }
+
+    if (initialAccountPool.length === 0) {
+      alert('⚠️ 当前所有选中的发信账号均处于【⚠️ 风控隔离组】或官方受限状态！\n\n系统已自动保护拦截本次群发，避免账号被 Telegram 官方永久封禁。请先在健康体检中解封或切换至健康分组号。');
+      setIsCampaignRunning(false);
+      return;
+    }
+
     const accountPool = initialAccountPool;
 
     // 辅助随机生成器：单号每发完 15 条自动微休 3~5 分钟 (180 ~ 300 秒)
@@ -2959,6 +3096,17 @@ if __name__ == "__main__":
                 : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号凭证鉴权失败');
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
+
+              // 🛡️ 实时熔断机制：发信遭遇官方限制，立即退出当前账号的群发任务并移入【⚠️ 风控隔离组】
+              const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限/i.test(errDetail);
+              if (isTgRestricted && autoQuarantineRestricted) {
+                quarantineAccounts([acc.phone], `发件中遇到官方限制: ${errDetail}`);
+                setSimpleLogs(prev => [
+                  ...prev,
+                  `🛑 [通道 #${workerIdx + 1} 实时熔断] 账号 ${acc.phone} 遇到 Telegram 官方限制，已自动退出群发任务并移出B组，划入【⚠️ 风控隔离组】冷冻保护！后续任务由其余健康通道无缝继续。`
+                ]);
+                break; // 立即停止该账号后续发信
+              }
             }
           } catch (err: any) {
             if (isAbortedRef.current) break;
@@ -3735,13 +3883,47 @@ if __name__ == "__main__":
               >
                 🧹 一键去重与净化账号库
               </button>
+              {/* 🎯 勾选账号快速体检按钮 (当用户选中账号时高亮显示) */}
+              {selectedAccountIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    const selectedAccs = distinctTgAccounts.filter(a => selectedAccountIds.includes(a.id));
+                    handleRunSpamBotCheck(selectedAccs, `已选中的 ${selectedAccs.length} 个账号`);
+                  }}
+                  disabled={isCheckingHealth}
+                  className="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-[11px] font-extrabold rounded-lg transition-all flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer animate-pulse"
+                  title="仅对您勾选的账号进行 SpamBot 真实穿透体检，跳过其余未发信号"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  🎯 仅检测已选 ({selectedAccountIds.length} 个)
+                </button>
+              )}
+
+              {/* 🏷️ 分组快速体检按钮 (当用户切到特定分组时高亮显示) */}
+              {selectedGroupFilter !== 'ALL' && (
+                <button
+                  onClick={() => {
+                    const grpAccs = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === selectedGroupFilter);
+                    handleRunSpamBotCheck(grpAccs, `【${selectedGroupFilter}】组 (${grpAccs.length}个号)`);
+                  }}
+                  disabled={isCheckingHealth}
+                  className="px-3 py-1 bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/80 text-cyan-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  title={`仅检测当前【${selectedGroupFilter}】组中的账号`}
+                >
+                  <Tag className="w-3.5 h-3.5 text-cyan-400" />
+                  🏷️ 仅检测本组 ({distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === selectedGroupFilter).length} 个)
+                </button>
+              )}
+
+              {/* 🩺 分组/范围/全量健康体检主按钮 */}
               <button
-                onClick={handleRunSpamBotCheck}
+                onClick={() => setShowHealthScopeModal(true)}
                 disabled={isCheckingHealth}
-                className="px-3 py-1 bg-sky-950 hover:bg-sky-900 border border-sky-600/80 text-sky-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                className="px-3 py-1 bg-sky-950 hover:bg-sky-900 border border-sky-600/80 text-sky-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="选择指定分组、已勾选账号或全量进行体检"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isCheckingHealth ? 'animate-spin' : ''}`} />
-                {isCheckingHealth ? '正在查验 SpamBot 状态...' : '🔍 一键检测健康度 (排查双向限制)'}
+                {isCheckingHealth ? '正在查验 SpamBot 状态...' : '🔍 分组/精准体检健康度...'}
               </button>
             </div>
           </div>
@@ -3794,6 +3976,20 @@ if __name__ == "__main__":
               {/* Action buttons */}
               <div className="flex flex-wrap items-center gap-2 self-stretch lg:self-auto">
                 <button
+                  type="button"
+                  onClick={() => toggleAutoQuarantine(!autoQuarantineRestricted)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                    autoQuarantineRestricted
+                      ? 'bg-amber-950/70 border-amber-500/80 text-amber-300 shadow-sm shadow-amber-950/50'
+                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="受限自动熔断隔离：体检或发信中一旦账号受限，立即自动退出B组养号与群发任务，转入【⚠️ 风控隔离组】保护"
+                >
+                  <ShieldAlert className={`w-3.5 h-3.5 ${autoQuarantineRestricted ? 'text-amber-400' : 'text-slate-500'}`} />
+                  <span>受限自动隔离: {autoQuarantineRestricted ? '已开启' : '已关闭'}</span>
+                </button>
+
+                <button
                   onClick={handleBatchCleanBannedAndFiles}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                     distinctTgAccounts.some(a => {
@@ -3825,6 +4021,7 @@ if __name__ == "__main__":
                   <option value="主力爆破A组">🚀 全部划入 ➔ 主力爆破A组 (全速群发)</option>
                   <option value="备用储备C组">📦 全部划入 ➔ 备用储备C组</option>
                   <option value="测试组">⚙️ 全部划入 ➔ 测试组</option>
+                  <option value="⚠️ 风控隔离组">⚠️ 全部划入 ➔ 风控隔离组 (冷冻保护)</option>
                 </select>
               </div>
             </div>
@@ -4039,6 +4236,7 @@ if __name__ == "__main__":
                     <option value="主力爆破A组">🚀 划入 ➔ 主力爆破A组 (全速群发)</option>
                     <option value="备用储备C组">📦 划入 ➔ 备用储备C组</option>
                     <option value="测试组">⚙️ 划入 ➔ 测试组</option>
+                    <option value="⚠️ 风控隔离组">⚠️ 划入 ➔ 风控隔离组 (冷冻保护)</option>
                   </select>
 
                   <button
@@ -4098,6 +4296,60 @@ if __name__ == "__main__":
               </div>
             )}
           </div>
+
+          {/* ⚠️ 风控隔离组专属警示与一键恢复横幅 */}
+          {selectedGroupFilter === '⚠️ 风控隔离组' && (
+            <div className="p-3.5 bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/40 border border-amber-500/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-200 shadow-lg">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-black text-amber-300 flex items-center gap-2">
+                    ⚠️ 当前处于【风控隔离组】冷冻保护区 (共 {distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组').length} 个账号)
+                  </div>
+                  <div className="text-[11px] text-amber-200/90 mt-0.5 leading-relaxed">
+                    本组账号由于在 SpamBot 体检或发信中被判定为临时双向限制、PeerFlood 或未登录状态，系统已将其<span className="text-amber-300 font-bold underline mx-1">自动移出B组养号与群发任务</span>，避免被 Telegram 永久封号。待冷却期结束或官方解封后，您可一键将其批量移回【新买养号B组】。
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const quarantined = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组');
+                    handleRunSpamBotCheck(quarantined, '风控隔离组复检');
+                  }}
+                  disabled={isCheckingHealth}
+                  className="px-3 py-1.5 bg-amber-900/80 hover:bg-amber-800 text-amber-100 font-bold text-xs rounded-lg border border-amber-600/70 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingHealth ? 'animate-spin' : ''}`} />
+                  重新体检本组
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const quarantinedPhones = new Set(distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组').map(a => a.id));
+                    if (quarantinedPhones.size === 0) {
+                      alert('当前风控隔离组中没有账号！');
+                      return;
+                    }
+                    if (confirm(`确认将当前风控隔离组中的 ${quarantinedPhones.size} 个账号全部移回【新买养号B组】继续养号吗？`)) {
+                      setAccounts(prev => {
+                        const updated = prev.map(a => quarantinedPhones.has(a.id) ? { ...a, groupTag: '新买养号B组', status: 'active' as const } : a);
+                        safeSaveAccountsToLocalStorage(updated);
+                        saveAccountsToStorage(updated);
+                        return updated;
+                      });
+                      alert(`✅ 成功将 ${quarantinedPhones.size} 个账号移回【新买养号B组】！`);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  一键全移回【新买养号B组】
+                </button>
+              </div>
+            </div>
+          )}
 
           {distinctTgAccounts.length === 0 ? (
             <div className="p-6 bg-slate-950/80 border border-dashed border-slate-800 rounded-xl text-center space-y-2">
@@ -7118,7 +7370,7 @@ if __name__ == "__main__":
                     onClick={handleStartMassSend}
                     className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-400 hover:from-amber-400 hover:to-teal-300 text-slate-950 shadow-xl shadow-amber-500/20 flex items-center gap-2 transition-all hover:scale-[1.02]"
                   >
-                    <Play className="w-4 h-4 fill-slate-950" /> 🚀 启动云端后台一键群发 (自动挂载 5 个巴西 IP)
+                    <Play className="w-4 h-4 fill-slate-950" /> 🚀 启动云端后台一键群发 (自动挂载 1号1独立IP池)
                   </button>
                 </div>
               </div>
@@ -7318,6 +7570,285 @@ if __name__ == "__main__":
                 className="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all shadow-lg shadow-emerald-500/20"
               >
                 保存并关闭弹窗
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🩺 精准分组/选定账号健康度体检弹窗 (支持针对性跳过免测号) */}
+      {showHealthScopeModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-2xl p-6 shadow-2xl space-y-4 relative text-slate-200">
+            <button
+              onClick={() => setShowHealthScopeModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-400 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                  Telegram 协议号精准健康与风控体检
+                </h3>
+                <p className="text-xs text-slate-400">
+                  支持按分组与勾选范围秒级检测，自动跳过未发信的免测健康账号
+                </p>
+              </div>
+            </div>
+
+            {/* 💡 贴心提示 */}
+            <div className="bg-sky-950/40 border border-sky-600/30 rounded-xl p-3 text-[11px] text-sky-200/90 leading-relaxed flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-amber-300">防风控与提速推荐：</span>
+                昨天购买且已体检健康的 51 个新号如果昨天未发信，今天<span className="underline decoration-sky-400 font-bold">完全无需重复检测</span>！仅检测昨天参与发信的 9 个账号，可有效防止官方 @SpamBot 频次警告，且只需 2~3 秒即可秒级测完！
+              </div>
+            </div>
+
+            {/* 范围选择区域 */}
+            <div className="space-y-2.5">
+              <label className="text-xs font-bold text-slate-300">请选择本次体检范围：</label>
+
+              {/* 选项 1: 仅检测当前勾选账号 */}
+              <div 
+                onClick={() => setHealthScopeType('selected')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  healthScopeType === 'selected'
+                    ? 'bg-purple-950/40 border-purple-500 shadow-md shadow-purple-500/10 ring-1 ring-purple-500/50'
+                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    healthScopeType === 'selected' ? 'border-purple-400 bg-purple-500' : 'border-slate-600'
+                  }`}>
+                    {healthScopeType === 'selected' && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full" />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-white flex items-center gap-2">
+                      🎯 仅检测已勾选账号
+                      {selectedAccountIds.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          已选 {selectedAccountIds.length} 个号
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {selectedAccountIds.length > 0 
+                        ? `精准针对列表中选中的 ${selectedAccountIds.length} 个号执行真机穿透检测`
+                        : '（当前列表尚未勾选账号，可在下方选择特定分组或先在列表中勾选）'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 选项 2: 按指定分组检测 */}
+              <div 
+                onClick={() => setHealthScopeType('group')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
+                  healthScopeType === 'group'
+                    ? 'bg-cyan-950/40 border-cyan-500 shadow-md shadow-cyan-500/10 ring-1 ring-cyan-500/50'
+                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      healthScopeType === 'group' ? 'border-cyan-400 bg-cyan-500' : 'border-slate-600'
+                    }`}>
+                      {healthScopeType === 'group' && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-extrabold text-white flex items-center gap-2">
+                        🏷️ 按指定业务分组检测
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        仅对指定分组中的账号进行体检，其他分组完全跳过
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 分组选择下拉 */}
+                {healthScopeType === 'group' && (
+                  <div className="pt-2 pl-7 flex items-center gap-2 flex-wrap">
+                    {PRESET_GROUPS.map(grp => {
+                      const count = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === grp).length;
+                      const isSelected = healthTargetGroup === grp;
+                      return (
+                        <button
+                          key={grp}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHealthTargetGroup(grp);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
+                              : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-700'
+                          }`}
+                        >
+                          <span>{grp}</span>
+                          <span className="text-[10px] opacity-80">({count}个)</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 选项 3: 当前页面筛选视图 */}
+              <div 
+                onClick={() => setHealthScopeType('view')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  healthScopeType === 'view'
+                    ? 'bg-emerald-950/40 border-emerald-500 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/50'
+                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    healthScopeType === 'view' ? 'border-emerald-400 bg-emerald-500' : 'border-slate-600'
+                  }`}>
+                    {healthScopeType === 'view' && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full" />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-white flex items-center gap-2">
+                      ⚡ 检测当前筛选视图
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        当前过滤出 {filteredTgAccounts.length} 个号
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      依据当前上方所选的分组或搜索关键词筛选出来的账号
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 选项 4: 全量体检 */}
+              <div 
+                onClick={() => setHealthScopeType('all')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  healthScopeType === 'all'
+                    ? 'bg-sky-950/40 border-sky-500 shadow-md shadow-sky-500/10 ring-1 ring-sky-500/50'
+                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    healthScopeType === 'all' ? 'border-sky-400 bg-sky-500' : 'border-slate-600'
+                  }`}>
+                    {healthScopeType === 'all' && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full" />}
+                  </div>
+                  <div>
+                    <div className="text-xs font-extrabold text-white flex items-center gap-2">
+                      🌐 全量全部账号检测 ({distinctTgAccounts.length} 个)
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      全面检测系统内所有账号（由 6 协程并发穿透，约 12~15 秒完成）
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 🛡️ 账号受限自动熔断隔离开关 (解决用户提问: "如果账号受限制了可以设置自动退出B组养号吗，自动退出群发任务") */}
+            <div 
+              onClick={() => toggleAutoQuarantine(!autoQuarantineRestricted)}
+              className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                autoQuarantineRestricted 
+                  ? 'bg-amber-950/40 border-amber-500/80 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/30' 
+                  : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 opacity-75'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className={`w-4 h-4 mt-0.5 shrink-0 ${autoQuarantineRestricted ? 'text-amber-400' : 'text-slate-500'}`} />
+                <div>
+                  <div className="text-xs font-black text-white flex items-center gap-2">
+                    🛡️ 账号受限自动熔断隔离保护
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                      autoQuarantineRestricted 
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                      {autoQuarantineRestricted ? '已开启 (强力保护)' : '已关闭'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300/90 mt-0.5 leading-relaxed">
+                    体检或发信中一旦检测到账号出现官方双向限制或凭证失效：
+                    <span className="text-amber-300 font-bold block">
+                      👉 立即自动移出【新买养号B组】，自动移出群发任务队列，并转入【⚠️ 风控隔离组】冷冻保护！
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`w-11 h-6 rounded-full transition-colors p-1 flex items-center shrink-0 ml-2 ${
+                autoQuarantineRestricted ? 'bg-amber-500 justify-end' : 'bg-slate-800 justify-start'
+              }`}>
+                <div className="w-4 h-4 rounded-full bg-slate-950 shadow-md" />
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowHealthScopeModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+              >
+                取消
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  let targets: AccountSession[] = [];
+                  let label = '';
+                  if (healthScopeType === 'selected') {
+                    targets = distinctTgAccounts.filter(a => selectedAccountIds.includes(a.id));
+                    label = `已选中的 ${targets.length} 个账号`;
+                    if (targets.length === 0) {
+                      alert('您尚未在列表中勾选任何账号，请勾选后再试或选择指定分组！');
+                      return;
+                    }
+                  } else if (healthScopeType === 'group') {
+                    targets = distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === healthTargetGroup);
+                    label = `【${healthTargetGroup}】组 (${targets.length}个号)`;
+                    if (targets.length === 0) {
+                      alert(`【${healthTargetGroup}】分组中暂无账号，请先为账号划分分组！`);
+                      return;
+                    }
+                  } else if (healthScopeType === 'view') {
+                    targets = filteredTgAccounts;
+                    label = `当前视图筛选出的 ${targets.length} 个账号`;
+                    if (targets.length === 0) {
+                      alert('当前筛选视图下没有账号！');
+                      return;
+                    }
+                  } else {
+                    targets = distinctTgAccounts;
+                    label = `全部 ${targets.length} 个账号`;
+                  }
+
+                  handleRunSpamBotCheck(targets, label);
+                }}
+                disabled={isCheckingHealth}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-teal-400 hover:from-sky-400 hover:to-teal-300 text-slate-950 font-black text-xs transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-slate-950" />
+                {healthScopeType === 'selected' && `🚀 立即启动体检 (已选 ${selectedAccountIds.length} 个账号)`}
+                {healthScopeType === 'group' && `🚀 立即体检【${healthTargetGroup}】(${distinctTgAccounts.filter(a => normalizeGroupTag(a.groupTag) === healthTargetGroup).length} 个账号)`}
+                {healthScopeType === 'view' && `🚀 立即体检当前视图 (${filteredTgAccounts.length} 个账号)`}
+                {healthScopeType === 'all' && `🚀 立即启动全量体检 (${distinctTgAccounts.length} 个账号)`}
               </button>
             </div>
           </div>

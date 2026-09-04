@@ -4,6 +4,14 @@
 ====================================================================
 🩺 Telegram 协议号真实健康与风控状态检测器 (tg_health_detector.py)
 ====================================================================
+三级真机穿透检测：
+1. MTProto 握手校验：检测 Session 是否掉线、注销或封号 (get_me)
+2. 代理穿透与自适应：支持 HTTP / SOCKS5 代理穿透
+3. 官方 @SpamBot 穿透测试 (支持英葡双语):
+   - 向官方 @SpamBot 发送 /start 命令并分析官方真实回复
+   - 提取精确解封时间 (UTC / 本地时间)
+   - 支持 --json 输出模式，无缝供 Web 控制台一键调度
+====================================================================
 """
 
 import os
@@ -13,7 +21,7 @@ import json
 import time
 import asyncio
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Set
 
 try:
     from telethon import TelegramClient
@@ -26,7 +34,7 @@ try:
     )
 except ImportError:
     try:
-        os.system("pip3 install telethon pysocks || pip install telethon pysocks")
+        os.system("(pip3 install telethon pysocks || pip install telethon pysocks) >/dev/null 2>&1")
         from telethon import TelegramClient
         from telethon.errors import (
             UserDeactivatedError,
@@ -47,11 +55,13 @@ DEFAULT_API_ID = 2040
 DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
 
 def parse_proxy(proxy_str: str):
+    """解析 host:port:user:pass 代理，支持 SOCKS5 与 HTTP"""
     if not proxy_str or not isinstance(proxy_str, str):
         return None
     try:
-        parts = proxy_str.strip().split(':')
-        ptype = socks.HTTP if (socks and hasattr(socks, 'HTTP')) else 2
+        clean = proxy_str.strip().replace("socks5://", "").replace("http://", "")
+        parts = clean.split(':')
+        ptype = socks.SOCKS5 if (socks and hasattr(socks, 'SOCKS5')) else (socks.HTTP if (socks and hasattr(socks, 'HTTP')) else 2)
         if len(parts) >= 4:
             return (ptype, parts[0], int(parts[1]), True, parts[2], parts[3])
         elif len(parts) == 2:
@@ -60,10 +70,12 @@ def parse_proxy(proxy_str: str):
         pass
     return None
 
-def load_account_configs(sessions_dir: str = "sessions") -> List[Dict[str, Any]]:
+def load_account_configs(sessions_dir: str = "sessions", target_phones: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
+    """扫描所有 session 文件及关联配置，支持按指定号码列表精准过滤"""
     accounts = []
     proxy_map = {}
     
+    # 尝试读取代理映射
     for candidate in ["account_proxies.json", os.path.join(sessions_dir, "account_proxies.json")]:
         if os.path.exists(candidate):
             try:
@@ -87,6 +99,10 @@ def load_account_configs(sessions_dir: str = "sessions") -> List[Dict[str, Any]]
         basename = os.path.basename(jf).replace(".json", "")
         if re.match(r'^\d+$', basename):
             all_phones.add(basename)
+
+    # 若指定了目标手机号集合，则精准过滤
+    if target_phones:
+        all_phones = {p for p in all_phones if p in target_phones}
 
     for phone in sorted(list(all_phones)):
         json_path = os.path.join(sessions_dir, f"{phone}.json")
@@ -157,10 +173,11 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
         result["user_name"] = user_name
         result["auth_status"] = f"✅ 正常在线 ({user_name})"
         
+        # 查询官方 @SpamBot
         try:
             spambot = await client.get_entity("SpamBot")
             await client.send_message(spambot, "/start")
-            await asyncio.sleep(2.2)
+            await asyncio.sleep(2.2)  # 等待机器人应答
             
             messages = await client.get_messages(spambot, limit=2)
             bot_reply = messages[0].text if messages else ""
@@ -226,32 +243,45 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
 
 async def main():
     as_json = "--json" in sys.argv
-    accounts = load_account_configs()
+    
+    phones_arg = None
+    for arg in sys.argv:
+        if arg.startswith("--phones="):
+            phones_arg = arg.split("=", 1)[1]
+    
+    target_set = None
+    if phones_arg:
+        target_set = set(re.sub(r'[^\d,]', '', phones_arg).split(','))
+        target_set = {p for p in target_set if p}
+
+    accounts = load_account_configs(target_phones=target_set)
     
     if as_json:
         if not accounts:
             print(json.dumps({"success": False, "total": 0, "results": [], "summary": {"clean": 0, "limited": 0, "dead": 0}}))
             return
-        results = []
-        clean_count, limited_count, dead_count = 0, 0, 0
-        for acc in accounts:
-            res = await check_single_account(acc)
-            results.append(res)
-            if res["health_score"] >= 90:
-                clean_count += 1
-            elif res["health_score"] >= 30:
-                limited_count += 1
-            else:
-                dead_count += 1
-            await asyncio.sleep(0.5)
             
+        # 并发检测，最多 6 个并发协程，防止瞬间流量冲击
+        sem = asyncio.Semaphore(6)
+        async def bounded_check(acc):
+            async with sem:
+                res = await check_single_account(acc)
+                await asyncio.sleep(0.2)
+                return res
+
+        results = await asyncio.gather(*(bounded_check(acc) for acc in accounts))
+        
+        clean_count = sum(1 for r in results if r.get("health_score", 0) >= 90)
+        limited_count = sum(1 for r in results if 30 <= r.get("health_score", 0) < 90)
+        dead_count = sum(1 for r in results if r.get("health_score", 0) < 30)
+
         print(json.dumps({
             "success": True,
             "total": len(accounts),
             "clean_count": clean_count,
             "limited_count": limited_count,
             "dead_count": dead_count,
-            "results": results
+            "results": list(results)
         }, ensure_ascii=False))
         return
 
