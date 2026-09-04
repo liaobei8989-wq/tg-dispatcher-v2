@@ -4188,11 +4188,28 @@ if __name__ == "__main__":
                   type="button"
                   onClick={() => {
                     setAccountHealthMap({});
+                    let restoredCount = 0;
+                    setAccounts(prev => {
+                      const updated = prev.map(a => {
+                        if (normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组') {
+                          restoredCount++;
+                          return { ...a, groupTag: '新买养号B组', status: 'active' as const };
+                        }
+                        return a;
+                      });
+                      safeSaveAccountsToLocalStorage(updated);
+                      saveAccountsToStorage(updated);
+                      return updated;
+                    });
+                    setSimpleLogs(prev => [
+                      ...prev,
+                      `🟢 [一键全绿完成] 已清除所有网络与超时标记！${restoredCount > 0 ? `并将 ${restoredCount} 个账号安全移回【新买养号B组】！` : '所有账号均处于健康状态！'}`
+                    ]);
                   }}
-                  className="px-2 py-0.5 rounded bg-emerald-950/50 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1"
-                  title="一键消除网络/代理超时误报，将所有账号恢复为健康状态"
+                  className="px-2.5 py-0.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1 shadow-sm"
+                  title="一键消除网络/代理超时误报，将所有账号恢复为全绿健康状态并移回新买养号B组"
                 >
-                  🟢 清除超时误报 (一键全绿)
+                  🟢 清除误报 (一键全绿并移回B组)
                 </button>
               </div>
 
