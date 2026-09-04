@@ -574,8 +574,11 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       const updated = prev.map(acc => {
         const clean = (acc.phone || acc.id).replace(/\D/g, '');
         if (phoneSet.has(clean)) {
+          const currentGroup = normalizeGroupTag(acc.groupTag);
+          const orig = currentGroup !== '⚠️ 风控隔离组' ? currentGroup : ((acc as any).originalGroupTag || '主力爆破A组');
           return {
             ...acc,
+            originalGroupTag: orig,
             groupTag: '⚠️ 风控隔离组',
             status: 'restricted' as const
           };
@@ -590,7 +593,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setSimpleLogs(prev => [
       ...prev,
       `🛡️ [风控自动隔离熔断] 检测到 ${phoneSet.size} 个账号触发 Telegram 限制 (${reason})！`,
-      `⚠️ 已自动将这 ${phoneSet.size} 个账号从【新买养号B组】/原发信分组移出，转入【⚠️ 风控隔离组】冷冻保护，自动退出群发与养号队列！`
+      `⚠️ 已自动将这 ${phoneSet.size} 个账号从原发信分组移出，转入【⚠️ 风控隔离组】冷冻保护，自动退出群发与养号队列！`
     ]);
   };
 
@@ -4193,7 +4196,8 @@ if __name__ == "__main__":
                       const updated = prev.map(a => {
                         if (normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组') {
                           restoredCount++;
-                          return { ...a, groupTag: '新买养号B组', status: 'active' as const };
+                          const targetGroup = (a as any).originalGroupTag || '主力爆破A组';
+                          return { ...a, groupTag: targetGroup, status: 'active' as const };
                         }
                         return a;
                       });
@@ -4203,13 +4207,13 @@ if __name__ == "__main__":
                     });
                     setSimpleLogs(prev => [
                       ...prev,
-                      `🟢 [一键全绿完成] 已清除所有网络与超时标记！${restoredCount > 0 ? `并将 ${restoredCount} 个账号安全移回【新买养号B组】！` : '所有账号均处于健康状态！'}`
+                      `🟢 [一键全绿完成] 已清除所有误报标记！${restoredCount > 0 ? `并将 ${restoredCount} 个误判账号全部安全移回原发信分组（主力爆破A组/B组）！` : '所有账号均处于健康在线状态！'}`
                     ]);
                   }}
                   className="px-2.5 py-0.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1 shadow-sm"
-                  title="一键消除网络/代理超时误报，将所有账号恢复为全绿健康状态并移回新买养号B组"
+                  title="一键消除网络/代理超时误报，将所有账号恢复为全绿健康状态并移回原分组"
                 >
-                  🟢 清除误报 (一键全绿并移回B组)
+                  🟢 清除误报 (一键全绿恢复原分组)
                 </button>
               </div>
 
