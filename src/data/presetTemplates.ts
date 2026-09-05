@@ -1,6 +1,41 @@
 import { PromotionalTemplate } from '../types';
 
 export const PRESET_TEMPLATES: PromotionalTemplate[] = [
+  // ================= 2026 巴西本土实战王牌文案 (免充测试金 / Tigrinho 爆款 / PIX秒到) =================
+  {
+    id: 'tiger-sem-deposito-1',
+    name: '🐯 [2026 爆款实战 1] R$ 15 免充值注册金 + PIX 秒提 (转化率王牌)',
+    category: 'welcome_bonus',
+    platformTarget: 'telegram',
+    isDefault: true,
+    content: `{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação. Resgata por aqui antes que expire:\n{URL}`,
+    mediaType: 'none',
+    mediaUrl: '',
+    variables: ['URL']
+  },
+  {
+    id: 'tiger-minutos-pagantes-2',
+    name: '⚡ [2026 爆款实战 2] Tigrinho 放水时段 + 50次免费旋转 (高点击)',
+    category: 'welcome_bonus',
+    platformTarget: 'telegram',
+    isDefault: false,
+    content: `Fala jogador! A plataforma nova tá com o Fortune Tiger 🐯 soltando carta direto hoje! Liberou 50 Giros Grátis + R$ 20 no cadastro pra você forrar no PIX sem risco. Link oficial ativado aqui:\n{URL}`,
+    mediaType: 'none',
+    mediaUrl: '',
+    variables: ['URL']
+  },
+  {
+    id: 'tiger-human-vip-3',
+    name: '🎁 [2026 爆款实战 3] 专属测试金发放 (真人客服人设 / 破除陌生戒备)',
+    category: 'custom',
+    platformTarget: 'telegram',
+    isDefault: false,
+    content: `Opa amigo! Sou eu do suporte da plataforma. Como você joga, o sistema liberou um voucher teste de R$ 15 a R$ 25 no seu CPF/número hoje. Dá pra forrar nos slots e sacar na hora pro seu PIX. Dá uma olhada aqui pra resgatar:\n{URL}`,
+    mediaType: 'none',
+    mediaUrl: '',
+    variables: ['URL']
+  },
+
   // ================= Mostbet 盘口专属文案 (1 ~ 3) =================
   {
     id: 'mostbet-1-lpl-500bonus',

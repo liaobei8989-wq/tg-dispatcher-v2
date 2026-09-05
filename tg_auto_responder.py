@@ -70,19 +70,42 @@ ALL_100_SUBDOMAINS = [
     for idx, prefix in enumerate(SUB_PREFIXES)
 ]
 
-SECOND_MESSAGE_TEMPLATES = [
-    "🔥 PROMOÇÃO EXCLUSIVA! 🎁 500% de Bônus! 🎰 Cadastre-se e receba na hora: {URL}",
-    "🔥 BÔNUS EXCLUSIVO LIBERADO! 🎁 Claim 500% de Bônus de Depósito + 150 Rodadas Grátis (Free Spins)! 💰 Convide 1 pessoa e ganhe R$ 60 no PIX instantâneo! 🎡 Acesse agora: {URL}",
-    "🎁 {GANHE SEU BÔNUS VIP HOJE|BÔNUS LIBERADO}! 💰 Cadastre-se e ganhe 200% de bônus no seu primeiro PIX + 100 Giros Grátis! 🎰 Acesse agora e forre alto: {URL}",
-    "⚡ {Oportunidade VIP|Bônus Especial}! 🎁 500% de bônus exclusivo no cadastro + Saque PIX imediato em menos de 1 minuto! 🚀 Aproveite aqui: {URL}"
+# ==============================================================================
+# 🇧🇷 2026 巴西本土实战高转化率话术库 (真人人设 + 免充心智 + Tigrinho 爆款)
+# ==============================================================================
+
+# 意图 1：当客户询问身份（"Quem é?", "De onde me conhece?", "Não te conheço", "O que é?"）
+INTENT_WHO_ARE_YOU_TEMPLATES = [
+    "Opa amigo! Sou eu da plataforma parceira do Telegram. Seu número foi selecionado hoje pra receber um saldo teste de R$ 15 no PIX sem precisar depositar! Dá pra testar no Tigrinho 🐯 e se forrar o saque cai direto na sua conta. O link oficial pra resgatar é esse: {URL}",
+    "Fala parceiro! Sou do suporte VIP de jogos. Te mandei mensagem porque liberou uma cortesia de R$ 10 a R$ 20 grátis pro seu perfil hoje pra rodar o Fortune Tiger 🎰. Sem pegadinha de depósito! Ativa rapidinho por aqui antes que expire: {URL}",
+    "Opa! Vi você participando de canais de apostas e o sistema liberou um código VIP pro seu Telegram: R$ 15 de crédito grátis de boas-vindas sem depósito no PIX. Entra por aqui e testa a sorte no Tigrinho: {URL}",
+    "E aí meu amigo, tudo joia? Sou da equipe da nova plataforma. Como você joga, liberaram giros grátis + saldo de cortesia de cadastro pra você testar a banca hoje! Resgata aqui direto: {URL}"
 ]
 
+# 意图 2：当客户询问玩法/真假/索要链接（"Como funciona?", "É verdade?", "Paga mesmo?", "Quero", "Manda", "Passa o link"）
+INTENT_HOW_IT_WORKS_TEMPLATES = [
+    "É bem simples mano! É só cadastrar rapidinho pelo link oficial que o saldo teste cai na hora pra você rodar o Tigrinho 🐯. Não precisa por dinheiro do bolso, e se forrar o saque vai direto pro seu PIX em menos de 1 minuto: {URL}",
+    "Paga sim chefe, 100% no PIX! O sistema tá dando R$ 15 grátis no cadastro pras primeiras contas hoje. Cria a conta em 30 segundos e vai direto no Fortune Tiger que tá soltando carta agora: {URL}",
+    "Com certeza irmão! Plataforma nova com licença oficial e pagamento instantâneo. Pega seu bônus de cortesia sem depósito aqui e boa forra: {URL}",
+    "Super fácil amigo! Clica no link, faz o cadastro básico e o bônus já ativa na conta pra você jogar. Link direto sem enrolação: {URL}"
+]
+
+# 意图 3：通用回复与问候（"Oi", "Olá", "Bom dia", "Boa tarde", "E aí", 或其他一般回复）
+SECOND_MESSAGE_TEMPLATES = [
+    "Opa parceiro, tudo bem? Passando pra te avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {URL}",
+    "E aí amigo! A plataforma nova tá com evento hoje dando rodadas grátis + bônus de cortesia no PIX pra quem se cadastrar agora. Tá soltando muita carta no Tigrinho 🎰! Resgata a sua parte aqui: {URL}",
+    "Fala jogador! Liberamos um bônus especial de boas-vindas pro seu perfil hoje: sem pegadinha de depósito, só cadastrar e rodar! O link oficial é esse: {URL}",
+    "Opa! Tá sabendo do bug dos minutos pagantes no Tigrinho hoje? 🐯 Liberou saldo de teste grátis pra você testar agora na plataforma nova. Dá uma conferida aqui: {URL}",
+    "Oi amigo! Consegui liberar um voucher de bônus VIP pro seu número: R$ 15 a R$ 20 grátis no cadastro com saque imediato no PIX! Acesse e aproveite: {URL}"
+]
+
+# 第 3 阶段：真人有温度的关照与指导（代替生硬广告祝福）
 THIRD_BLESSING_TEMPLATES = [
-    "🚀 Arrebenta lá amigo! Hoje a forra é certa! 🎰💵 Qualquer dúvida estou por aqui! 😉",
-    "🍀 Boa sorte nas jogadas! Que venha o grande jackpot hoje! 💰🔥",
-    "👑 Vai com tudo, que hoje o PIX cai em dobro na sua conta! 🤑✨",
-    "🎯 Torcendo pelo seu forro hoje! Se precisar de dicas de slots é só chamar! 🎲💎",
-    "🔥 Sucesso meu amigo! Que venha muitos ganhos hoje! 🎰💵 Tamo junto! 😉"
+    "🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que a plataforma tá pagando muito! 🍀",
+    "✨ Dica de ouro: joga no Tigrinho na aposta mínima primeiro que a cartinha tá vindo rápido hoje! Boa sorte amigo 🎰💵",
+    "💸 Só lembra de usar a mesma chave PIX do seu CPF na hora de sacar pro dinheiro cair na hora blz? Tamo junto! 😉",
+    "🚀 Se der forra grande manda o print aqui pra mim hein! Arrebenta lá nos giros! 🤑💎",
+    "🎰 Vai com tudo irmão! Qualquer coisa sobre o saque no PIX é só me chamar aqui! 👑✨"
 ]
 
 def get_random_url() -> str:
@@ -488,13 +511,26 @@ async def start_account_listener(session_path: str):
                     except Exception:
                         pass
 
-                    msg_text = str(event.text or event.raw_text or "")
+                    msg_text = str(event.text or event.raw_text or "").strip()
+                    lower_msg = msg_text.lower()
                     print(f"\n📩 [收到客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'}) | 内容: \"{msg_text}\"")
 
-                    # 拟人延时 1.5 ~ 3 秒后发送第 2 阶段彩金链接
-                    await asyncio.sleep(random.uniform(1.5, 3.0))
+                    # 智能客户意图匹配：根据客户说的话匹配真人回复
+                    if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
+                        matched_intent = "身份释疑"
+                        rand_template = random.choice(INTENT_WHO_ARE_YOU_TEMPLATES)
+                    elif any(k in lower_msg for k in ['como', 'funciona', 'paga', 'verdade', 'golpe', 'quero', 'manda', 'passa', 'link', 'pix', 'onde clica']):
+                        matched_intent = "玩法/领福利"
+                        rand_template = random.choice(INTENT_HOW_IT_WORKS_TEMPLATES)
+                    else:
+                        matched_intent = "通用问候"
+                        rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
+
+                    print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
+
+                    # 拟人延时 2.0 ~ 3.8 秒后发送第 2 阶段彩金链接
+                    await asyncio.sleep(random.uniform(2.0, 3.8))
                     
-                    rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
                     rand_url = get_random_url()
                     second_msg = parse_spintax(rand_template).replace("{URL}", rand_url)
                     

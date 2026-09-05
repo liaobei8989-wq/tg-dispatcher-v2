@@ -1188,10 +1188,12 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   const [greetingText, setGreetingText] = useState<string>(OPTIMIZED_100_DAY_SPINTAX_GREETING);
   const [followupLinkText, setFollowupLinkText] = useState<string>(() => {
-    return `🔥 {BÔNUS EXCLUSIVO LIBERADO|GANHE SEU BÔNUS VIP HOJE}! 🎁 {Claim 500% de Bônus de Depósito + 150 Rodadas Grátis (Free Spins)|200% de Bônus VIP + 100 Giros Grátis}! 💰 Convide 1 pessoa e ganhe R$ 60 no PIX instantâneo (Afiliado até R$ 1.000)! 🎡 Roleta da Sorte & Chuva de Dinheiro: ${get100SubdomainsSpintax()}`;
+    return `{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação. Resgata por aqui antes que expire: ${get100SubdomainsSpintax()}`;
   });
   // 阶段三：祝老板中奖/暴富祝福语 (Spintax 变量语法 + 官方推荐 3~6s 拟人延时)
-  const [blessingText, setBlessingText] = useState<string>(DEFAULT_BLESSING_SPINTAX);
+  const [blessingText, setBlessingText] = useState<string>(() => {
+    return `🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀`;
+  });
   const [enableBlessing, setEnableBlessing] = useState<boolean>(true);
   const [blessingDelayMin, setBlessingDelayMin] = useState<number>(3.5);
   const [blessingDelayMax, setBlessingDelayMax] = useState<number>(6.0);
@@ -1201,7 +1203,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const [massDataText, setMassDataText] = useState<string>('');
   const [massFileName, setMassFileName] = useState<string>('');
   const [massMessageText, setMassMessageText] = useState<string>(() => {
-    return `🔥 {PROMOÇÃO EXCLUSIVA|GANHE BÔNUS HOJE}! 🎁 {500% de Bônus + 150 Spins|200% de bônus no PIX}! 🎰 Cadastre-se e receba na hora: ${get100SubdomainsSpintax()}`;
+    return `{Opa parceiro!|Fala jogador!} Liberou um bônus especial sem depósito de R$ 15 a R$ 25 no seu cadastro pra rodar o Fortune Tiger 🐯! Saque direto via PIX. Resgate seu acesso aqui: ${get100SubdomainsSpintax()}`;
   });
 
   // Batch Result Alert Modal State (提示群发结果/失败通知)
@@ -7374,7 +7376,14 @@ if __name__ == "__main__":
                           }}
                           className="bg-amber-950/80 hover:bg-amber-900 text-amber-200 border border-amber-500/40 text-[11px] font-bold rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
                         >
-                          <option value="">🔥 载入双盘口爆款文案库 (Mostbet / 933)...</option>
+                          <option value="">🔥 载入双盘口/爆款文案库 (Tigrinho / Mostbet / 933)...</option>
+                          <optgroup label="🐯 2026 爆款实战 (免充测试金 / Tigrinho 放水 / PIX秒到)">
+                            {PRESET_TEMPLATES.filter(t => t.id.startsWith('tiger')).map((tpl) => (
+                              <option key={tpl.id} value={tpl.id}>
+                                {tpl.name}
+                              </option>
+                            ))}
+                          </optgroup>
                           <optgroup label="🔴 Mostbet 盘口 (500%首充 / LPL / PIX)">
                             {PRESET_TEMPLATES.filter(t => t.id.startsWith('mostbet')).map((tpl) => (
                               <option key={tpl.id} value={tpl.id}>
@@ -7402,12 +7411,32 @@ if __name__ == "__main__":
                         <button
                           type="button"
                           onClick={() => {
+                            const tpl = PRESET_TEMPLATES.find(t => t.id === 'tiger-sem-deposito-1');
+                            if (tpl) setFollowupLinkText(tpl.content);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-200 font-bold transition-colors animate-pulse"
+                        >
+                          🐯 R$15 免充测试金+PIX (点击率最高)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tpl = PRESET_TEMPLATES.find(t => t.id === 'tiger-minutos-pagantes-2');
+                            if (tpl) setFollowupLinkText(tpl.content);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-300 font-bold transition-colors"
+                        >
+                          ⚡ Tigrinho 放水+50 Spins
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             const tpl = PRESET_TEMPLATES.find(t => t.id === 'mostbet-1-lpl-500bonus');
                             if (tpl) setFollowupLinkText(tpl.content);
                           }}
                           className="px-2 py-0.5 rounded text-[10px] bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-300 font-bold transition-colors"
                         >
-                          🔴 Mostbet LPL 500%+150Spins
+                          🔴 Mostbet 500%+150Spins
                         </button>
                         <button
                           type="button"

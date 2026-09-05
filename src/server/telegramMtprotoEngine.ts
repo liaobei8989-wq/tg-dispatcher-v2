@@ -240,8 +240,8 @@ export async function executeTelegramDirectSend(
 
   const targets = options.targets && options.targets.length > 0 ? options.targets : ['+5571996984203'];
   const greetingTemplate = options.message || "{Oi, tudo bem? Vi você lá no grupo dos jogos, achei seu perfil tão legal e resolvi chamar. 😊|Olá! Tudo bem? Entrei no grupo de jogos esses dias e vi você comentando, adoro gente que joga sério! 😉}";
-  const secondTemplate = options.second_message || "🔥 PROMOÇÃO EXCLUSIVA! 🎁 500% de Bônus! 🎰 Cadastre-se e receba na hora: {https://m1.promobr1.xyz/pt|https://m2.promobr2.xyz/pt|https://m3.promobr1.xyz/pt}";
-  const thirdTemplate = options.third_message || "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Boa sorte|🚀 Arrebenta lá|🔥 Sucesso} {patrão|chefe|meu amigo|campeão|amigo}! {Que venha o grande jackpot|Hoje a forra é certa|Bora lucrar pesado nos giros|Que venha muitos ganhos hoje}! 🎰💵 {Qualquer dúvida estou por aqui|Se precisar de ajuda só chamar|Tamo junto}! 😉";
+  const secondTemplate = options.second_message || "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
+  const thirdTemplate = options.third_message || "🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀";
   const enableThirdMessage = options.enable_third_message !== undefined ? options.enable_third_message : true;
   const autoSendSecond = options.auto_send_second !== undefined ? options.auto_send_second : true;
   const waitForReply = options.wait_for_reply !== undefined ? options.wait_for_reply : true;
@@ -493,8 +493,8 @@ export async function executeTelegramReplyScanner(
   };
 
   const accounts = loadAllTelegramAccounts();
-  const secondTemplate = "🔥 PROMOÇÃO EXCLUSIVA! 🎁 500% de Bônus! 🎰 Cadastre-se e receba na hora: {https://m1.promobr1.xyz/pt|https://m2.promobr2.xyz/pt|https://m3.promobr1.xyz/pt}";
-  const thirdTemplate = "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Boa sorte|🚀 Arrebenta lá|🔥 Sucesso} {patrão|chefe|meu amigo|campeão|amigo}! {Que venha o grande jackpot|Hoje a forra é certa|Bora lucrar pesado nos giros|Que venha muitos ganhos hoje}! 🎰💵 {Qualquer dúvida estou por aqui|Se precisar de ajuda só chamar|Tamo junto}! 😉";
+  const secondTemplate = "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
+  const thirdTemplate = "🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀";
   const statsFilePath = path.join(process.cwd(), 'sessions', 'auto_scanner_stats.json');
 
   log("==================================================");

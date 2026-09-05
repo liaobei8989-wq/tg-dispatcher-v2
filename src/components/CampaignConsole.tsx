@@ -144,10 +144,10 @@ export const CampaignConsole: React.FC<CampaignConsoleProps> = ({
     '{Olá|Oi|E aí|Opa}, {tudo bem|tudo bom|como vai|tudo certo}? {Espero que tenha um ótimo dia|Tamo junto|Um grande abraço}! 👍✨'
   );
   const [step2BonusOfferText, setStep2BonusOfferText] = useState<string>(
-    '🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: {URL}'
+    '{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação: {URL}'
   );
   const [step3BlessingText, setStep3BlessingText] = useState<string>(
-    '🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥'
+    '🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀'
   );
   const [enableThirdStep, setEnableThirdStep] = useState<boolean>(true);
 
