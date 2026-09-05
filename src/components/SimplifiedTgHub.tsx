@@ -606,6 +606,28 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   // ☑️ 账号多选与批量操作 State (支持勾选指定账号批量修改/改资料/调分组)
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
+  // 🩺 账号发信能力与健康状态过滤 (ALL: 全部 | CAN_SEND: 确认可群发 | CANNOT_SEND: 受限不能发 | BANNED: 封号失效 | UNTESTED: 待体检)
+  const [selectedHealthFilter, setSelectedHealthFilter] = useState<'ALL' | 'CAN_SEND' | 'CANNOT_SEND' | 'BANNED' | 'UNTESTED'>('ALL');
+
+  // 🩺 真实账号健康度与 SpamBot 检测结果 State (自动持久化到本地 localStorage，刷新不丢失)
+  const [isCheckingHealth, setIsCheckingHealth] = useState<boolean>(false);
+  const [accountHealthMap, setAccountHealthMap] = useState<Record<string, {
+    status: 'healthy' | 'restricted' | 'banned' | 'timeout' | 'untested';
+    label: string;
+    details: string;
+    badgeBg: string;
+    badgeText: string;
+    badgeBorder: string;
+    can_send_today?: boolean;
+    unban_date?: string;
+  }>>(() => {
+    try {
+      const saved = localStorage.getItem('tg_account_health_map_v2');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return {};
+  });
+
   // 🎯 改资料与换头像生效范围与独立配置 State (支持单独改头像、改名字、改简介、改2FA)
   const [profileTargetScope, setProfileTargetScope] = useState<'selected' | 'group' | 'unconfigured' | 'all' | 'single'>('selected');
   const [profileTargetGroup, setProfileTargetGroup] = useState<string>('新买养号B组');
@@ -826,21 +848,22 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     });
   };
 
-  // 批量清理封号及限制死号并物理销毁其磁盘文件
+  // 批量清理失效封号并物理销毁其磁盘文件 (不清理临时限制号，临时限制号应放隔离组等待解封)
   const handleBatchCleanBannedAndFiles = async () => {
     const bannedAccounts = distinctTgAccounts.filter(acc => {
       const clean = (acc.phone || acc.id).replace(/\D/g, '');
       const hInfo = accountHealthMap[clean];
-      return acc.status === 'banned' || acc.status === 'risk' || hInfo?.status === 'restricted' || hInfo?.status === 'banned';
+      const isTimeout = hInfo?.status === 'timeout' || /超时|timeout/i.test(hInfo?.label || '');
+      return !isTimeout && (acc.status === 'banned' || hInfo?.status === 'banned');
     });
 
     if (bannedAccounts.length === 0) {
-      alert('🎉 经检测，当前账号池中暂无已被封禁或被 SpamBot 限制的死号！所有账号状态良好。\n\n如需重新检测，可点击下方的【🔍 SpamBot 账号健康体检】。');
+      alert('🎉 经检测，当前账号池中暂无已封禁或失效的死号！所有账号凭证正常。\n\n如需重新检测，可点击【⚡ 一键检测全部60个号发信能力】。');
       return;
     }
 
     const phonesToDelete = bannedAccounts.map(a => (a.phone || a.id).replace(/\D/g, ''));
-    if (!confirm(`⚠️ 检测到 ${bannedAccounts.length} 个被封禁/限制的死号！\n\n确定要一键清理这 ${bannedAccounts.length} 个账号并从服务器磁盘永久销毁其 .session / .json 文件吗？`)) return;
+    if (!confirm(`⚠️ 检测到 ${bannedAccounts.length} 个凭证失效/已封号的死号！\n\n确定要一键清理这 ${bannedAccounts.length} 个失效账号并从服务器磁盘永久销毁其 .session / .json 文件吗？`)) return;
 
     try {
       const res = await fetch('/api/telegram/delete-account-files', {
@@ -1490,11 +1513,63 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     return Array.from(map.values());
   }, [accounts]);
 
-  // Filter visible accounts based on group filter tab and search query
+  // 📊 实时统计所有账号的发信能力与健康状态 (用于仪表盘与快速筛选药丸)
+  const healthStats = React.useMemo(() => {
+    let canSendCount = 0;
+    let restrictedCount = 0;
+    let bannedCount = 0;
+    let untestedCount = 0;
+
+    distinctTgAccounts.forEach(a => {
+      const cleanPhone = (a.phone || a.id).replace(/\D/g, '');
+      const hi = accountHealthMap[cleanPhone];
+      if (!hi || hi.status === 'untested') {
+        untestedCount++;
+      } else {
+        const isTimeout = hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || '');
+        const isBanned = !isTimeout && (hi.status === 'banned' || a.status === 'banned');
+        const isRestricted = !isTimeout && !isBanned && (hi.status === 'restricted' || a.status === 'risk');
+        const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi.status === 'healthy' || /自由|无限制|健康/i.test(hi.label || ''));
+
+        if (isBanned) {
+          bannedCount++;
+        } else if (isRestricted) {
+          restrictedCount++;
+        } else if (isHealthy) {
+          canSendCount++;
+        } else {
+          untestedCount++;
+        }
+      }
+    });
+
+    return { canSendCount, restrictedCount, bannedCount, untestedCount };
+  }, [distinctTgAccounts, accountHealthMap]);
+
+  // Filter visible accounts based on group filter tab, health filter, and search query
   const filteredTgAccounts = React.useMemo(() => {
     let result = distinctTgAccounts;
     if (selectedGroupFilter !== 'ALL') {
       result = result.filter(a => normalizeGroupTag(a.groupTag) === selectedGroupFilter);
+    }
+    if (selectedHealthFilter !== 'ALL') {
+      result = result.filter(a => {
+        const cleanPhone = (a.phone || a.id).replace(/\D/g, '');
+        const hi = accountHealthMap[cleanPhone];
+        if (!hi || hi.status === 'untested') {
+          return selectedHealthFilter === 'UNTESTED';
+        }
+        const isTimeout = hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || '');
+        const isBanned = !isTimeout && (hi.status === 'banned' || a.status === 'banned');
+        const isRestricted = !isTimeout && !isBanned && (hi.status === 'restricted' || a.status === 'risk');
+        const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi.status === 'healthy' || /自由|无限制|健康/i.test(hi.label || ''));
+
+        if (selectedHealthFilter === 'CAN_SEND') return isHealthy;
+        if (selectedHealthFilter === 'CANNOT_SEND') return isRestricted;
+        if (selectedHealthFilter === 'BANNED') return isBanned;
+        if (selectedHealthFilter === 'UNTESTED') return !isBanned && !isRestricted && !isHealthy && !isTimeout;
+        return true;
+      });
     }
     if (accountSearchQuery.trim()) {
       const q = accountSearchQuery.trim().toLowerCase();
@@ -1508,7 +1583,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       });
     }
     return result;
-  }, [distinctTgAccounts, selectedGroupFilter, accountSearchQuery]);
+  }, [distinctTgAccounts, selectedGroupFilter, selectedHealthFilter, accountSearchQuery, accountHealthMap]);
 
   const totalAccountPages = accountPageSize > 0 ? Math.max(1, Math.ceil(filteredTgAccounts.length / accountPageSize)) : 1;
 
@@ -1759,6 +1834,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const handleResetToRealAccounts = async () => {
     setAccountHealthMap({});
     try {
+      localStorage.removeItem('tg_account_health_map_v2');
+    } catch (_) {}
+    try {
       const res = await fetch('/api/telegram/get-accounts');
       const data = await res.json();
       if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
@@ -1766,7 +1844,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(data.accounts));
         setSimpleLogs(prev => [
           ...prev,
-          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${data.accounts.length} 个真实 Telegram 协议号并绑定巴西原生代理！所有健康状态已重置为全绿！`
+          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${data.accounts.length} 个真实 Telegram 协议号并绑定巴西原生代理！所有健康状态已重置为待测！`
         ]);
         return;
       }
@@ -1780,17 +1858,6 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       `[账号净化完成] 已成功加载 ${INITIAL_MOCK_ACCOUNTS.length} 个巴西 TG 协议号凭证并就绪。`
     ]);
   };
-
-  // Real Account Health Check & SpamBot Status State
-  const [isCheckingHealth, setIsCheckingHealth] = useState<boolean>(false);
-  const [accountHealthMap, setAccountHealthMap] = useState<Record<string, {
-    status: 'healthy' | 'restricted' | 'banned';
-    label: string;
-    details: string;
-    badgeBg: string;
-    badgeText: string;
-    badgeBorder: string;
-  }>>({});
 
   // Run Real SpamBot & Account Health Inspection (Connected to Server Telethon Engine)
   const handleRunSpamBotCheck = async (targetAccounts?: AccountSession[], scopeLabel?: string) => {
@@ -1884,8 +1951,14 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           }
         }
 
-        // 合并保留已有检测结果，不冲掉之前51个健康号！
-        setAccountHealthMap(prev => ({ ...prev, ...newMap }));
+        // 合并保留已有检测结果，不冲掉之前健康号！
+        setAccountHealthMap(prev => {
+          const merged = { ...prev, ...newMap };
+          try {
+            localStorage.setItem('tg_account_health_map_v2', JSON.stringify(merged));
+          } catch (_) {}
+          return merged;
+        });
 
         // 🛡️ 智能风控分流保护：
         // 1. 永久封号/失效 (banned): 必须立刻隔离到【⚠️ 风控隔离组】
@@ -1944,7 +2017,13 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         badgeBorder: 'border-emerald-600'
       };
     }
-    setAccountHealthMap(prev => ({ ...prev, ...fallbackMap }));
+    setAccountHealthMap(prev => {
+      const merged = { ...prev, ...fallbackMap };
+      try {
+        localStorage.setItem('tg_account_health_map_v2', JSON.stringify(merged));
+      } catch (_) {}
+      return merged;
+    });
     setSimpleLogs(prev => [
       ...prev,
       `[体检完成 | ${scopeDesc}] 已完成 ${accountsToCheck.length} 个协议号基础状态核验！`
@@ -2919,23 +2998,21 @@ if __name__ == "__main__":
       initialAccountPool = filtered;
     }
 
-    // 🛡️ 自动剔除受限制账号 / 隔离组账号 (熔断防护，受限号自动退出群发任务)
-    if (autoQuarantineRestricted) {
-      const beforeCount = initialAccountPool.length;
-      initialAccountPool = initialAccountPool.filter(a => {
-        const cleanP = a.phone.replace(/\D/g, '');
-        const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
-        const health = accountHealthMap[cleanP];
-        const isRestricted = health && (health.status === 'restricted' || health.status === 'banned');
-        return !isQuarantined && !isRestricted;
-      });
-      const removedCount = beforeCount - initialAccountPool.length;
-      if (removedCount > 0) {
-        setSimpleLogs(prev => [
-          ...prev,
-          `🛡️ [群发安全熔断] 已自动将 ${removedCount} 个【受限/风控隔离】账号退出群发任务，仅由健康的 ${initialAccountPool.length} 个账号执行发信！`
-        ]);
-      }
+    // 🛡️ 智能发信账号池过滤：永远自动剔除双向受限账号 (restricted) 与失效封账号 (banned)
+    const beforeCount = initialAccountPool.length;
+    initialAccountPool = initialAccountPool.filter(a => {
+      const cleanP = a.phone.replace(/\D/g, '');
+      const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+      const health = accountHealthMap[cleanP];
+      const isRestricted = health && (health.status === 'restricted' || health.status === 'banned');
+      return !isQuarantined && !isRestricted;
+    });
+    const removedCount = beforeCount - initialAccountPool.length;
+    if (removedCount > 0) {
+      setSimpleLogs(prev => [
+        ...prev,
+        `🛡️ [群发安全熔断] 已自动将 ${removedCount} 个【受限/风控隔离】账号退出群发任务，仅由健康的 ${initialAccountPool.length} 个账号执行发信！`
+      ]);
     }
 
     if (initialAccountPool.length === 0) {
@@ -3967,6 +4044,17 @@ if __name__ == "__main__":
                 </button>
               )}
 
+              {/* ⚡ 一键全量检测发信能力大按钮 */}
+              <button
+                onClick={() => handleRunSpamBotCheck(distinctTgAccounts, '全部60个号发信能力大盘点')}
+                disabled={isCheckingHealth}
+                className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-black text-[11px] rounded-lg transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
+                title="向官方 @SpamBot 发起穿透测试，快速识别全部账号谁能群发、谁不能群发"
+              >
+                <Zap className={`w-3.5 h-3.5 text-slate-950 ${isCheckingHealth ? 'animate-spin' : ''}`} />
+                {isCheckingHealth ? '正在排查发信能力...' : `⚡ 一键检测全部 ${distinctTgAccounts.length} 个号发信能力`}
+              </button>
+
               {/* 🩺 分组/范围/全量健康体检主按钮 */}
               <button
                 onClick={() => setShowHealthScopeModal(true)}
@@ -3975,12 +4063,193 @@ if __name__ == "__main__":
                 title="选择指定分组、已勾选账号或全量进行体检"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isCheckingHealth ? 'animate-spin' : ''}`} />
-                {isCheckingHealth ? '正在查验 SpamBot 状态...' : '🔍 分组/精准体检健康度...'}
+                {isCheckingHealth ? '正在查验...' : '🔍 自选范围体检...'}
               </button>
             </div>
           </div>
 
-          {/* 🏷️ 账号分组、高密搜索与视图控制条 */}
+          {/* 🎯 60 个账号发信能力与健康状态实时大盘 */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3 shadow-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white flex items-center gap-2">
+                    🎯 账号群发能力实时看板
+                    <span className="text-[10px] text-emerald-400 font-normal border border-emerald-500/30 bg-emerald-950/60 px-1.5 py-0.2 rounded">
+                      官方 @SpamBot 实测
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    实时区分哪些账号能群发、哪些账号不能群发，点击下方卡片可一键隔离或筛选：
+                  </p>
+                </div>
+              </div>
+
+              {/* 快捷批量勾选 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {healthStats.canSendCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const canSendIds = distinctTgAccounts
+                        .filter(a => {
+                          const cp = (a.phone || a.id).replace(/\D/g, '');
+                          const hi = accountHealthMap[cp];
+                          return hi?.status === 'healthy' || /自由|无限制|健康/i.test(hi?.label || '');
+                        })
+                        .map(a => a.id);
+                      setSelectedAccountIds(canSendIds);
+                      alert(`✅ 已一键勾选了全部 ${canSendIds.length} 个确认可群发的健康号！您可以点击右侧批量划入【主力爆破A组】或直接开始群发。`);
+                    }}
+                    className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    仅勾选可群发号 ({healthStats.canSendCount}个)
+                  </button>
+                )}
+                {healthStats.restrictedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const restrictedPhones = distinctTgAccounts
+                        .filter(a => {
+                          const cp = (a.phone || a.id).replace(/\D/g, '');
+                          const hi = accountHealthMap[cp];
+                          return hi?.status === 'restricted' || a.status === 'risk';
+                        })
+                        .map(a => (a.phone || a.id).replace(/\D/g, ''));
+                      quarantineAccounts(restrictedPhones, '一键隔离所有受限账号');
+                      alert(`🛡️ 已将 ${restrictedPhones.length} 个双向受限账号移入【⚠️ 风控隔离组】静默保护！`);
+                    }}
+                    className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-500/60 text-amber-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                    一键隔离受限号 ({healthStats.restrictedCount}个)
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 4大能力分类看板卡片 (点击即筛选) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* 1. 确认可群发 */}
+              <div
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'CAN_SEND' ? 'ALL' : 'CAN_SEND');
+                  setAccountCurrentPage(1);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedHealthFilter === 'CAN_SEND'
+                    ? 'bg-emerald-950/90 border-emerald-400 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-emerald-500/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1">
+                    🟢 确认可群发
+                  </span>
+                  <span className="font-mono text-base font-black text-emerald-400">
+                    {healthStats.canSendCount}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                  <span>官方无限制/可主动发信</span>
+                  <span className="text-emerald-400 font-bold underline">
+                    {selectedHealthFilter === 'CAN_SEND' ? '筛选中 ✕' : '点击查看'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 2. 双向受限 (不能主动发) */}
+              <div
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'CANNOT_SEND' ? 'ALL' : 'CANNOT_SEND');
+                  setAccountCurrentPage(1);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedHealthFilter === 'CANNOT_SEND'
+                    ? 'bg-amber-950/90 border-amber-400 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-amber-500/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                    🟡 双向限制 (不能发)
+                  </span>
+                  <span className="font-mono text-base font-black text-amber-400">
+                    {healthStats.restrictedCount}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                  <span>PeerFlood 临时风控</span>
+                  <span className="text-amber-400 font-bold underline">
+                    {selectedHealthFilter === 'CANNOT_SEND' ? '筛选中 ✕' : '点击查看'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. 封号失效 */}
+              <div
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'BANNED' ? 'ALL' : 'BANNED');
+                  setAccountCurrentPage(1);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedHealthFilter === 'BANNED'
+                    ? 'bg-rose-950/90 border-rose-400 shadow-md shadow-rose-500/20 ring-1 ring-rose-400'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-rose-500/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-rose-300 flex items-center gap-1">
+                    🔴 封号/凭证失效
+                  </span>
+                  <span className="font-mono text-base font-black text-rose-400">
+                    {healthStats.bannedCount}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                  <span>Session 失效或已注销</span>
+                  <span className="text-rose-400 font-bold underline">
+                    {selectedHealthFilter === 'BANNED' ? '筛选中 ✕' : '点击查看'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 4. 待体检 */}
+              <div
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'UNTESTED' ? 'ALL' : 'UNTESTED');
+                  setAccountCurrentPage(1);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  selectedHealthFilter === 'UNTESTED'
+                    ? 'bg-sky-950/90 border-sky-400 shadow-md shadow-sky-500/20 ring-1 ring-sky-400'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-sky-500/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                    ⚪ 待体检 (未知能力)
+                  </span>
+                  <span className="font-mono text-base font-black text-slate-400">
+                    {healthStats.untestedCount}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                  <span>尚未向 SpamBot 测试</span>
+                  <span className="text-sky-400 font-bold underline">
+                    {selectedHealthFilter === 'UNTESTED' ? '筛选中 ✕' : '点击查看'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 🏷️ 账号分组、发信状态筛选、高密搜索与视图控制条 */}
           <div className="bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl space-y-2">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2.5">
               {/* Group filter tabs */}
@@ -4062,6 +4331,103 @@ if __name__ == "__main__":
                   <option value="⚠️ 风控隔离组">⚠️ 全部划入 ➔ 风控隔离组 (冷冻保护)</option>
                 </select>
               </div>
+            </div>
+
+            {/* 🩺 发信能力状态筛选切换条 */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/80">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 mr-1">
+                <Zap className="w-3.5 h-3.5 text-amber-400" /> 发信状态:
+              </span>
+
+              <button
+                onClick={() => {
+                  setSelectedHealthFilter('ALL');
+                  setAccountCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  selectedHealthFilter === 'ALL'
+                    ? 'bg-slate-200 text-slate-950 shadow-sm'
+                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+              >
+                全部状态 ({distinctTgAccounts.length})
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'CAN_SEND' ? 'ALL' : 'CAN_SEND');
+                  setAccountCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  selectedHealthFilter === 'CAN_SEND'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/30'
+                    : 'bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/80 border border-emerald-800/60'
+                }`}
+                title="筛选官方 @SpamBot 验证通过、确认可以无限制主动发信的健康账号"
+              >
+                <span>🟢 确认可群发</span>
+                <span className="font-mono font-black">({healthStats.canSendCount})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'CANNOT_SEND' ? 'ALL' : 'CANNOT_SEND');
+                  setAccountCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  selectedHealthFilter === 'CANNOT_SEND'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30'
+                    : 'bg-amber-950/40 text-amber-300 hover:bg-amber-950/80 border border-amber-800/60'
+                }`}
+                title="筛选遭遇 PeerFlood 双向限制、目前无法主动私聊客户的受限号"
+              >
+                <span>🟡 双向受限 (不能发)</span>
+                <span className="font-mono font-black">({healthStats.restrictedCount})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'BANNED' ? 'ALL' : 'BANNED');
+                  setAccountCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  selectedHealthFilter === 'BANNED'
+                    ? 'bg-rose-500 text-slate-950 font-black shadow-md shadow-rose-500/30'
+                    : 'bg-rose-950/40 text-rose-300 hover:bg-rose-950/80 border border-rose-800/60'
+                }`}
+                title="筛选 Session 凭证失效、未登录或已注销的死号"
+              >
+                <span>🔴 封号/失效</span>
+                <span className="font-mono font-black">({healthStats.bannedCount})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedHealthFilter(selectedHealthFilter === 'UNTESTED' ? 'ALL' : 'UNTESTED');
+                  setAccountCurrentPage(1);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  selectedHealthFilter === 'UNTESTED'
+                    ? 'bg-sky-500 text-slate-950 font-black shadow-md shadow-sky-500/30'
+                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+                title="筛选尚未向官方 @SpamBot 发起真实发信能力测试的账号"
+              >
+                <span>⚪ 待体检 (未知能力)</span>
+                <span className="font-mono font-black">({healthStats.untestedCount})</span>
+              </button>
+
+              {selectedHealthFilter !== 'ALL' && (
+                <button
+                  onClick={() => {
+                    setSelectedHealthFilter('ALL');
+                    setAccountCurrentPage(1);
+                  }}
+                  className="text-xs text-slate-400 hover:text-white underline ml-2 cursor-pointer"
+                >
+                  ✕ 清除筛选 (看全部)
+                </button>
+              )}
             </div>
 
             {/* Sub-bar: Search, View Mode Switcher, and Density/Page controls */}
@@ -4457,7 +4823,7 @@ if __name__ == "__main__":
                       <th className="py-2 px-2.5">手机号码</th>
                       <th className="py-2 px-2.5">分组调度</th>
                       <th className="py-2 px-2.5 text-center">养号天数</th>
-                      <th className="py-2 px-2.5">SpamBot健康状态</th>
+                      <th className="py-2 px-2.5">发信能力 (SpamBot 穿透)</th>
                       <th className="py-2 px-2.5">2FA 二级密码</th>
                       <th className="py-2 px-2.5">独享 SOCKS5 代理 IP</th>
                       <th className="py-2 px-2.5 text-center">磁盘凭证</th>
@@ -4469,7 +4835,15 @@ if __name__ == "__main__":
                       const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
                       const hasSession = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.session'));
                       const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
-                      const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
+                      const rawHealth = accountHealthMap[cleanPhone];
+                      const healthInfo = rawHealth || {
+                        status: 'untested' as const,
+                        label: '⚪ 待体检 (能力未知)',
+                        details: '尚未向官方 @SpamBot 发起真实穿透测试',
+                        badgeBg: 'bg-slate-900',
+                        badgeText: 'text-slate-400',
+                        badgeBorder: 'border-slate-700'
+                      };
                       const isTimeout = healthInfo.status === 'timeout' || /超时|timeout/i.test(healthInfo.label || '') || /超时|timeout/i.test(healthInfo.details || '');
                       const isBannedOrRestricted = !isTimeout && (healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk');
                       const effectiveGroup = normalizeGroupTag(acc.groupTag);
@@ -4556,10 +4930,37 @@ if __name__ == "__main__":
                             </div>
                           </td>
                           <td className="py-1.5 px-2.5">
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${healthInfo.badgeBg} ${healthInfo.badgeText} ${healthInfo.badgeBorder}`}>
-                              {healthInfo.label}
-                              {healthInfo.status === 'restricted' && <span className="text-rose-400 ml-1">已隔离</span>}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span 
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${healthInfo.badgeBg} ${healthInfo.badgeText} ${healthInfo.badgeBorder}`}
+                                title={healthInfo.details || healthInfo.label}
+                              >
+                                {healthInfo.status === 'healthy' ? '🟢 确认可群发' : healthInfo.label}
+                                {healthInfo.status === 'restricted' && <span className="text-amber-400 font-normal ml-0.5">(不可发)</span>}
+                              </span>
+                              {healthInfo.status === 'untested' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRunSpamBotCheck([acc], acc.phone || acc.alias)}
+                                  disabled={isCheckingHealth}
+                                  className="text-[9px] text-sky-400 hover:text-sky-200 underline font-bold cursor-pointer text-left flex items-center gap-0.5"
+                                  title="向官方 @SpamBot 发起单号发信能力测试"
+                                >
+                                  ⚡ 测发信能力
+                                </button>
+                              )}
+                              {healthInfo.status === 'timeout' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRunSpamBotCheck([acc], acc.phone || acc.alias)}
+                                  disabled={isCheckingHealth}
+                                  className="text-[9px] text-amber-400 hover:text-amber-200 underline font-bold cursor-pointer text-left flex items-center gap-0.5"
+                                  title="网络波动超时，点击重新测试"
+                                >
+                                  🔄 重测
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="py-1.5 px-2.5 font-mono text-amber-300">
                             <span 
@@ -4634,11 +5035,20 @@ if __name__ == "__main__":
                 const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
                 const hasSession = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.session'));
                 const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
-                const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
+                const rawHealth = accountHealthMap[cleanPhone];
+                const healthInfo = rawHealth || {
+                  status: 'untested' as const,
+                  label: '⚪ 待体检',
+                  details: '尚未向官方 @SpamBot 发起真实穿透测试',
+                  badgeBg: 'bg-slate-900',
+                  badgeText: 'text-slate-400',
+                  badgeBorder: 'border-slate-700'
+                };
                 const isTimeout = healthInfo.status === 'timeout' || /超时|timeout/i.test(healthInfo.label || '') || /超时|timeout/i.test(healthInfo.details || '');
                 const isTrulyBanned = !isTimeout && (healthInfo.status === 'banned' || acc.status === 'banned');
                 const isTemporaryRestricted = !isTimeout && !isTrulyBanned && (healthInfo.status === 'restricted' || acc.status === 'risk');
                 const isBannedOrRestricted = isTrulyBanned || isTemporaryRestricted;
+                const isSendable = !isTimeout && !isBannedOrRestricted && (healthInfo.status === 'healthy' || /自由|健康|可发/i.test(healthInfo.label || ''));
                 const effectiveGroup = normalizeGroupTag(acc.groupTag);
                 const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                 const isSelected = selectedAccountIds.includes(acc.id);
@@ -4804,9 +5214,45 @@ if __name__ == "__main__":
                     {/* Footer: Health & Session Status */}
                     <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[8.5px] font-mono">
                       <div className="flex items-center gap-1 min-w-0">
-                        <span className={`${healthInfo.badgeText} font-bold truncate max-w-[90px]`} title={healthInfo.details || healthInfo.label}>
-                          {healthInfo.label}
+                        <span 
+                          className={`${healthInfo.badgeText} font-bold truncate max-w-[90px]`} 
+                          title={healthInfo.details || healthInfo.label}
+                        >
+                          {healthInfo.status === 'healthy' ? '🟢 确认可群发' : healthInfo.label}
                         </span>
+
+                        {/* Untested quick single test */}
+                        {healthInfo.status === 'untested' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRunSpamBotCheck([acc], acc.phone || acc.alias);
+                            }}
+                            disabled={isCheckingHealth}
+                            className="text-[8px] bg-sky-950 text-sky-300 hover:bg-sky-900 px-1 py-0.2 rounded border border-sky-600/60 font-bold cursor-pointer shrink-0"
+                            title="单号立即测发信能力"
+                          >
+                            ⚡测
+                          </button>
+                        )}
+
+                        {/* Timeout quick retry */}
+                        {healthInfo.status === 'timeout' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRunSpamBotCheck([acc], acc.phone || acc.alias);
+                            }}
+                            disabled={isCheckingHealth}
+                            className="text-[8px] bg-amber-950 text-amber-300 hover:bg-amber-900 px-1 py-0.2 rounded border border-amber-600/60 font-bold cursor-pointer shrink-0"
+                            title="网络超时，重测一次"
+                          >
+                            🔄
+                          </button>
+                        )}
+
                         {/* If marked timeout or restricted, provide a tiny 1-click restore dot */}
                         {(isTimeout || healthInfo.status === 'restricted' || healthInfo.status === 'banned') && (
                           <button
@@ -4820,9 +5266,9 @@ if __name__ == "__main__":
                               });
                             }}
                             className="text-[8px] text-slate-400 hover:text-emerald-300 underline cursor-pointer shrink-0"
-                            title="清除此账号状态标记，恢复默认绿色"
+                            title="清除此账号状态标记，恢复待检测状态"
                           >
-                            恢复
+                            重置
                           </button>
                         )}
                       </div>
