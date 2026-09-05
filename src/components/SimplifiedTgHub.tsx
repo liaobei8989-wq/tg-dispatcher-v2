@@ -1757,6 +1757,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   // Reset and purge duplicate/fake mock accounts & reload all real disk sessions
   const handleResetToRealAccounts = async () => {
+    setAccountHealthMap({});
     try {
       const res = await fetch('/api/telegram/get-accounts');
       const data = await res.json();
@@ -1765,7 +1766,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(data.accounts));
         setSimpleLogs(prev => [
           ...prev,
-          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${data.accounts.length} 个真实 Telegram 协议号并绑定巴西原生代理！`
+          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${data.accounts.length} 个真实 Telegram 协议号并绑定巴西原生代理！所有健康状态已重置为全绿！`
         ]);
         return;
       }
@@ -1847,11 +1848,11 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           if (isTimeout) {
             newMap[cleanPhone] = {
               status: 'timeout',
-              label: '🌐 代理超时 (非死号)',
-              details: res.restriction_detail || '代理 IP 响应缓慢或连接超时，账号本身安全无损，切勿销毁凭证！',
+              label: '🌐 网络波动 (凭证完好)',
+              details: res.restriction_detail || '代理 IP 连接波动或节点延迟，凭证正常无损，无需任何手动处理。',
               badgeBg: 'bg-slate-900/90',
-              badgeText: 'text-amber-300',
-              badgeBorder: 'border-amber-500/50'
+              badgeText: 'text-slate-400',
+              badgeBorder: 'border-slate-700'
             };
           } else if (res.health_score >= 90 || res.can_send_today) {
             newMap[cleanPhone] = {
@@ -1886,24 +1887,37 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         // 合并保留已有检测结果，不冲掉之前51个健康号！
         setAccountHealthMap(prev => ({ ...prev, ...newMap }));
 
-        // 🛡️ 账号受限自动熔断隔离：若开启自动隔离，将受限制/失效账号立即移出原分组(B组)，转入【⚠️ 风控隔离组】
+        // 🛡️ 智能风控分流保护：
+        // 1. 永久封号/失效 (banned): 必须立刻隔离到【⚠️ 风控隔离组】
+        // 2. 临时双向限制 (restricted/PeerFlood): 仅当用户开启了自动隔离时移入隔离组静默冷却；超时(timeout)绝对不移组！
+        const deadPhones: string[] = [];
         const restrictedPhones: string[] = [];
         for (const [phone, info] of Object.entries(newMap)) {
-          if (info.status === 'restricted' || info.status === 'banned') {
+          if (info.status === 'banned') {
+            deadPhones.push(phone);
+          } else if (info.status === 'restricted') {
             restrictedPhones.push(phone);
           }
         }
 
+        // 死号永久失效始终自动隔离保护
+        if (deadPhones.length > 0) {
+          quarantineAccounts(deadPhones, '凭证已失效/账号注销');
+        }
+        // 临时限制根据用户开关决定是否移组
         if (autoQuarantineRestricted && restrictedPhones.length > 0) {
-          quarantineAccounts(restrictedPhones, '体检侦测到双向限制/凭证异常');
+          quarantineAccounts(restrictedPhones, '官方临时双向限制静默冷却');
         }
 
         setSimpleLogs(prev => [
           ...prev,
           `🎉 [真实体检完成 | ${scopeDesc}] 共完成 ${data.total} 个账号穿透检测！`,
           `🟢 100%健康自由发信: ${data.clean_count} 个 | 🟡 官方受限冷却: ${data.limited_count} 个 | 🔴 凭证失效: ${data.dead_count} 个`,
+          ...(deadPhones.length > 0 
+            ? [`🚫 已将 ${deadPhones.length} 个失效死号自动移入【⚠️ 风控隔离组】防止继续占用资源！`] 
+            : []),
           ...(autoQuarantineRestricted && restrictedPhones.length > 0 
-            ? [`🛡️ [自动熔断已生效] 已将 ${restrictedPhones.length} 个受限账号自动退出【新买养号B组】/原队列，移入【⚠️ 风控隔离组】冷冻保护！`] 
+            ? [`🛡️ 已将 ${restrictedPhones.length} 个临时受限账号移入【⚠️ 风控隔离组】静默冷却保护！`] 
             : [])
         ]);
         setIsCheckingHealth(false);
@@ -3891,10 +3905,35 @@ if __name__ == "__main__":
               </button>
               <button
                 onClick={handleResetToRealAccounts}
-                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
-                title="清理所有重复与无效账号"
+                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="清理所有重复与无效账号并重新加载磁盘凭证"
               >
                 🧹 一键去重与净化账号库
+              </button>
+              <button
+                onClick={() => {
+                  setAccountHealthMap({});
+                  let restoredCount = 0;
+                  setAccounts(prev => {
+                    const updated = prev.map(a => {
+                      restoredCount++;
+                      const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+                      const targetGroup = isQuarantined ? ((a as any).originalGroupTag || '主力爆破A组') : a.groupTag;
+                      return { ...a, groupTag: targetGroup, status: 'active' as const };
+                    });
+                    safeSaveAccountsToLocalStorage(updated);
+                    saveAccountsToStorage(updated);
+                    return updated;
+                  });
+                  setSimpleLogs(prev => [
+                    ...prev,
+                    `🟢 [一键全绿恢复] 已清除所有超时与误报标记！全部 ${restoredCount} 个账号已彻底恢复为健康活跃状态！`
+                  ]);
+                }}
+                className="px-3 py-1 bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/70 text-emerald-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="一键清除所有超时误报标记，卡片恢复全绿"
+              >
+                🟢 清除超时误报 (恢复全绿)
               </button>
               {/* 🎯 勾选账号快速体检按钮 (当用户选中账号时高亮显示) */}
               {selectedAccountIds.length > 0 && (
@@ -3988,20 +4027,6 @@ if __name__ == "__main__":
 
               {/* Action buttons */}
               <div className="flex flex-wrap items-center gap-2 self-stretch lg:self-auto">
-                <button
-                  type="button"
-                  onClick={() => toggleAutoQuarantine(!autoQuarantineRestricted)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
-                    autoQuarantineRestricted
-                      ? 'bg-amber-950/70 border-amber-500/80 text-amber-300 shadow-sm shadow-amber-950/50'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="受限自动熔断隔离：体检或发信中一旦账号受限，立即自动退出B组养号与群发任务，转入【⚠️ 风控隔离组】保护"
-                >
-                  <ShieldAlert className={`w-3.5 h-3.5 ${autoQuarantineRestricted ? 'text-amber-400' : 'text-slate-500'}`} />
-                  <span>受限自动隔离: {autoQuarantineRestricted ? '已开启' : '已关闭'}</span>
-                </button>
-
                 <button
                   onClick={handleBatchCleanBannedAndFiles}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
@@ -4194,12 +4219,10 @@ if __name__ == "__main__":
                     let restoredCount = 0;
                     setAccounts(prev => {
                       const updated = prev.map(a => {
-                        if (normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组') {
-                          restoredCount++;
-                          const targetGroup = (a as any).originalGroupTag || '主力爆破A组';
-                          return { ...a, groupTag: targetGroup, status: 'active' as const };
-                        }
-                        return a;
+                        restoredCount++;
+                        const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+                        const targetGroup = isQuarantined ? ((a as any).originalGroupTag || '主力爆破A组') : a.groupTag;
+                        return { ...a, groupTag: targetGroup, status: 'active' as const };
                       });
                       safeSaveAccountsToLocalStorage(updated);
                       saveAccountsToStorage(updated);
@@ -4207,7 +4230,7 @@ if __name__ == "__main__":
                     });
                     setSimpleLogs(prev => [
                       ...prev,
-                      `🟢 [一键全绿完成] 已清除所有误报标记！${restoredCount > 0 ? `并将 ${restoredCount} 个误判账号全部安全移回原发信分组（主力爆破A组/B组）！` : '所有账号均处于健康在线状态！'}`
+                      `🟢 [一键全绿完成] 已清除所有超时与误报标记！全部 ${restoredCount} 个账号已彻底恢复为活跃健康状态（active），发信协议号已重新就绪！`
                     ]);
                   }}
                   className="px-2.5 py-0.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold cursor-pointer transition-colors flex items-center gap-1 shadow-sm"
@@ -4447,7 +4470,8 @@ if __name__ == "__main__":
                       const hasSession = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.session'));
                       const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
                       const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
-                      const isBannedOrRestricted = healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk';
+                      const isTimeout = healthInfo.status === 'timeout' || /超时|timeout/i.test(healthInfo.label || '') || /超时|timeout/i.test(healthInfo.details || '');
+                      const isBannedOrRestricted = !isTimeout && (healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk');
                       const effectiveGroup = normalizeGroupTag(acc.groupTag);
                       const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                       const rowIdx = (accountPageSize > 0 ? (accountCurrentPage - 1) * accountPageSize : 0) + idx + 1;
@@ -4612,7 +4636,9 @@ if __name__ == "__main__":
                 const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
                 const healthInfo = accountHealthMap[cleanPhone] || { status: 'healthy', label: '🟢 单向自由', badgeBg: 'bg-emerald-950/90', badgeText: 'text-emerald-300', badgeBorder: 'border-emerald-600' };
                 const isTimeout = healthInfo.status === 'timeout' || /超时|timeout/i.test(healthInfo.label || '') || /超时|timeout/i.test(healthInfo.details || '');
-                const isBannedOrRestricted = !isTimeout && (healthInfo.status === 'restricted' || healthInfo.status === 'banned' || acc.status === 'banned' || acc.status === 'risk');
+                const isTrulyBanned = !isTimeout && (healthInfo.status === 'banned' || acc.status === 'banned');
+                const isTemporaryRestricted = !isTimeout && !isTrulyBanned && (healthInfo.status === 'restricted' || acc.status === 'risk');
+                const isBannedOrRestricted = isTrulyBanned || isTemporaryRestricted;
                 const effectiveGroup = normalizeGroupTag(acc.groupTag);
                 const currentDay = calculateWarmupDays(acc.createdAt, acc.baseWarmupDay || (acc.warmupDay > 0 ? acc.warmupDay : 1));
                 const isSelected = selectedAccountIds.includes(acc.id);
@@ -4623,10 +4649,12 @@ if __name__ == "__main__":
                     className={`p-2 rounded-xl border flex flex-col justify-between space-y-1.5 transition-all text-xs relative ${
                       isSelected
                         ? 'bg-purple-950/40 border-purple-500 shadow-md shadow-purple-500/20'
-                        : isBannedOrRestricted
+                        : isTrulyBanned
                         ? 'bg-rose-950/30 border-rose-800/80'
+                        : isTemporaryRestricted
+                        ? 'bg-amber-950/20 border-amber-600/70'
                         : isTimeout
-                        ? 'bg-amber-950/20 border-amber-700/60 shadow-sm'
+                        ? 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
                         : hasSession
                         ? 'bg-slate-950/95 border-emerald-500/50 shadow-sm hover:border-emerald-400'
                         : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
@@ -4773,50 +4801,32 @@ if __name__ == "__main__":
                       </div>
                     </div>
 
-                    {/* Prominent delete button ONLY if truly banned (NOT timeout) */}
-                    {isBannedOrRestricted && (healthInfo.status === 'banned' || acc.status === 'banned') && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAccountAndFiles(acc)}
-                        className="w-full bg-rose-900/90 hover:bg-rose-800 text-rose-100 border border-rose-600 font-extrabold text-[9px] py-0.5 px-1 rounded flex items-center justify-center gap-1 transition-all cursor-pointer animate-pulse"
-                      >
-                        <Trash2 className="w-2.5 h-2.5" /> 销毁死号凭证
-                      </button>
-                    )}
-
-                    {/* Timeout Safe Notice & Quick Reset */}
-                    {isTimeout && (
-                      <div className="flex items-center justify-between gap-1 bg-amber-950/40 border border-amber-500/40 rounded px-1.5 py-0.5 text-[8.5px] text-amber-200">
-                        <span className="truncate">⏳ 代理波动 (非死号)</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAccountHealthMap(prev => ({
-                              ...prev,
-                              [cleanPhone]: {
-                                status: 'healthy',
-                                label: '🟢 单向自由',
-                                details: '已清除超时标记，账号状态健康',
-                                badgeBg: 'bg-emerald-950/90',
-                                badgeText: 'text-emerald-300',
-                                badgeBorder: 'border-emerald-600'
-                              }
-                            }));
-                          }}
-                          className="text-[8px] bg-amber-800/80 hover:bg-emerald-800 text-white px-1 py-0.2 rounded cursor-pointer shrink-0 font-bold transition-colors"
-                          title="点击消除超时标记，恢复为健康状态"
-                        >
-                          恢复健康
-                        </button>
-                      </div>
-                    )}
-
                     {/* Footer: Health & Session Status */}
                     <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[8.5px] font-mono">
-                      <span className={`${healthInfo.badgeText} font-bold truncate max-w-[70px]`}>
-                        {healthInfo.label}
-                      </span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className={`${healthInfo.badgeText} font-bold truncate max-w-[90px]`} title={healthInfo.details || healthInfo.label}>
+                          {healthInfo.label}
+                        </span>
+                        {/* If marked timeout or restricted, provide a tiny 1-click restore dot */}
+                        {(isTimeout || healthInfo.status === 'restricted' || healthInfo.status === 'banned') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAccountHealthMap(prev => {
+                                const next = { ...prev };
+                                delete next[cleanPhone];
+                                return next;
+                              });
+                            }}
+                            className="text-[8px] text-slate-400 hover:text-emerald-300 underline cursor-pointer shrink-0"
+                            title="清除此账号状态标记，恢复默认绿色"
+                          >
+                            恢复
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
                         <span className={hasSession ? 'text-emerald-400' : 'text-slate-600'}>.ses</span>
                         <span className="text-slate-600">/</span>
                         <span className={hasJson ? 'text-emerald-400' : 'text-slate-600'}>.json</span>
