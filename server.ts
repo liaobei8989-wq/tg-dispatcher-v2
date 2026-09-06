@@ -2420,15 +2420,89 @@ Requirements:
   const inboxStoragePath = path.join(sessionsDir, "inbox_conversations.json");
 
   function getInboxConversations() {
+    // 1. Try reading manual or saved inbox_conversations.json
+    let savedList: any[] = [];
     if (fs.existsSync(inboxStoragePath)) {
       try {
         const raw = fs.readFileSync(inboxStoragePath, 'utf8');
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) savedList = parsed;
       } catch (e) {}
     }
-    // Clean production state: return empty list to only capture authentic Telegram customer messages
-    return [];
+
+    // 2. If savedList is empty or to complement, sync from real replied_customers.json
+    const repliedCustomersFile = path.join(sessionsDir, "replied_customers.json");
+    if (fs.existsSync(repliedCustomersFile)) {
+      try {
+        const rawReplied = fs.readFileSync(repliedCustomersFile, 'utf8');
+        const parsedReplied = JSON.parse(rawReplied);
+        if (Array.isArray(parsedReplied) && parsedReplied.length > 0) {
+          const existingIds = new Set(savedList.map(c => c.id || c.customerPhone || c.customerUsername));
+          const convertedFromReplied = parsedReplied.map((r: any, idx: number) => {
+            const convId = `conv-${r.id || idx}`;
+            // Determine intent tag from reply text
+            let tag = 'asking_bonus';
+            const textLower = (r.lastReplyText || '').toLowerCase();
+            if (textLower.includes('pix') || textLower.includes('pagar') || textLower.includes('deposito')) {
+              tag = 'asking_pix';
+            } else if (textLower.includes('link') || textLower.includes('cadastro') || textLower.includes('como')) {
+              tag = 'hot_lead';
+            } else if (textLower.includes('sinais') || textLower.includes('vip')) {
+              tag = 'asking_bonus';
+            }
+
+            return {
+              id: convId,
+              customerName: r.fullName || r.firstName || `Cliente ${r.id}`,
+              customerPhone: r.phone || r.id || '',
+              customerUsername: r.username || (r.username ? `@${r.username.replace('@','')}` : ''),
+              assignedAccountPhone: r.receivedByAccount || '5586994428117',
+              assignedAccountName: r.receivedByAccountName || 'TG矩阵协议号',
+              tag: tag,
+              unreadCount: 1,
+              lastMessageText: r.lastReplyText || 'Oi, vi sua mensagem!',
+              lastMessageTime: r.repliedAt || '刚刚',
+              messages: [
+                {
+                  id: `m-out-${idx}`,
+                  conversationId: convId,
+                  senderType: 'account',
+                  senderName: r.receivedByAccountName || 'TG营销号',
+                  text: '🔥 Olá! Liberamos R$ 50 de Bônus Grátis sem depósito + 100 Giros no Tigrinho pra você testar agora! Quer o link de ativação?',
+                  timestamp: '10:00',
+                  status: 'read'
+                },
+                {
+                  id: `m-in-${idx}`,
+                  conversationId: convId,
+                  senderType: 'customer',
+                  senderName: r.fullName || 'Cliente',
+                  text: r.lastReplyText || 'Oi, como funciona?',
+                  timestamp: r.repliedAt ? r.repliedAt.split(' ')[1] || '10:31' : '10:31',
+                  status: 'delivered'
+                }
+              ]
+            };
+          });
+
+          if (savedList.length === 0) {
+            savedList = convertedFromReplied;
+            try {
+              fs.writeFileSync(inboxStoragePath, JSON.stringify(savedList, null, 2), 'utf8');
+            } catch (e) {}
+          } else {
+            // Append missing ones
+            convertedFromReplied.forEach(item => {
+              if (!existingIds.has(item.id)) {
+                savedList.push(item);
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    return savedList;
   }
 
   app.get("/api/inbox/conversations", (req, res) => {

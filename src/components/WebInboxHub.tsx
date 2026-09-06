@@ -19,7 +19,8 @@ import {
   Copy,
   Trash2,
   DollarSign,
-  Download
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { InboxConversation, InboxMessage, AccountSession } from '../types';
 
@@ -362,10 +363,24 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts, onOpenReplie
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 font-mono border border-teal-500/30">
-                    承接: {activeConversation.assignedAccountAlias}
-                  </span>
+                <div className="flex items-center gap-2">
+                  {activeConversation.customerUsername ? (
+                    <a
+                      href={`https://t.me/${activeConversation.customerUsername.replace('@', '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center gap-1 transition"
+                      title="直接用电脑 Telegram 客户端打开与该客户的会话"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>TG 直达私聊</span>
+                    </a>
+                  ) : null}
+                  <div className="text-right">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 font-mono border border-teal-500/30">
+                      承接: {activeConversation.assignedAccountAlias || activeConversation.assignedAccountPhone}
+                    </span>
+                  </div>
                 </div>
               </div>
 
