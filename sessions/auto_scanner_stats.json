@@ -1,9 +1,9 @@
 {
   "status": "ACTIVE",
-  "statusLabel": "🟢 24小时全天候即时巡航补发",
-  "todayCount": 0,
-  "totalCount": 0,
-  "uniqueRepliedCustomers": 0,
+  "statusLabel": "\ud83d\udfe2 24\u5c0f\u65f6\u5168\u5929\u5019\u5373\u65f6\u5de1\u822a\u8865\u53d1",
+  "todayCount": 56,
+  "totalCount": 56,
+  "uniqueRepliedCustomers": 56,
   "lastResetTime": "2026-08-31T08:59:02.594Z",
   "accountStats": {},
   "logs": []

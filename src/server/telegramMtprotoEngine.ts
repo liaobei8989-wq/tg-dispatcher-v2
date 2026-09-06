@@ -657,6 +657,43 @@ export async function executeTelegramReplyScanner(
           if (!statsData.logs) statsData.logs = [];
           statsData.logs.unshift(logEntry);
           if (statsData.logs.length > 50) statsData.logs = statsData.logs.slice(0, 50);
+
+          // 持久化记录到 replied_customers.json (供运营一键下载和主号跟进)
+          try {
+            const custFile = path.join(process.cwd(), 'sessions', 'replied_customers.json');
+            let custList: any[] = [];
+            if (fs.existsSync(custFile)) {
+              try { custList = JSON.parse(fs.readFileSync(custFile, 'utf8')); } catch (e) {}
+            }
+            if (!Array.isArray(custList)) custList = [];
+            const custId = String((d.entity as any)?.id || targetEntityId);
+            const custUname = (d.entity as any)?.username ? `@${(d.entity as any).username}` : '';
+            const custFn = (d.entity as any)?.firstName || '';
+            const custLn = (d.entity as any)?.lastName || '';
+            const custPhone = (d.entity as any)?.phone ? `+${(d.entity as any).phone}` : '';
+            
+            const existingIdx = custList.findIndex(c => c.id === custId);
+            const record = {
+              id: custId,
+              username: custUname,
+              firstName: custFn,
+              lastName: custLn,
+              fullName: [custFn, custLn].filter(Boolean).join(' ') || targetName,
+              phone: custPhone,
+              receivedByAccount: curPhone,
+              receivedByAccountName: accName,
+              lastReplyText: replySnippet,
+              repliedAt: new Date().toLocaleString('pt-BR'),
+              repliedAtIso: new Date().toISOString(),
+              directChatUrl: custUname ? `https://t.me/${custUname.replace('@', '')}` : `tg://user?id=${custId}`
+            };
+            if (existingIdx >= 0) {
+              custList[existingIdx] = record;
+            } else {
+              custList.unshift(record);
+            }
+            fs.writeFileSync(custFile, JSON.stringify(custList, null, 2), 'utf8');
+          } catch (e) {}
         } catch (dErr) {}
       }
     } catch (err: any) {

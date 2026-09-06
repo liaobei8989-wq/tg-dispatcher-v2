@@ -326,3 +326,18 @@ export interface SpintaxTestResult {
   errors?: string[];
 }
 
+export interface RepliedCustomerRecord {
+  id: string; // Telegram user ID e.g. "689123456"
+  username?: string; // e.g. "@carlos_br88"
+  firstName?: string;
+  lastName?: string;
+  fullName: string;
+  phone?: string;
+  receivedByAccount: string;
+  receivedByAccountName?: string;
+  lastReplyText: string;
+  repliedAt: string;
+  repliedAtIso?: string;
+  directChatUrl: string;
+}
+

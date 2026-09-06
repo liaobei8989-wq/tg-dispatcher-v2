@@ -16,6 +16,7 @@ import { LeadScraperHub } from './components/LeadScraperHub';
 import { WebInboxHub } from './components/WebInboxHub';
 import { ProxyManagerModal } from './components/ProxyManagerModal';
 import { ProxyHubView } from './components/ProxyHubView';
+import { RepliedCustomersModal } from './components/RepliedCustomersModal';
 
 import { AccountSession, AntiBanSettings, CampaignLog, AccountStatus, ScrubbedContact } from './types';
 import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, getDedicatedProxyForPhone, BRAZIL_DEDICATED_PROXIES_MAP } from './data/mockAccounts';
@@ -278,6 +279,7 @@ export default function App() {
   const [resetKey, setResetKey] = useState<number>(0);
   const [showBatchHealthModal, setShowBatchHealthModal] = useState<boolean>(false);
   const [showProxyModal, setShowProxyModal] = useState<boolean>(false);
+  const [showRepliedCustomersModal, setShowRepliedCustomersModal] = useState<boolean>(false);
 
   // Auto-imported leads from LeadScraperHub
   const [importedLeadsPool, setImportedLeadsPool] = useState<string[]>([]);
@@ -384,6 +386,7 @@ export default function App() {
         isCampaignRunning={isCampaignRunning}
         onResetAllToZero={handleResetAllToZero}
         onResetDailySent={handleResetDailySent}
+        onOpenRepliedCustomers={() => setShowRepliedCustomersModal(true)}
       />
 
       <main className="w-full max-w-[1840px] mx-auto px-2 sm:px-4 lg:px-6 py-5">
@@ -411,7 +414,10 @@ export default function App() {
         )}
 
         {activeTab === 'web_inbox' && (
-          <WebInboxHub accounts={accounts} />
+          <WebInboxHub
+            accounts={accounts}
+            onOpenRepliedCustomers={() => setShowRepliedCustomersModal(true)}
+          />
         )}
 
         {activeTab === 'proxy_manager' && (
@@ -500,6 +506,11 @@ export default function App() {
         onClose={() => setShowProxyModal(false)}
         accounts={accounts}
         onUpdateAccountProxy={handleUpdateAccountProxy}
+      />
+
+      <RepliedCustomersModal
+        isOpen={showRepliedCustomersModal}
+        onClose={() => setShowRepliedCustomersModal(false)}
       />
     </div>
   );

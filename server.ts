@@ -1389,6 +1389,99 @@ async function startServer() {
   });
 
   // =========================================================================
+  // 📥 已回复高意向客户名单库 & 多格式导出 API (Replied Customers Export)
+  // =========================================================================
+  const REPLIED_CUSTOMERS_PATH = path.join(process.cwd(), "sessions", "replied_customers.json");
+
+  function getRepliedCustomersList(): any[] {
+    if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
+      try {
+        const raw = fs.readFileSync(REPLIED_CUSTOMERS_PATH, "utf8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return list;
+      } catch (e) {}
+    }
+    return [];
+  }
+
+  // 1. 获取已回复客户列表 (JSON 供前端弹窗展示与交互)
+  app.get("/api/telegram/replied-customers", (req, res) => {
+    try {
+      const customers = getRepliedCustomersList();
+      res.json({
+        success: true,
+        count: customers.length,
+        customers
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 2. 导出已回复客户名单文件 (CSV / TXT，带 UTF-8 BOM，支持 Excel 和主号直接导入)
+  app.get("/api/telegram/export-replied-customers", (req, res) => {
+    try {
+      const format = (req.query.format as string || 'csv').toLowerCase();
+      const type = (req.query.type as string || 'all').toLowerCase(); // all, usernames, ids, phones
+      const customers = getRepliedCustomersList();
+      const timestamp = new Date().toISOString().slice(0, 10);
+
+      if (format === 'txt') {
+        let lines: string[] = [];
+        if (type === 'usernames') {
+          lines = customers.filter(c => c.username).map(c => c.username);
+        } else if (type === 'ids') {
+          lines = customers.map(c => c.id);
+        } else if (type === 'phones') {
+          lines = customers.filter(c => c.phone).map(c => c.phone.replace(/[^0-9+]/g, ''));
+        } else {
+          // 智能混合：优先 @username，若无则给 ID
+          lines = customers.map(c => c.username ? c.username : c.id);
+        }
+
+        const txtContent = lines.join('\n');
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="telegram_replied_leads_${type}_${timestamp}.txt"`);
+        return res.send(txtContent);
+      }
+
+      // Default: CSV with UTF-8 BOM (\uFEFF) for Excel
+      const headers = ['序号', 'Telegram ID', '@用户名', '客户姓名', '客户手机号', '客户回复内容', '接待小号', '最后回复时间', '主号直达私聊链接'];
+      const rows = customers.map((c, idx) => {
+        const escapeCsv = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+        return [
+          idx + 1,
+          `'${c.id || ''}`,
+          escapeCsv(c.username || ''),
+          escapeCsv(c.fullName || c.firstName || ''),
+          escapeCsv(c.phone || ''),
+          escapeCsv(c.lastReplyText || ''),
+          escapeCsv(c.receivedByAccount || ''),
+          escapeCsv(c.repliedAt || ''),
+          escapeCsv(c.directChatUrl || '')
+        ].join(',');
+      });
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="telegram_replied_leads_brazil_${timestamp}.csv"`);
+      return res.send(csvContent);
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 3. 清空已回复名单
+  app.post("/api/telegram/clear-replied-customers", (req, res) => {
+    try {
+      fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      res.json({ success: true, message: "已回复客户名单已清空" });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // =========================================================================
   // ⏰ 服务端常驻 24h 跨时区 3 波定时群发调度中心 (Server-Side Wave Scheduler)
   // =========================================================================
   const SCHED_CONFIG_PATH = path.join(process.cwd(), "sessions", "scheduled_campaign_config.json");

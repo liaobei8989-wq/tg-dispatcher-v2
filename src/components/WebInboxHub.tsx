@@ -18,15 +18,17 @@ import {
   Check,
   Copy,
   Trash2,
-  DollarSign
+  DollarSign,
+  Download
 } from 'lucide-react';
 import { InboxConversation, InboxMessage, AccountSession } from '../types';
 
 interface WebInboxHubProps {
   accounts: AccountSession[];
+  onOpenRepliedCustomers?: () => void;
 }
 
-export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts }) => {
+export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts, onOpenRepliedCustomers }) => {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string>('');
   const [filterAccount, setFilterAccount] = useState<string>('ALL');
@@ -197,6 +199,14 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts }) => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={onOpenRepliedCustomers}
+            className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-900/30 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+            title="查看并一键下载所有已回复的客户名单 (TG ID、@用户名、手机号)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>导出已回复客户 (Excel/TXT)</span>
+          </button>
           <button
             onClick={fetchConversations}
             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"

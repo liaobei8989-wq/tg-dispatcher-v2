@@ -28,6 +28,7 @@ interface NavbarProps {
   isCampaignRunning: boolean;
   onResetAllToZero: () => void;
   onResetDailySent?: () => void;
+  onOpenRepliedCustomers?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isCampaignRunning,
   onResetAllToZero,
   onResetDailySent,
+  onOpenRepliedCustomers,
 }) => {
   const navItems = [
     { id: 'tg_simple', label: '⚡ TG 极速一键中台', icon: Send, pulse: isCampaignRunning, badge: '极简主控' },
@@ -113,26 +115,37 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-[10px] text-slate-400 group-hover:text-amber-200 opacity-60 group-hover:opacity-100 ml-0.5">🔄</span>
               </button>
               <div className="h-3 w-px bg-slate-800"></div>
-              <button
-                type="button"
-                title="点击可一键清零补发统计"
-                onClick={async () => {
-                  if (window.confirm('确定要一键清零【自动补发】统计数据吗？')) {
-                    try {
-                      await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
-                      window.location.reload();
-                    } catch (e: any) {
-                      alert('清零失败: ' + e.message);
+              <div className="flex items-center bg-emerald-950/40 hover:bg-emerald-900/60 rounded-lg border border-emerald-500/20 hover:border-emerald-400/40 transition">
+                <button
+                  type="button"
+                  title="点击查看并一键下载所有已回复的客户名单（TG ID、@用户名、手机号，可供主号直接私聊）"
+                  onClick={onOpenRepliedCustomers}
+                  className="flex items-center space-x-1.5 px-2 py-0.5 cursor-pointer active:scale-95 group"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  <span className="text-slate-300 group-hover:text-white">自动补发:</span>
+                  <span className="text-cyan-400 font-extrabold font-mono">{totalFollowupToday} 条</span>
+                  <span className="text-[10px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 ml-0.5 font-sans font-medium">📥 导出客资</span>
+                </button>
+                <button
+                  type="button"
+                  title="清零自动补发统计数据"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (window.confirm('确定要一键清零【自动补发】统计数据吗？')) {
+                      try {
+                        await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
+                        window.location.reload();
+                      } catch (e: any) {
+                        alert('清零失败: ' + e.message);
+                      }
                     }
-                  }
-                }}
-                className="flex items-center space-x-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 px-2 py-0.5 rounded-lg border border-emerald-500/20 hover:border-emerald-400/40 transition cursor-pointer active:scale-95 group"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span className="text-slate-300 group-hover:text-white">自动补发:</span>
-                <span className="text-cyan-400 font-extrabold font-mono">{totalFollowupToday} 条</span>
-                <span className="text-[10px] text-slate-400 group-hover:text-rose-300 opacity-60 group-hover:opacity-100 ml-0.5">🔄</span>
-              </button>
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-rose-300 border-l border-emerald-500/20 cursor-pointer"
+                >
+                  🔄
+                </button>
+              </div>
             </div>
           </div>
         </div>
