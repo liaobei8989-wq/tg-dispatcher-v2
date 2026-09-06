@@ -414,11 +414,10 @@ async def scan_and_reply_for_account(phone, stats):
                     await asyncio.sleep(blessing_delay)
 
                     third_blessings = [
-                        "🚀 Arrebenta lá amigo! Hoje a forra é certa! 🎰💵 Qualquer dúvida estou por aqui! 😉",
-                        "🍀 Boa sorte nas jogadas! Que venha o grande jackpot hoje! 💰🔥",
-                        "👑 Vai com tudo, que hoje o PIX cai em dobro na sua conta! 🤑✨",
-                        "🎯 Torcendo pelo seu forro hoje! Se precisar de dicas de slots é só chamar! 🎲💎",
-                        "🔥 Sucesso meu amigo! Que venha muitos ganhos hoje! 🎰💵 Tamo junto! 😉"
+                        "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
+                        "{🐯 Muita sorte nas rodadas|🔥 Sucesso nos giros|🍀 Boa sorte aí} {patrão|chefe|campeão|amigo}! {Que o Tigre solte a carta pra você hoje|Tomara que estoure a banca com lucro alto|Que venha aquele Big Win insano}! 💰🏆 {A lista dos minutos pagantes de hoje tá fixada no canal VIP}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} 🚀🍀",
+                        "{💎 Boas apostas|🎉 Muito lucro|🚀 Sucesso garantido} {meu parceiro|chefia|amigo}! {Qualquer dúvida estou à disposição}! 🤝 {Guarda o nosso canal oficial pra você nunca perder os links e bônus}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat}! 📲💵",
+                        "{🍀 Boa sorte aí|🚀 Arrebenta lá|🔥 Sucesso nas apostas} {amigo|patrão|parceiro}! {Bora forrar|Hoje é dia de lucro}! 🎰 {Dicas e sinais VIP aqui|Canal oficial de estratégias}: {t.me/brazilgo_chat|https://t.me/brazilgo_chat} 🐯💰"
                     ]
                     third_msg = parse_spintax(random.choice(third_blessings))
                     try:

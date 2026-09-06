@@ -1675,7 +1675,7 @@ async function startServer() {
           targets: targets,
           message: message || "{Olá|Oi}! {Tudo bem|Como vai}? 👍",
           second_message: second_message || "🔥 500% Bônus exclusivo: {URL}",
-          third_message: third_message || "🍀 Boa sorte amigo! 🎰💵",
+          third_message: third_message || "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
           wait_for_reply: true,
           delay_min: 45.0,
           delay_max: 60.0
@@ -1765,7 +1765,7 @@ async function startServer() {
                 targetGroupTag: wave.targetGroupTag || 'ALL',
                 message: "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
                 second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: https://brazilgo888.com/vip",
-                third_message: "🍀 Boa sorte amigo! Que venha o grande jackpot hoje! 💰🔥",
+                third_message: "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
                 wait_for_reply: true,
                 delay_min: 45.0,
                 delay_max: 65.0

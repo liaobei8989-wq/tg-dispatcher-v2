@@ -1192,7 +1192,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   });
   // 阶段三：祝老板中奖/暴富祝福语 (Spintax 变量语法 + 官方推荐 3~6s 拟人延时)
   const [blessingText, setBlessingText] = useState<string>(() => {
-    return `🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀`;
+    return DEFAULT_BLESSING_SPINTAX;
   });
   const [enableBlessing, setEnableBlessing] = useState<boolean>(true);
   const [blessingDelayMin, setBlessingDelayMin] = useState<number>(3.5);

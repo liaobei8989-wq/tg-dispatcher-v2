@@ -557,6 +557,10 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts, onOpenReplie
                   text: '🔥 Dica quente: O Fortune Tiger está com 98.7% de assertividade agora em brazilgo888.com! Aproveite as rodadas pagantes!'
                 },
                 {
+                  title: '📢 进官方 VIP 策略群 (t.me/brazilgo_chat)',
+                  text: '🎁 Amigo, entra no nosso canal VIP oficial de dicas e sinais: 👉 t.me/brazilgo_chat pra pegar os horários que o Tigrinho tá pagando e bônus diários no PIX! 🐯💵'
+                },
+                {
                   title: '🎁 200% 首充翻倍福利',
                   text: 'Seu bônus de 200% de primeiro depósito está liberado! Acesse brazilgo888.com/vip e ative antes que expire hoje! 💰'
                 }

@@ -1,47 +1,48 @@
 export interface BlessingTemplate {
   id: string;
   name: string;
-  category: 'jackpot' | 'pix' | 'support' | 'short';
+  category: 'channel' | 'jackpot' | 'pix' | 'support' | 'short';
   content: string;
   description: string;
 }
 
 export const PRESET_BLESSING_TEMPLATES: BlessingTemplate[] = [
   {
-    id: 'blessing-jackpot-1',
-    name: '🎰 祝老板爆大奖 / 老虎机PG爆分 (Jackpot & Forra)',
-    category: 'jackpot',
-    description: '祝老板爆出超级大奖、老虎机出分，巴西玩家最喜爱的地道黑话',
-    content: '{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Boa sorte|🚀 Arrebenta lá|🔥 Sucesso} {patrão|chefe|meu amigo|campeão|amigo}! {Que venha o grande jackpot|Hoje a forra é certa|Bora lucrar pesado nos giros|Que venha muitos ganhos hoje}! 🎰💵 {Qualquer dúvida estou por aqui|Se precisar de ajuda só chamar|Tamo junto}! 😉'
+    id: 'blessing-channel-vip',
+    name: '🎯 祝老板中奖 + VIP 策略频道 (t.me/brazilgo_chat 推荐首选)',
+    category: 'channel',
+    description: '祝老板爆奖，并引导加入官方“Chat - Dicas e Estratégias”群，即便网址受限客户也能随时在 TG 找到我们',
+    content: '{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨'
   },
   {
-    id: 'blessing-tiger-2',
-    name: '🐯 祝老板老虎机放水出卡 (Fortune Tiger Soltar Carta)',
-    category: 'jackpot',
-    description: '针对 Fortune Tiger 等热门老虎机游戏，祝老板遇上大暴击',
-    content: '{🐯 Boa sorte aí|🎰 Muita sorte nas rodadas|🔥 Sucesso} {patrão|chefe|campeão}! {Que o Tigre solte a carta pra você hoje|Tomara que estoure a banca com lucro alto|Que venha aquele Big Win insano}! 💰🏆 {Bom jogo e boas apostas|Qualquer coisa me avisa aqui}! 🍀'
+    id: 'blessing-channel-tiger',
+    name: '🐯 老虎机爆分出卡 + 进群查放水时间表 (Fortune Tiger)',
+    category: 'channel',
+    description: '主打 Fortune Tiger 爆分时间表，吸引客户进群蹲守高爆率时段',
+    content: '{🐯 Muita sorte nas rodadas|🔥 Sucesso nos giros|🍀 Boa sorte aí} {patrão|chefe|campeão|amigo}! {Que o Tigre solte a carta pra você hoje|Tomara que estoure a banca com lucro alto|Que venha aquele Big Win insano}! 💰🏆 {Liberamos os horários pagantes atualizados lá no nosso canal VIP|A lista dos minutos pagantes de hoje tá fixada no canal}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {corre lá pra conferir antes de girar|entra pra pegar a estratégia completa}! 🚀🍀'
   },
   {
-    id: 'blessing-pix-3',
-    name: '💸 祝老板PIX提款秒到 / 天天提现 (Saques no PIX)',
+    id: 'blessing-channel-backup',
+    name: '🛡️ 官方防封备用频道 + 永不失联通道 (Dicas e Estratégias)',
+    category: 'channel',
+    description: '强调这是官方备用通讯频道，即使平台域名遭遇风控客户也能持续获取最新线路',
+    content: '{💎 Boas apostas|🎉 Muito lucro|🚀 Sucesso garantido} {meu parceiro|chefia|amigo}! {Qualquer dúvida estou à disposição|Tamo junto pro que precisar}! 🤝 {Guarda o nosso canal oficial de suporte e atualizações pra você nunca perder os links e bônus|Se o link oscilar, o acesso rápido e promoções ficam sempre atualizados no nosso canal oficial}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat}! 📲💵'
+  },
+  {
+    id: 'blessing-channel-pix',
+    name: '💸 祝老板PIX秒到 + 群内看大奖提现图 (Comprovantes PIX)',
     category: 'pix',
-    description: '祝老板今天提款顺利、狂提 PIX 现金',
-    content: '{💎 Muito sucesso|🎉 Boas apostas|🤑 Lucro garantido} {chefia|patrão|meu parceiro}! {Que você saque muito no PIX hoje|Tomara que multiplique sua banca com segurança|Que hoje seja seu dia de forrar}! 🚀💵 {Tamo junto sempre|Qualquer dúvida só mandar mensagem}! 🙌'
+    description: '祝愿玩家提现顺利，并引导进群查看真实出款与交流体验',
+    content: '{🤑 Que você saque muito no PIX hoje|💸 Tomara que forre pesado|💰 Que venha muito lucro na conta} {parceiro|amigo|patrão}! {Aproveita os giros grátis|Vai com tudo pra cima do Tigrinho}! 🎰 {Confira os comprovantes de saque e estratégias da galera no nosso canal VIP}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {Qualquer coisa só me dar um toque por aqui|Tamo junto sempre}! 🙌💵'
   },
   {
-    id: 'blessing-support-4',
-    name: '🤝 贴心客服陪伴 / 有疑问随时找我 (Suporte VIP)',
-    category: 'support',
-    description: '拉近与客户的距离，树立真实可信的 1 对 1 专属客服形象，降低被举报率',
-    content: '{✨ Boa sorte nos jogos|🍀 Ótimas apostas|🎲 Bom jogo} {meu amigo|meu querido|parceiro}! {Aproveita o bônus e arrebenta lá|Vai dar bom demais hoje|Bora lucrar}! 🤑 {Se tiver qualquer dúvida sobre cadastro, depósito ou bônus, só me chamar aqui no chat|Qualquer coisa me chama que te ajudo|Estou à disposição}! 💬❤️'
-  },
-  {
-    id: 'blessing-short-5',
-    name: '⚡ 极速精炼版 (Curto & Rápido)',
+    id: 'blessing-channel-short',
+    name: '⚡ 极速精炼版 (祝老板中奖 + 频道秒引流)',
     category: 'short',
-    description: '超短一句话祝福，适合极速追发，最自然真实',
-    content: '{Boa sorte aí|Muito boa sorte|Sucesso nas apostas} {patrão|chefe|amigo}! 🍀 {Que venha o forro|Bora faturar} hoje! 🎰'
+    description: '超短一句话祝福附带频道，适合快速触达，最自然真实',
+    content: '{🍀 Boa sorte aí|🚀 Arrebenta lá|🔥 Sucesso nas apostas} {amigo|patrão|parceiro}! {Bora forrar|Hoje é dia de lucro}! 🎰 {Dicas e sinais VIP aqui|Canal oficial de estratégias}: {t.me/brazilgo_chat|https://t.me/brazilgo_chat} 🐯💰'
   }
 ];
 
-export const DEFAULT_BLESSING_SPINTAX = '{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Boa sorte|🚀 Arrebenta lá|🔥 Sucesso} {patrão|chefe|meu amigo|campeão|amigo}! {Que venha o grande jackpot|Hoje a forra é certa|Bora lucrar pesado nos giros|Que venha muitos ganhos hoje}! 🎰💵 {Qualquer dúvida estou por aqui|Se precisar de ajuda só chamar|Tamo junto}! 😉';
+export const DEFAULT_BLESSING_SPINTAX = '{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨';
+

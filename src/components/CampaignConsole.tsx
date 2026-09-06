@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AccountSession, AntiBanSettings, CampaignLog, PromotionalTemplate, ScrubbedContact, PlatformType } from '../types';
 import { PRESET_TEMPLATES } from '../data/presetTemplates';
+import { DEFAULT_BLESSING_SPINTAX } from '../data/blessingTemplates';
 import {
   parseSpintax,
   replaceVariables,
@@ -147,7 +148,7 @@ export const CampaignConsole: React.FC<CampaignConsoleProps> = ({
     '{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação: {URL}'
   );
   const [step3BlessingText, setStep3BlessingText] = useState<string>(
-    '🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀'
+    DEFAULT_BLESSING_SPINTAX
   );
   const [enableThirdStep, setEnableThirdStep] = useState<boolean>(true);
 
