@@ -73,14 +73,14 @@ export default function App() {
             }
           });
 
-          const sanitizedList = Array.from(uniqueMap.values());
+          const sanitizedList = Array.from(uniqueMap.values()).slice(0, 60);
           if (sanitizedList.length > 0) return sanitizedList;
         }
       }
     } catch (e) {
       console.warn('Initial localStorage account load warning:', e);
     }
-    return INITIAL_MOCK_ACCOUNTS;
+    return INITIAL_MOCK_ACCOUNTS.slice(0, 60);
   });
 
   // Async hydration from server API and IndexedDB on initial load
@@ -135,7 +135,7 @@ export default function App() {
                 });
               }
             });
-            const list = Array.from(uniqueMap.values());
+            const list = Array.from(uniqueMap.values()).slice(0, 60);
             safeSaveAccountsToLocalStorage(list);
             return list;
           });
@@ -335,6 +335,16 @@ export default function App() {
     }
   };
 
+  // Reset daily followup stats (一键清零【自动补发】计数)
+  const handleResetFollowupToday = async () => {
+    setTotalFollowupToday(0);
+    try {
+      await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
+    } catch (e) {
+      console.warn('Failed to reset reply stats', e);
+    }
+  };
+
   // Check and automatically roll over / reset sentToday at 00:00 (daily rollover)
   React.useEffect(() => {
     const checkDailyMidnightReset = () => {
@@ -386,6 +396,7 @@ export default function App() {
         isCampaignRunning={isCampaignRunning}
         onResetAllToZero={handleResetAllToZero}
         onResetDailySent={handleResetDailySent}
+        onResetFollowupToday={handleResetFollowupToday}
         onOpenRepliedCustomers={() => setShowRepliedCustomersModal(true)}
       />
 
@@ -511,6 +522,7 @@ export default function App() {
       <RepliedCustomersModal
         isOpen={showRepliedCustomersModal}
         onClose={() => setShowRepliedCustomersModal(false)}
+        onRefreshStats={() => setTotalFollowupToday(0)}
       />
     </div>
   );

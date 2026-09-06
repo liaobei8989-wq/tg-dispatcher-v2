@@ -1535,6 +1535,15 @@ async function startServer() {
   app.post("/api/telegram/clear-replied-customers", (req, res) => {
     try {
       fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
+      if (fs.existsSync(statsFilePath)) {
+        try {
+          const stats = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
+          stats.todayCount = 0;
+          stats.totalCount = 0;
+          fs.writeFileSync(statsFilePath, JSON.stringify(stats, null, 2), "utf8");
+        } catch (_) {}
+      }
       res.json({ success: true, message: "已回复客户名单已清空" });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });

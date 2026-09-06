@@ -117,6 +117,23 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
     document.body.removeChild(a);
   };
 
+  // Clear all replied customers from database
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+  const handleClearAll = async () => {
+    if (window.confirm('确定要清空已回复客户名单并归零计数吗？\n（清空后，下次导出的就全都是全新回复的意向客户，绝不重复！）')) {
+      setIsClearing(true);
+      try {
+        await fetch('/api/telegram/clear-replied-customers', { method: 'POST' });
+        setCustomers([]);
+        onRefreshStats?.();
+      } catch (e) {
+        console.error('Failed to clear replied customers', e);
+      } finally {
+        setIsClearing(false);
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -229,6 +246,17 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
                 <span>{copyFeedback === 'ids' ? '已复制 ID' : '复制全部 ID'}</span>
               </button>
             </div>
+
+            {/* Clear List Button */}
+            <button
+              onClick={handleClearAll}
+              disabled={isClearing || customers.length === 0}
+              className="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 hover:text-rose-100 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
+              title="导出后点击清空，下次导出的就全都是全新的意向客户，绝不重复"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>{isClearing ? '正在清空...' : '清空已导名单 (归零)'}</span>
+            </button>
           </div>
         </div>
 
