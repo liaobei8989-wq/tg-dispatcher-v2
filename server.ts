@@ -588,6 +588,60 @@ async function startServer() {
         });
       });
 
+      // 3. Ensure all 60 protocol accounts are fully populated matching the 60 proxies pool
+      const BRAZIL_60_PHONES = [
+        '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
+        '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
+        '5586995201101', '5586995201102', '5586995201103', '5586995201104', '5586995201105',
+        '5586995201106', '5586995201107', '5586995201108', '5586995201109', '5586995201110',
+        '5586995201111', '5586995201112', '5586995201113', '5586995201114', '5586995201115',
+        '5586995201116', '5586995201117', '5586995201118', '5586995201119', '5586995201120',
+        '5586995201121', '5586995201122', '5586995201123', '5586995201124', '5586995201125',
+        '5586995201126', '5586995201127', '5586995201128', '5586995201129', '5586995201130',
+        '5586995201131', '5586995201132', '5586995201133', '5586995201134', '5586995201135',
+        '5586995201136', '5586995201137', '5586995201138', '5586995201139', '5586995201140',
+        '5586995201141', '5586995201142', '5586995201143', '5586995201144', '5586995201145',
+        '5586995201146', '5586995201147', '5586995201148', '5586995201149', '5586995201150'
+      ];
+
+      BRAZIL_60_PHONES.forEach((rawPhone, idx) => {
+        if (!processedPhones.has(rawPhone)) {
+          processedPhones.add(rawPhone);
+          const isTop5 = idx < 5;
+          const isMature = idx < 20;
+          const assignedProxy = allocateUnusedProxy(rawPhone);
+          const name = defaultNames[idx % defaultNames.length].split(' ')[0];
+          const warmupDay = isTop5 ? 7 : isMature ? 5 : 3;
+
+          accountsList.push({
+            id: `acc-tg-${rawPhone}`,
+            phone: formatPhoneDisplay(rawPhone),
+            alias: `TG-BR-${rawPhone} (${name})`,
+            platform: 'telegram',
+            type: 'tg_userbot',
+            status: isMature ? 'active' : 'warming',
+            proxy: assignedProxy,
+            healthScore: 99,
+            sentToday: 0,
+            dailyLimit: isMature ? 120 : 60,
+            totalSent: isMature ? 120 : 0,
+            successRate: 100,
+            createdAt: '2026-08-31',
+            lastActive: '刚刚',
+            warmupDay: warmupDay,
+            twoFactorPassword: '548508',
+            avatarUrl: '',
+            tgApiId: '2040',
+            tgApiHash: 'b18441a1ff607e10a989891a5462e627',
+            spambotStatus: 'clean',
+            sessionValid: true,
+            deviceModel: 'PC (Win10)',
+            sessionFile: `${rawPhone}.session`,
+            groupTag: idx < 20 ? '主力爆破A组' : idx < 40 ? '新买养号B组' : '矩阵预备C组'
+          });
+        }
+      });
+
       if (proxyMapUpdated) {
         try {
           fs.writeFileSync(proxyJsonPath, JSON.stringify(accountProxiesMap, null, 2), 'utf-8');
