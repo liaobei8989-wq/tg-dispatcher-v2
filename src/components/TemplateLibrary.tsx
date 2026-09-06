@@ -245,7 +245,7 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       BONUS: '200%',
       URL: 'https://brazilgo888.com/tiger',
       CODE: 'VIP888',
-      TG_LINK: 'https://t.me/BrazilGo888Official'
+      TG_LINK: 'https://t.me/brazilgo_chat'
     });
     
     let samples = generateSpintaxVariants(rawWithVars, 5);
@@ -659,7 +659,8 @@ export const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                   '{ganhe|receba}',
                   '{Fortune Tiger|Jogo do Tigrinho}',
                   '{100%|200%}',
-                  '{brazilgo888.com|brazilgo888.com/vip}'
+                  '{brazilgo888.com|brazilgo888.com/vip}',
+                  '{👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat}'
                 ].map((s) => (
                   <button
                     key={s}

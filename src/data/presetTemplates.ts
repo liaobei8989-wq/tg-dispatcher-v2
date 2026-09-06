@@ -3,11 +3,22 @@ import { PromotionalTemplate } from '../types';
 export const PRESET_TEMPLATES: PromotionalTemplate[] = [
   // ================= 2026 巴西本土实战王牌文案 (免充测试金 / Tigrinho 爆款 / PIX秒到) =================
   {
+    id: 'tg-vip-channel-direct',
+    name: '📢 [官方 VIP 频道] 进群领每日放水时间表 + 98% 胜率信号 (t.me/brazilgo_chat)',
+    category: 'custom',
+    platformTarget: 'telegram',
+    isDefault: true,
+    content: `{Fala amigo!|Opa jogador!|Salve parceiro!} {Quer saber os minutos exatos que o Fortune Tiger tá pagando hoje?|Quer dobrar sua banca com sinais ao vivo?|Liberamos a lista dos minutos pagantes de hoje no nosso canal VIP oficial!} 🐯📊\n\n{🎁 Entre no nosso canal VIP exclusivo de estratégias e bônus no PIX}: 👉 {t.me/brazilgo_chat|https://t.me/brazilgo_chat}\n\n✅ Sinais diários com 98.7% de assertividade\n✅ Alertas de rodadas bônus e sorteios no PIX\n✅ Link oficial da plataforma pagando muito: {URL}\n\n{Corre lá antes que feche as vagas VIP!|Te vejo no grupo! Tamo junto!} 🚀🔥`,
+    mediaType: 'none',
+    mediaUrl: '',
+    variables: ['URL']
+  },
+  {
     id: 'tiger-sem-deposito-1',
     name: '🐯 [2026 爆款实战 1] R$ 15 免充值注册金 + PIX 秒提 (转化率王牌)',
     category: 'welcome_bonus',
     platformTarget: 'telegram',
-    isDefault: true,
+    isDefault: false,
     content: `{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação. Resgata por aqui antes que expire:\n{URL}`,
     mediaType: 'none',
     mediaUrl: '',
