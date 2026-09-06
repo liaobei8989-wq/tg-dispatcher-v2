@@ -38,6 +38,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<'csv' | 'txt_usernames' | 'txt_ids' | 'txt_phones'>('csv');
+  const [isClearing, setIsClearing] = useState<boolean>(false);
 
   // Load replied customers list from server
   const fetchRepliedCustomers = async () => {
@@ -118,7 +119,6 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   };
 
   // Clear all replied customers from database
-  const [isClearing, setIsClearing] = useState<boolean>(false);
   const handleClearAll = async () => {
     if (window.confirm('确定要清空已回复客户名单并归零计数吗？\n（清空后，下次导出的就全都是全新回复的意向客户，绝不重复！）')) {
       setIsClearing(true);
