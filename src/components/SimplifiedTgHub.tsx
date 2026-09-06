@@ -2916,16 +2916,17 @@ if __name__ == "__main__":
       return;
     }
 
+    const obsoleteDeadPhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     const realSessionFiles = uploadedSessions.filter(s => {
       if (!s.fileName || !s.fileName.endsWith('.session')) return false;
       const cleanDigits = s.fileName.replace(/[^0-9]/g, '');
-      return cleanDigits.length >= 7 && !s.fileName.toLowerCase().includes('2fa');
+      return cleanDigits.length >= 7 && !s.fileName.toLowerCase().includes('2fa') && !obsoleteDeadPhones.has(cleanDigits);
     });
     const hasRealSessions = realSessionFiles.length > 0;
 
     if (!hasRealSessions && !isAutoScheduled) {
       const confirmContinue = confirm(
-        "⚠️【发件凭证缺失提示】\n\n当前服务器磁盘未挂载任何发件号的 .session 真实凭证！\n如果强行群发，系统将无法与 Telegram 网络建立通信，导致所有目标发送失败 (0 条送达)。\n\n【确定】: 仍然强行测试发送\n【取消】: 页面将为您定位到【.session 文件上传中心】"
+        "⚠️【发件凭证缺失提示】\n\n当前服务器磁盘未挂载任何有效的 Telegram .session 真实凭证！\n如果强行群发，系统将无法与 Telegram 网络建立通信，导致所有目标发送失败 (0 条送达)。\n\n【确定】: 仍然强行测试发送\n【取消】: 页面将为您定位到【.session 文件上传中心】"
       );
       if (!confirmContinue) {
         const uploadArea = document.querySelector('input[accept=".session,.json"]');
@@ -2973,17 +2974,17 @@ if __name__ == "__main__":
           const rawPhoneNum = s.fileName.replace('.session', '').replace(/\D/g, '');
           const matchedAcc = distinctTgAccounts.find(a => {
             const cleanAccP = a.phone.replace(/\D/g, '');
-            return cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP);
+            return (cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP)) && !obsoleteDeadPhones.has(cleanAccP);
           });
           return {
             phone: matchedAcc ? matchedAcc.phone : `+${rawPhoneNum}`,
             sessionFile: s.fileName,
             groupTag: matchedAcc?.groupTag || '主力爆破A组'
           };
-        })
+        }).filter(a => !obsoleteDeadPhones.has(a.phone.replace(/\D/g, '')))
       : (distinctTgAccounts.length > 0 
-          ? distinctTgAccounts.map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
-          : [{ phone: '+55 41 99999-8888', sessionFile: undefined, groupTag: '主力爆破A组' }]);
+          ? distinctTgAccounts.filter(a => !obsoleteDeadPhones.has(a.phone.replace(/\D/g, ''))).map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
+          : [{ phone: '+55 86 99442-8117', sessionFile: undefined, groupTag: '主力爆破A组' }]);
 
     const activeFilter = currentWave?.targetGroupTag || massSendGroupFilter;
     if (activeFilter && activeFilter !== 'ALL') {

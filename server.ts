@@ -140,15 +140,18 @@ async function startServer() {
 
       const filesInSessions = fs.existsSync(sessionsDir) ? fs.readdirSync(sessionsDir) : [];
       const sessionFilesMap = new Map();
+      const obsoleteSet = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
 
-      // Clean up any accidentally renamed 2fa.txt.session files, system json, or malformed bak in sessions/
+      // Clean up any accidentally renamed 2fa.txt.session files, system json, malformed bak, or obsolete dead accounts in sessions/
       filesInSessions.forEach(f => {
+        const cleanDigits = f.replace(/[^0-9]/g, '');
         if (
           (f.toLowerCase().includes('2fa') && f.endsWith('.session')) ||
           f === 'package-lock.json' ||
           f === 'package.json' ||
           f === 'account_proxies.json' ||
-          f.includes('.malformed_')
+          f.includes('.malformed_') ||
+          obsoleteSet.has(cleanDigits)
         ) {
           try {
             fs.unlinkSync(path.join(sessionsDir, f));

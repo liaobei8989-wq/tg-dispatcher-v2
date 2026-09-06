@@ -192,6 +192,8 @@ def parse_proxy_dict_or_str(proxy_data):
             return (p_type, ip, port, True, user, pwd)
     return None
 
+BANNED_OBSOLETE_PHONES = {'5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207'}
+
 def load_account_proxies_map():
     for p in [os.path.join(os.getcwd(), "account_proxies.json"), os.path.join(os.getcwd(), "sessions", "account_proxies.json")]:
         if os.path.exists(p):
@@ -204,6 +206,8 @@ def load_account_proxies_map():
 
 def find_session_file(phone_or_name: str):
     clean_digits = re.sub(r'[^0-9]', '', str(phone_or_name))
+    if clean_digits in BANNED_OBSOLETE_PHONES:
+        return None
     search_dirs = [
         os.path.join(os.getcwd(), "sessions"),
         os.getcwd(),
@@ -219,12 +223,17 @@ def find_session_file(phone_or_name: str):
         if os.path.exists(p2) and os.path.getsize(p2) > 100:
             return p2
         for f in glob.glob(os.path.join(d, "*.session")):
+            f_digits = re.sub(r'[^0-9]', '', os.path.basename(f))
+            if f_digits in BANNED_OBSOLETE_PHONES:
+                continue
             if clean_digits and clean_digits in f and os.path.getsize(f) > 100:
                 return f
     return None
 
 def find_json_config(phone_or_name: str):
     clean_digits = re.sub(r'[^0-9]', '', str(phone_or_name))
+    if clean_digits in BANNED_OBSOLETE_PHONES:
+        return {}
     search_dirs = [
         os.path.join(os.getcwd(), "sessions"),
         os.getcwd(),
@@ -250,6 +259,14 @@ def get_all_valid_session_files():
             for f in glob.glob(os.path.join(d, "*.session")):
                 # Filter out temporary worker files
                 if "_worker_" in f or "_tmp_" in f:
+                    continue
+                basename = os.path.basename(f)
+                f_digits = re.sub(r'[^0-9]', '', basename)
+                if f_digits in BANNED_OBSOLETE_PHONES:
+                    try:
+                        os.remove(f)
+                    except Exception:
+                        pass
                     continue
                 if os.path.getsize(f) > 200:
                     if f not in valid:
