@@ -436,7 +436,8 @@ export async function executeTelegramDirectSend(
           } else if (errStr.includes('TIMEOUT') || errStr.includes('Timeout') || errStr.includes('ETIMEDOUT') || errStr.includes('TIMEDOUT')) {
             diag = `⏳ [网络连接响应超时 (TIMEOUT)]: Telegram MTProto 节点响应超时，系统已自动切入备用账号继续发信`;
           } else if (errStr.includes('PEER_FLOOD') || errStr.includes('PeerFlood')) {
-            diag = `⚠️ [Telegram 账号受限]: 该发件号被 Telegram 官方临时限制向陌生人发信 (PeerFlood)，系统已自动切换下一个账号接力`;
+            diag = `⚠️ [Telegram 账号受限]: 该发件号被 Telegram 官方临时限制向陌生人发信 (PeerFlood)，系统已设置 12 小时休眠冷却并强制退出发信，已自动切换下一个健康账号接力`;
+            setAccountCooldown(curPhone, 12 * 3600 * 1000);
           } else if (errStr.includes('FLOOD_WAIT') || errStr.includes('FloodWait')) {
             diag = `⏳ [Telegram 限流等待]: ${errStr}`;
           } else if (errStr.includes('USER_PRIVACY_RESTRICTED') || errStr.includes('Privacy')) {

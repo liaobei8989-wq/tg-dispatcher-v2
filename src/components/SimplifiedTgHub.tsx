@@ -565,6 +565,14 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     ]);
   };
 
+  // 实时当前群发批次进度追踪 (明确区分“本次批次进度”与“今日全天累计发信量”，消除重复发件恐慌)
+  const [currentBatchStats, setCurrentBatchStats] = useState<{
+    total: number;
+    dispatched: number;
+    success: number;
+    failed: number;
+  }>({ total: 0, dispatched: 0, success: 0, failed: 0 });
+
   // 执行自动隔离移组核心函数
   const quarantineAccounts = (phones: string[], reason: string) => {
     const phoneSet = new Set(phones.map(p => p.replace(/\D/g, '')));
@@ -2968,6 +2976,8 @@ if __name__ == "__main__":
       updateSentOffset(0);
     }
 
+    setCurrentBatchStats({ total: rawLines.length, dispatched: currentIndex, success: 0, failed: 0 });
+
     // 1. 动态构建独立发件账号池 (匹配 .session 协议号凭证，支持按分组分流)
     let initialAccountPool = hasRealSessions 
       ? realSessionFiles.map((s) => {
@@ -3027,13 +3037,17 @@ if __name__ == "__main__":
     const accountPool = initialAccountPool;
 
     // 辅助随机生成器：单号每发完 15 条自动微休 3~5 分钟 (180 ~ 300 秒)
-    const getRandomThreshold = () => 15; // 严格单号 15 条微批次阈值
-    const getRandomRestSec = () => Math.floor(Math.random() * (300 - 180 + 1)) + 180; // 3~5分钟随机微休
+    const getRandomThreshold = () => 20; // 连发 20 条微批次
+    const getRandomRestSec = () => {
+      if (tgSendSpeedMode === 'turbo') return Math.floor(Math.random() * 20) + 20; // 20~40秒极速微歇
+      if (tgSendSpeedMode === 'balanced') return Math.floor(Math.random() * 30) + 40; // 40~70秒平衡微歇
+      return Math.floor(Math.random() * 40) + 60; // 60~100秒稳健微歇
+    };
 
     // 2. 初始化每个发件账号独立的员工性格档案 (动态自适应任意 N 个账号的弹性矩阵)
     const poolSize = accountPool.length;
-    // 根据实际在线协议号总数自适应错峰步长，无论 10 个号、50 个号、100 个号还是 500+ 个号均自动平滑散开
-    const dynamicStaggerStepMs = Math.max(150, Math.min(2000, Math.floor(45000 / Math.max(poolSize, 1))));
+    // 根据实际在线协议号总数自适应错峰步长，秒级平滑错峰，迅速全员就位
+    const dynamicStaggerStepMs = Math.max(80, Math.min(600, Math.floor(6000 / Math.max(poolSize, 1))));
 
     const accountTracker = accountPool.map((acc, idx) => {
       const rawDigits = acc.phone.replace(/\D/g, '');
@@ -3041,25 +3055,25 @@ if __name__ == "__main__":
       const personalityRoll = (phoneSeed + idx * 7) % 100;
       
       let personalityType = '标准稳健型 (正点到岗)';
-      let arrivalDelayMs = (idx % Math.min(poolSize, 50)) * dynamicStaggerStepMs + Math.floor(Math.random() * 2000) + 1000;
+      let arrivalDelayMs = (idx % Math.min(poolSize, 20)) * dynamicStaggerStepMs + Math.floor(Math.random() * 800) + 500;
       let typingFactor = 1.0;
-      let restThreshold = 15;
+      let restThreshold = 20;
 
       if (personalityRoll < 30) {
         personalityType = '积极早鸟型 (提早到岗)';
-        arrivalDelayMs = Math.floor(Math.random() * 2000) + 500 + (idx % Math.min(poolSize, 20)) * (dynamicStaggerStepMs * 0.4);
-        typingFactor = 0.88 + (phoneSeed % 10) / 100; // 0.88 ~ 0.98x 手速稍快
-        restThreshold = 14 + (phoneSeed % 3); // 14 ~ 16 条
+        arrivalDelayMs = Math.floor(Math.random() * 600) + 300 + (idx % Math.min(poolSize, 10)) * (dynamicStaggerStepMs * 0.4);
+        typingFactor = 0.88 + (phoneSeed % 10) / 100; // 手速稍快
+        restThreshold = 18 + (phoneSeed % 4);
       } else if (personalityRoll < 80) {
         personalityType = '标准稳健型 (正点到岗)';
-        arrivalDelayMs = (idx % Math.min(poolSize, 50)) * dynamicStaggerStepMs + Math.floor(Math.random() * 3000) + 1500;
-        typingFactor = 0.98 + (phoneSeed % 15) / 100; // 0.98 ~ 1.13x 标准
-        restThreshold = 13 + (phoneSeed % 3); // 13 ~ 15 条
+        arrivalDelayMs = (idx % Math.min(poolSize, 20)) * dynamicStaggerStepMs + Math.floor(Math.random() * 800) + 600;
+        typingFactor = 0.98 + (phoneSeed % 15) / 100; // 标准
+        restThreshold = 19 + (phoneSeed % 3);
       } else {
         personalityType = '慢热从容型 (稍迟就位)';
-        arrivalDelayMs = (idx % Math.min(poolSize, 60)) * (dynamicStaggerStepMs * 1.5) + Math.floor(Math.random() * 5000) + 3000;
-        typingFactor = 1.12 + (phoneSeed % 15) / 100; // 1.12 ~ 1.27x 慢吞吞
-        restThreshold = 12 + (phoneSeed % 4); // 12 ~ 15 条
+        arrivalDelayMs = (idx % Math.min(poolSize, 30)) * (dynamicStaggerStepMs * 1.2) + Math.floor(Math.random() * 1200) + 1000;
+        typingFactor = 1.05 + (phoneSeed % 15) / 100;
+        restThreshold = 18 + (phoneSeed % 3);
       }
 
       return {
@@ -3091,15 +3105,20 @@ if __name__ == "__main__":
       let lastErrorDetail = '';
       let nextTaskQueueIndex = currentIndex;
 
-      // 线程安全原子任务取模器
+      // 线程安全原子任务取模器 (支持频控失败目标放回 retryTasks，由其他健康通道接手)
+      const retryTasks: { taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }[] = [];
       const getNextTask = () => {
         if (isAbortedRef.current) return null;
+        if (retryTasks.length > 0) {
+          return retryTasks.shift()!;
+        }
         if (nextTaskQueueIndex >= rawLines.length) return null;
         const taskIdx = nextTaskQueueIndex++;
         return {
           taskIndex: taskIdx,
           targetItem: rawLines[taskIdx],
-          cleanPhone: rawLines[taskIdx].replace(/\s*\(.*?\)/, '').trim()
+          cleanPhone: rawLines[taskIdx].replace(/\s*\(.*?\)/, '').trim(),
+          retries: 0
         };
       };
 
@@ -3129,6 +3148,7 @@ if __name__ == "__main__":
 
           const { taskIndex, targetItem, cleanPhone } = task;
           updateSentOffset(taskIndex + 1);
+          setCurrentBatchStats(prev => ({ ...prev, dispatched: Math.max(prev.dispatched, taskIndex + 1) }));
 
           // 问候语轮换
           let selectedGreeting = greetingText;
@@ -3143,8 +3163,12 @@ if __name__ == "__main__":
           const assignedProxy = brazilProxies[taskIndex % brazilProxies.length];
           const proxyIp = assignedProxy.split(':')[0];
 
-          // 拟人真实打字中 (Typing) 动作：发信前 3~5 秒随机模拟
-          const typingDurationMs = Math.floor(Math.random() * 2000) + 3000;
+          // 拟人真实打字中 (Typing) 动作：根据发信挡位自适应轻量拟人
+          const typingDurationMs = tgSendSpeedMode === 'turbo'
+            ? (Math.floor(Math.random() * 500) + 600)
+            : (tgSendSpeedMode === 'balanced'
+                ? (Math.floor(Math.random() * 800) + 1200)
+                : (Math.floor(Math.random() * 1000) + 1800));
           const typingDurationSec = (typingDurationMs / 1000).toFixed(1);
 
           setSimpleLogs(prev => [
@@ -3190,6 +3214,7 @@ if __name__ == "__main__":
 
             if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {
               runSuccessCount++;
+              setCurrentBatchStats(prev => ({ ...prev, success: prev.success + 1 }));
               const cleanLogText = `[云端后台 🇧🇷 IP:${proxyIp}] [通道 #${workerIdx + 1}: ${acc.phone}] ✨ 消息已送达 ➔ (${targetItem}) [${sessionLabel}]`;
               setSimpleLogs(prev => [...prev, cleanLogText]);
               if (sendStrategyMode === 'two_stage') {
@@ -3197,6 +3222,7 @@ if __name__ == "__main__":
               }
             } else {
               runFailCount++;
+              setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));
               const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
               const errDetail = isUnregistered 
                 ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
@@ -3204,15 +3230,26 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 实时熔断机制：发信遭遇官方限制，立即退出当前账号的群发任务并移入【⚠️ 风控隔离组】
+              // 🛡️ 强力频控绝对熔断机制：发信遭遇官方限制/频控 (PeerFlood/FloodWait/限制)，强制 100% 立即退出本次发信任务！
               const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限/i.test(errDetail);
-              if (isTgRestricted && autoQuarantineRestricted) {
-                quarantineAccounts([acc.phone], `发件中遇到官方限制: ${errDetail}`);
+              if (isTgRestricted) {
+                // 1. 本次目标由于发信号自身频控未送达，放回重试队列让其他健康通道接力发送
+                if ((task.retries || 0) < 2) {
+                  runFailCount = Math.max(0, runFailCount - 1);
+                  retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
+                }
+
+                // 2. 若开启了风控隔离组，自动归档
+                if (autoQuarantineRestricted) {
+                  quarantineAccounts([acc.phone], `发件中遇到官方限制: ${errDetail}`);
+                }
+
+                // 3. 打印醒目的红字停止日志并退出
                 setSimpleLogs(prev => [
                   ...prev,
-                  `🛑 [通道 #${workerIdx + 1} 实时熔断] 账号 ${acc.phone} 遇到 Telegram 官方限制，已自动退出群发任务并移出B组，划入【⚠️ 风控隔离组】冷冻保护！后续任务由其余健康通道无缝继续。`
+                  `🛑 [通道 #${workerIdx + 1} 频控绝对熔断退出] 账号 +${acc.phone} 遇到 Telegram 官方频控限制 (${errDetail.slice(0, 50)})！系统已强制该账号【立即退出】本次任务进入休眠，严禁继续发信以保护账号！未送达目标 (${targetItem}) 已自动转由其余健康通道接力发送。`
                 ]);
-                break; // 立即停止该账号后续发信
+                break; // 🚨 无论开关如何，该账号必须 100% 立即退出发信任务！
               }
             }
           } catch (err: any) {
@@ -3239,20 +3276,20 @@ if __name__ == "__main__":
             ]);
           }
 
-          // 单号专属 45~65 秒高斯拟人随机打散延迟 (只阻塞本账号，不影响任何其它账号！)
-          let minBaseSec = 45.0;
-          let maxBaseSec = 65.0;
+          // 单号专属高斯拟人随机打散延迟 (只阻塞本账号，不影响任何其它账号！)
+          let minBaseSec = 15.0;
+          let maxBaseSec = 25.0;
           if (tgSendSpeedMode === 'conservative') {
-            minBaseSec = 45.0;
-            maxBaseSec = 65.0;
+            minBaseSec = 20.0;
+            maxBaseSec = 35.0;
           } else if (tgSendSpeedMode === 'balanced') {
-            minBaseSec = 30.0;
-            maxBaseSec = 50.0;
+            minBaseSec = 8.0;
+            maxBaseSec = 16.0;
           } else if (tgSendSpeedMode === 'turbo') {
-            minBaseSec = 15.0;
-            maxBaseSec = 30.0;
+            minBaseSec = 2.0;
+            maxBaseSec = 6.0;
           } else if (tgSendSpeedMode === 'custom') {
-            minBaseSec = Math.max(1.0, customSpeedMin);
+            minBaseSec = Math.max(0.5, customSpeedMin);
             maxBaseSec = Math.max(minBaseSec + 0.5, customSpeedMax);
           }
 
@@ -3460,25 +3497,40 @@ if __name__ == "__main__":
 
       {/* 🚨 ACTIVE RUNNING CAMPAIGN EMERGENCY CONTROLLER BANNER */}
       {isCampaignRunning && (
-        <div className="bg-gradient-to-r from-red-950 via-rose-900/90 to-red-950 border-2 border-red-500 rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+        <div className="bg-gradient-to-r from-red-950 via-rose-900/90 to-red-950 border-2 border-red-500 rounded-2xl p-4 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in">
           <div className="flex items-center gap-3">
-            <span className="relative flex h-4 w-4">
+            <span className="relative flex h-4 w-4 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
             </span>
             <div>
-              <h4 className="text-sm font-black text-white flex items-center gap-2">
-                🚨 群发任务正在多账号并发运行中 (高斯 45~65s + 拟人打字)
-              </h4>
-              <p className="text-xs text-rose-200 mt-0.5">
-                各协议号按员工性格自然错开到岗。若需中途停止，请点击右侧【一键紧急停跑】彻底终止所有线程及云端进程。
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-black text-white flex items-center gap-2">
+                  🚨 群发任务正在多账号并发运行中
+                </h4>
+                {currentBatchStats.total > 0 && (
+                  <span className="bg-amber-400/20 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-md border border-amber-400/40">
+                    🎯 本次批次进度: {currentBatchStats.dispatched} / {currentBatchStats.total} 目标 ({Math.min(100, Math.round((currentBatchStats.dispatched / currentBatchStats.total) * 100))}%)
+                  </span>
+                )}
+                <span className="bg-emerald-500/20 text-emerald-300 font-mono text-xs px-2 py-0.5 rounded border border-emerald-500/30">
+                  ✓ 已送达: {currentBatchStats.success}
+                </span>
+                {currentBatchStats.failed > 0 && (
+                  <span className="bg-rose-500/20 text-rose-300 font-mono text-xs px-2 py-0.5 rounded border border-rose-500/30">
+                    ⚠️ 频控换号重试: {currentBatchStats.failed}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-rose-200 mt-1">
+                📌 提示：顶部导航栏数字为全天所有账号的历史累计量；当前任务仅针对导入的 <strong className="text-white underline">{currentBatchStats.total} 个目标</strong> 执行，发完自动停止，绝不重复！
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleStopCampaign}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white hover:bg-rose-100 text-rose-700 font-extrabold text-xs shadow-xl flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 border border-white"
+            className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-white hover:bg-rose-100 text-rose-700 font-extrabold text-xs shadow-xl flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 border border-white"
           >
             <Square className="w-4 h-4 fill-rose-700" /> 🛑 立即紧急停跑 (一键彻底熔断)
           </button>
@@ -7032,10 +7084,10 @@ if __name__ == "__main__":
                         🧑‍💼 真人业务员节奏 (强烈推荐)
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>45 ~ 60 秒</strong> (15封约12~15分)
+                        每条浮动 <strong>20 ~ 35 秒</strong> (15封约5~8分)
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        模拟业务员看对话框、打字、发信与喝水小憩，5个号各具独立手速，防封安全性最高！
+                        模拟业务员看对话框、打字、发信，各号独立手速，防封安全性最高！
                       </p>
                     </div>
 
@@ -7052,7 +7104,7 @@ if __name__ == "__main__":
                         🛡️ 平稳波动模式
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>20 ~ 35 秒</strong>
+                        每条浮动 <strong>8 ~ 16 秒</strong> (15封约2~4分)
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
                         单号中速交替发信，适合成熟稳定期账号在白天的营销推广。
@@ -7069,13 +7121,13 @@ if __name__ == "__main__":
                     >
                       <div className="font-bold text-xs flex items-center gap-1.5">
                         <Flame className="w-3.5 h-3.5 text-amber-400" />
-                        🚀 极速拟人变速
+                        🚀 极速拟人变速 (推荐高速)
                       </div>
                       <div className="text-[11px] text-slate-200 mt-1">
-                        每条浮动 <strong>5 ~ 12 秒</strong>
+                        每条浮动 <strong>2 ~ 6 秒</strong> (50封仅需1~2分钟)
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">
-                        多号高并发交替发信，适合老号集群或紧急高转化活动爆破。
+                        多号高并发交替发信，50条数据极速扫完，兼顾轻量拟人防封。
                       </p>
                     </div>
 
@@ -7947,6 +7999,11 @@ if __name__ == "__main__":
             <span className="text-xs text-slate-500 font-mono">
               ({isCampaignRunning ? '任务正在高速跑...' : '系统准备就绪'})
             </span>
+            {isCampaignRunning && currentBatchStats.total > 0 && (
+              <span className="bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs font-bold px-2.5 py-0.5 animate-pulse">
+                本次任务进度: {currentBatchStats.dispatched} / {currentBatchStats.total} ({Math.min(100, Math.round((currentBatchStats.dispatched / currentBatchStats.total) * 100))}%)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">

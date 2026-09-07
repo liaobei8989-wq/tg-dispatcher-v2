@@ -343,10 +343,9 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
     # Stage 1: Send Greeting with realistic human typing action
     try:
-        # Simulate employee looking at dialog and typing message (3.5 ~ 6.0s)
+        # Simulate employee looking at dialog and typing message (1.0 ~ 1.8s)
         await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-        typing_wait = random.uniform(3.5, 6.0)
-        await asyncio.sleep(typing_wait)
+        await asyncio.sleep(random.uniform(1.0, 1.8))
     except Exception:
         pass
 
@@ -359,18 +358,16 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     third_sent_id = None
 
     if wait_reply:
-        if logs is not None:
-            logs.append(f"🛡️ [防封守护模式]: 问候已送达，启动短雷达监听客户回复...")
         try:
             replied = False
             last_reply_text = ""
-            for _ in range(6):  # 监听 6 秒
-                await asyncio.sleep(1.0)
-                async for msg_item in client.iter_messages(peer, limit=2):
-                    if not msg_item.out and msg_item.id > sent_id:
-                        replied = True
-                        last_reply_text = msg_item.message or "客户回复"
-                        break
+            # 快速探测 1.2 秒（后续客户主动回复由后台常驻 tg-auto-responder 守护进程 24/7 毫秒级跟进，无需发信主进程傻等卡顿）
+            await asyncio.sleep(1.2)
+            async for msg_item in client.iter_messages(peer, limit=2):
+                if not msg_item.out and msg_item.id > sent_id:
+                    replied = True
+                    last_reply_text = msg_item.message or "客户回复"
+                    break
                 if replied:
                     break
             
@@ -567,24 +564,24 @@ async def run_worker(
         
         # 1. 员工性格分类 (动态适配任意 N 个账号的弹性矩阵)：
         # 根据总 Worker 数量动态自适应离散步长，无论 10 个号、100 个号还是 500+ 个号均自动计算最平滑的错峰分布
-        stagger_step = max(0.15, min(1.8, 45.0 / max(total_workers, 1)))
+        stagger_step = max(0.1, min(0.6, 6.0 / max(total_workers, 1)))
 
         personality_dice = random.random()
         if personality_dice < 0.30:
             employee_type = "积极早鸟型 (早到开工)"
-            arrival_delay = random.uniform(0.5, 3.0) + (worker_id % 10) * (stagger_step * 0.5)
+            arrival_delay = random.uniform(0.3, 1.2) + (worker_id % 10) * (stagger_step * 0.4)
             typing_speed_base = random.uniform(0.85, 0.98) # 手速稍快
-            rest_threshold = random.randint(14, 16)
+            rest_threshold = random.randint(18, 22)
         elif personality_dice < 0.80:
             employee_type = "标准稳健型 (正点进场)"
-            arrival_delay = random.uniform(3.0, 15.0) + ((worker_id - 1) % max(total_workers, 1)) * stagger_step
-            typing_speed_base = random.uniform(0.98, 1.12) # 标准手速
-            rest_threshold = random.randint(13, 15)
+            arrival_delay = random.uniform(1.0, 2.5) + ((worker_id - 1) % max(total_workers, 1)) * stagger_step
+            typing_speed_base = random.uniform(0.98, 1.10) # 标准手速
+            rest_threshold = random.randint(16, 20)
         else:
             employee_type = "慢热从容型 (迟后就位)"
-            arrival_delay = random.uniform(15.0, 45.0) + ((worker_id - 1) % max(total_workers, 1)) * (stagger_step * 1.5)
-            typing_speed_base = random.uniform(1.12, 1.28) # 慢吞吞打字
-            rest_threshold = random.randint(12, 15)
+            arrival_delay = random.uniform(2.0, 4.5) + ((worker_id - 1) % max(total_workers, 1)) * (stagger_step * 0.8)
+            typing_speed_base = random.uniform(1.05, 1.18) # 稳健手速
+            rest_threshold = random.randint(15, 18)
 
         worker_typing_factor = round(typing_speed_base, 2)
         random.seed() # reset seed
@@ -625,10 +622,16 @@ async def run_worker(
                 worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target} 开启了隐私保护。")
             except PeerFloodError:
                 fail_count += 1
-                worker_logs.append(f"⚠️ [Worker #{worker_id}] 协议号 +{clean_digits} 触发官方临时频控 (PeerFlood)。")
+                worker_logs.append(f"🛑 [Worker #{worker_id} 频控绝对熔断退出] 协议号 +{clean_digits} 触发官方临时频控 (PeerFlood)，已立即退出本次任务以保护账号！")
+                break
             except FloodWaitError as fe:
                 fail_count += 1
-                worker_logs.append(f"⏳ [Worker #{worker_id}] 需等待 {fe.seconds}s。")
+                worker_logs.append(f"🛑 [Worker #{worker_id} 限流熔断退出] 协议号 +{clean_digits} 需等待 {fe.seconds}s，已立即中止该号发信！")
+                break
+            except (UserDeactivatedError, UserDeactivatedBanError, AuthKeyUnregisteredError) as ue:
+                fail_count += 1
+                worker_logs.append(f"🛑 [Worker #{worker_id} 凭证失效退出] 协议号 +{clean_digits} 凭证已失效 ({str(ue)})，立即退出！")
+                break
             except Exception as e:
                 fail_count += 1
                 worker_logs.append(f"❌ [Worker #{worker_id}] 目标 {target}: {str(e)}")
