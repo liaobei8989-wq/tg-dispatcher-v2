@@ -127,7 +127,7 @@ async function startServer() {
 
       // Auto sync ONLY genuine protocol session/json files from root directory to sessions/ folder
       filesInRoot
-        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /^\+?\d{6,16}/.test(f))
+        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /\d{6,}/.test(f))
         .forEach(f => {
           const srcPath = path.join(rootDir, f);
           const dstPath = path.join(sessionsDir, f);
@@ -161,7 +161,7 @@ async function startServer() {
 
       // Scan sessions/ folder for legitimate session and json files
       filesInSessions
-        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /^\+?\d{6,16}/.test(f))
+        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /\d{6,}/.test(f))
         .forEach(f => {
         const fullPath = path.join(sessionsDir, f);
         try {
@@ -180,7 +180,7 @@ async function startServer() {
 
       // Scan root folder
       filesInRoot
-        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /^\+?\d{6,16}/.test(f))
+        .filter(f => (f.endsWith(".session") || f.endsWith(".json")) && !isSystemFile(f) && /\d{6,}/.test(f))
         .forEach(f => {
           if (!sessionFilesMap.has(f)) {
             const fullPath = path.join(rootDir, f);

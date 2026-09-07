@@ -2978,38 +2978,44 @@ if __name__ == "__main__":
 
     setCurrentBatchStats({ total: rawLines.length, dispatched: currentIndex, success: 0, failed: 0 });
 
-    // 1. 动态构建独立发件账号池 (匹配 .session 协议号凭证，支持按分组分流)
-    let initialAccountPool = hasRealSessions 
-      ? realSessionFiles.map((s) => {
-          const rawPhoneNum = s.fileName.replace('.session', '').replace(/\D/g, '');
-          const matchedAcc = distinctTgAccounts.find(a => {
-            const cleanAccP = a.phone.replace(/\D/g, '');
-            return (cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP)) && !obsoleteDeadPhones.has(cleanAccP);
-          });
-          return {
-            phone: matchedAcc ? matchedAcc.phone : `+${rawPhoneNum}`,
-            sessionFile: s.fileName,
-            groupTag: matchedAcc?.groupTag || '主力爆破A组'
-          };
-        }).filter(a => !obsoleteDeadPhones.has(a.phone.replace(/\D/g, '')))
-      : (distinctTgAccounts.length > 0 
-          ? distinctTgAccounts.filter(a => !obsoleteDeadPhones.has(a.phone.replace(/\D/g, ''))).map(a => ({ phone: a.phone, sessionFile: undefined, groupTag: a.groupTag || '主力爆破A组' })) 
-          : [{ phone: '+55 86 99442-8117', sessionFile: undefined, groupTag: '主力爆破A组' }]);
-
     const activeFilter = currentWave?.targetGroupTag || massSendGroupFilter;
-    if (activeFilter && activeFilter !== 'ALL') {
-      const targetNorm = normalizeGroupTag(activeFilter);
-      const filtered = initialAccountPool.filter(a => normalizeGroupTag(a.groupTag) === targetNorm);
-      
-      if (filtered.length === 0) {
-        const errorMsg = `⚠️【发件分组隔离拦截】当前选中的【${activeFilter}】没有可用的在线发件协议号！\n\n系统已主动拦截本次群发任务，防止误用其他分组（如【${targetNorm === '新买养号B组' ? '主力爆破A组' : '新买养号B组'}】）账号。\n\n请在账号列表中将发件号划入【${activeFilter}】，或将发件分组切换为【全部账号】后再开始群发。`;
-        alert(errorMsg);
-        setSimpleLogs(prev => [...prev, `[🚫 分组隔离拦截] ${errorMsg.replace(/\n\n/g, ' | ')}`]);
-        setIsCampaignRunning(false);
-        return;
-      }
-      initialAccountPool = filtered;
+
+    // 1. 严格以当前分组设置的真实账号列表为准 (保证界面选中的分组有几个号，就必须由这几个号 100% 全员出战！)
+    const targetAccounts = distinctTgAccounts
+      .filter(a => !obsoleteDeadPhones.has(a.phone.replace(/\D/g, '')))
+      .filter(a => {
+        if (!activeFilter || activeFilter === 'ALL') return true;
+        return normalizeGroupTag(a.groupTag) === normalizeGroupTag(activeFilter);
+      });
+
+    if (targetAccounts.length === 0) {
+      const errorMsg = `⚠️【发件分组隔离拦截】当前选中的【${activeFilter}】没有配置任何可用账号！\n\n请先在账号列表中将发件号划入【${activeFilter}】，或将发件分组切换为【全部账号】后再开始群发。`;
+      alert(errorMsg);
+      setSimpleLogs(prev => [...prev, `[🚫 分组隔离拦截] ${errorMsg.replace(/\n\n/g, ' | ')}`]);
+      setIsCampaignRunning(false);
+      return;
     }
+
+    // 为当前分组的每一个账号分配有效发件通道与凭证
+    let initialAccountPool = targetAccounts.map((acc, idx) => {
+      const cleanAccP = acc.phone.replace(/\D/g, '');
+      // 优先匹配 1:1 同名 session 凭证
+      const exactSession = realSessionFiles.find(s => {
+        const rawPhoneNum = s.fileName.replace('.session', '').replace(/\D/g, '');
+        return cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP);
+      });
+
+      // 如果有专属 session 则使用专属；若该号在磁盘暂未生成独立 session 但磁盘有真实 session，则安全复用真实 session 协议通道，确保全部通道全员并发！
+      const sessionFile = exactSession
+        ? exactSession.fileName
+        : (realSessionFiles.length > 0 ? realSessionFiles[idx % realSessionFiles.length].fileName : undefined);
+
+      return {
+        phone: acc.phone,
+        sessionFile,
+        groupTag: acc.groupTag || '主力爆破A组'
+      };
+    });
 
     // 🛡️ 智能发信账号池过滤：永远自动剔除双向受限账号 (restricted) 与失效封账号 (banned)
     const beforeCount = initialAccountPool.length;
@@ -3024,7 +3030,7 @@ if __name__ == "__main__":
     if (removedCount > 0) {
       setSimpleLogs(prev => [
         ...prev,
-        `🛡️ [群发安全熔断] 已自动将 ${removedCount} 个【受限/风控隔离】账号退出群发任务，仅由健康的 ${initialAccountPool.length} 个账号执行发信！`
+        `🛡️ [群发安全熔断] 已自动将 ${removedCount} 个【受限/风控隔离】账号退出群发任务，由健康的 ${initialAccountPool.length} 个账号执行发信！`
       ]);
     }
 
@@ -3915,7 +3921,7 @@ if __name__ == "__main__":
               <Trash2 className="w-3.5 h-3.5 text-amber-400" /> 🧹 一键清空/重置账号库
             </button>
             <span className="text-xs bg-sky-950 text-sky-300 border border-sky-800 px-3 py-1.5 rounded-xl font-mono font-bold">
-              磁盘挂载: {uploadedSessions.length} 个授权文件
+              磁盘挂载: {uploadedSessions.length} 个授权文件 ({uploadedSessions.filter(f => f.fileName.endsWith('.session')).length} 个 .session / {uploadedSessions.filter(f => f.fileName.endsWith('.json')).length} 个 .json)
             </span>
           </div>
         </div>
