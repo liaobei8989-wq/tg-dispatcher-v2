@@ -37,6 +37,8 @@ except ImportError:
 
 import sqlite3
 
+BANNED_OBSOLETE_PHONES = {'5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207'}
+
 def is_valid_telethon_session(session_path: str) -> bool:
     """检查文件是否为有效的 Telethon SQLite 数据库文件"""
     try:
@@ -99,13 +101,30 @@ SECOND_MESSAGE_TEMPLATES = [
     "Oi amigo! Consegui liberar um voucher de bônus VIP pro seu número: R$ 15 a R$ 20 grátis no cadastro com saque imediato no PIX! Acesse e aproveite: {URL}"
 ]
 
-# 第 3 阶段：真人有温度的关照与指导（代替生硬广告祝福）
+# 默认官方沉淀频道/社群（支持环境变量 TG_CHANNEL_LINK 或 sessions/tg_channel.txt 自定义）
+DEFAULT_TG_CHANNEL = "t.me/brazilgo_chat"
+
+def get_tg_channel_link() -> str:
+    chan = os.environ.get("TG_CHANNEL_LINK")
+    if chan:
+        return chan.strip()
+    for p in ["sessions/tg_channel.txt", "tg_channel.txt", "/root/tg-dispatcher-v2/sessions/tg_channel.txt"]:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        return content
+            except Exception:
+                pass
+    return DEFAULT_TG_CHANNEL
+
+# 第 3 阶段：真人有温度的关照与指导 + 沉淀到官方 TG 频道/社群
 THIRD_BLESSING_TEMPLATES = [
-    "🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que a plataforma tá pagando muito! 🍀",
-    "✨ Dica de ouro: joga no Tigrinho na aposta mínima primeiro que a cartinha tá vindo rápido hoje! Boa sorte amigo 🎰💵",
-    "💸 Só lembra de usar a mesma chave PIX do seu CPF na hora de sacar pro dinheiro cair na hora blz? Tamo junto! 😉",
-    "🚀 Se der forra grande manda o print aqui pra mim hein! Arrebenta lá nos giros! 🤑💎",
-    "🎰 Vai com tudo irmão! Qualquer coisa sobre o saque no PIX é só me chamar aqui! 👑✨"
+    "🎯 Torcendo pelo seu forro hoje! {Se precisar de dicas de slots é só chamar|Bora lucrar muito}! 🎲💎 Não esquece de acompanhar nosso canal VIP de sinais e horários pagantes: 👉 {CHANNEL} 🚀👑",
+    "🐯 {Qualquer dúvida me dá um toque aqui que te ajudo a resgatar|Vai com tudo amigo}! E entra também no nosso grupo oficial de estratégias do Tigrinho: 👉 {CHANNEL} {pra pegar os minutos pagantes|onde a gente solta as melhores dicas}! 🍀💵",
+    "✨ {Dica de ouro: joga no Tigrinho com calma que a cartinha vem rápido hoje|Hoje a forra é certa}! 🎰💵 Cola no nosso canal VIP pra não perder os bônus diários: 👉 {CHANNEL} 😉💎",
+    "💸 {Lembrete importante: usa a mesma chave PIX do CPF pro saque cair na hora|Bons giros irmão}! Dá uma passada no nosso grupo VIP de sinais: 👉 {CHANNEL} {Tamo junto|Qualquer dúvida estou por aqui}! 👑✨"
 ]
 
 def get_random_url() -> str:
@@ -116,7 +135,9 @@ def parse_spintax(text: str) -> str:
         return ""
     # 替换各种形式的 URL 占位符或旧静态域名
     rand_url = get_random_url()
+    chan_link = get_tg_channel_link()
     text = re.sub(r'\{URL\}|\bURL\b|https?://mostbet\.com/pt|https?://mostbet\.com|https?://brazilgo888\.com/\d+', rand_url, text, flags=re.IGNORECASE)
+    text = re.sub(r'\{CHANNEL\}|\bCHANNEL\b', chan_link, text, flags=re.IGNORECASE)
     pattern = re.compile(r'\{([^{}]+)\}')
     while pattern.search(text):
         text = pattern.sub(lambda m: random.choice(m.group(1).split('|')), text)
@@ -341,8 +362,120 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
     except Exception as e:
         print(f"⚠️ [写入补发统计日志失败]: {e}")
 
-async def start_account_listener(session_path: str):
+async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name):
+    try:
+        sender_id = str(chat_id)
+        track_key = f"{session_basename}_{sender_id}"
+
+        replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
+        replied_history = {}
+        if os.path.exists(replied_chats_file):
+            try:
+                with open(replied_chats_file, "r", encoding="utf-8") as rf:
+                    replied_history = json.load(rf)
+            except Exception:
+                replied_history = {}
+
+        last_recorded_id = replied_history.get(track_key, 0)
+        if incoming_msg_id > 0 and incoming_msg_id <= last_recorded_id:
+            return False
+
+        # 检查最新消息是否已回复过
+        try:
+            recent_msgs = await client.get_messages(chat_id, limit=6)
+            has_replied_already = False
+            if recent_msgs:
+                for rm in recent_msgs:
+                    if rm.out and rm.id > incoming_msg_id:
+                        has_replied_already = True
+                        break
+            if has_replied_already:
+                replied_history[track_key] = incoming_msg_id
+                try:
+                    with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                        json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+                return False
+        except Exception:
+            pass
+
+        # 20秒防抖
+        if not check_and_mark_reply(track_key, cooldown_seconds=20):
+            return False
+
+        replied_history[track_key] = incoming_msg_id
+        try:
+            os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
+            with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+        msg_text = str(msg_text or "").strip()
+        lower_msg = msg_text.lower()
+        print(f"\n📩 [感知客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'}) | 内容: \"{msg_text}\"")
+
+        # 智能客户意图匹配
+        if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
+            matched_intent = "身份释疑"
+            rand_template = random.choice(INTENT_WHO_ARE_YOU_TEMPLATES)
+        elif any(k in lower_msg for k in ['como', 'funciona', 'paga', 'verdade', 'golpe', 'quero', 'manda', 'passa', 'link', 'pix', 'onde clica']):
+            matched_intent = "玩法/领福利"
+            rand_template = random.choice(INTENT_HOW_IT_WORKS_TEMPLATES)
+        else:
+            matched_intent = "通用问候"
+            rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
+
+        print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
+
+        # 拟人延时 2.0 ~ 3.8 秒后发送第 2 阶段彩金链接
+        await asyncio.sleep(random.uniform(2.0, 3.8))
+        
+        rand_url = get_random_url()
+        second_msg = parse_spintax(rand_template).replace("{URL}", rand_url)
+        
+        try:
+            try:
+                await client.send_message(chat_id, second_msg, parse_mode='html')
+            except Exception:
+                await client.send_message(chat_id, second_msg)
+            print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
+            record_auto_reply_stat(session_basename, sender_id, sender_name, second_msg, rand_url)
+        except Exception as e2:
+            print(f"❌ [第2条发送失败]: {e2}")
+            return False
+
+        # 拟人打字 (Typing) 3.5 ~ 6 秒
+        human_delay = random.uniform(3.5, 6.0)
+        print(f"⏳ [模拟真人打字]: 延时 {human_delay:.1f}s 后发送第3阶段中奖祝福语...")
+        try:
+            await client(SetTypingRequest(peer=chat_id, action=SendMessageTypingAction()))
+        except Exception:
+            pass
+        await asyncio.sleep(human_delay)
+
+        # 发送第 3 阶段祝福语
+        third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
+        try:
+            await client.send_message(chat_id, third_msg)
+            print(f"🍀 [自动补发第3条成功] 已向客户 {sender_id} 推送祝福语: \"{third_msg}\"")
+        except Exception as e3:
+            print(f"❌ [第3条发送失败]: {e3}")
+            return False
+
+        return True
+    except Exception as handler_err:
+        print(f"⚠️ [处理消息事件异常]: {handler_err}")
+        return False
+
+async def start_account_listener(session_path: str, scan_once: bool = False):
     session_basename = os.path.basename(session_path).replace('.session', '')
+    clean_digits = re.sub(r'[^0-9]', '', session_basename)
+    if clean_digits in BANNED_OBSOLETE_PHONES:
+        print(f"🛑 [黑名单过滤] 跳过已弃用/封禁旧号码: +{clean_digits}")
+        return
+
     session_prefix = session_path[:-8] if session_path.endswith('.session') else session_path
     
     # 开启 SQLite WAL 预写日志与并发等待 (30秒超时)，彻底消除多进程 database is locked
@@ -370,22 +503,20 @@ async def start_account_listener(session_path: str):
     system_version = str(json_cfg.get("system_version") or "Windows 10")
     app_version = str(json_cfg.get("app_version") or "3.4.3 x64")
 
-    # 智能 100% 巴西专属独享代理分配（严格防封，绝不裸奔 VPS 原生 IP）
+    # 智能 100% 巴西专属独享代理分配
     proxy_tuple = get_proxy_for_account(session_basename, json_cfg)
 
     if not is_valid_telethon_session(session_path):
         print(f"⚠️ [跳过无效/空文件]: 账号文件 [{session_basename}.session] 并非有效 Telethon 数据库格式。")
         return
 
-    # 无限自动重连守护循环（即使群发中断或网络闪断，也会在3~5秒内自动重连继续监听）
     retry_count = 0
     while True:
         client = None
         try:
-            print(f"📡 [24h常驻监听] 正在挂载并连接账号: {session_basename} ...")
+            print(f"📡 [{'单次扫描' if scan_once else '24h常驻监听'}] 正在挂载并连接账号: {session_basename} ...")
             
             connected_ok = False
-            # 优先尝试分配的巴西专属代理
             if proxy_tuple:
                 try:
                     client = TelegramClient(
@@ -403,15 +534,13 @@ async def start_account_listener(session_path: str):
                     )
                     await asyncio.wait_for(client.connect(), timeout=10.0)
                     connected_ok = True
-                except Exception as p_err:
-                    print(f"⚠️ [代理连接较慢/超时] 账号 {session_basename} 代理响应超时，正在自动切换备用稳定链路...")
+                except Exception:
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
                     client = None
 
-            # 若代理不可用或未配置，自动建立直连以确保 24h 监听永不中断
             if not connected_ok:
                 client = TelegramClient(
                     session_prefix,
@@ -429,80 +558,50 @@ async def start_account_listener(session_path: str):
                 await asyncio.wait_for(client.connect(), timeout=15.0)
 
             if not await client.is_user_authorized():
-                print(f"⚠️ [未授权] 账号 {session_basename} 未登录或 Session 已失效，60秒后重新检查...")
+                print(f"⚠️ [未授权] 账号 {session_basename} 未登录或 Session 已失效。")
+                if scan_once:
+                    return
                 await asyncio.sleep(60)
                 continue
             
             me = await client.get_me()
             phone_num = getattr(me, 'phone', '') or session_basename
             first_name = getattr(me, 'first_name', '') or ''
-            print(f"🟢 [24h守护就绪] 账号 +{phone_num} ({first_name}) 24小时自动追发守护已锁定在线！")
+            print(f"🟢 [{'扫描' if scan_once else '24h守护就绪'}] 账号 +{phone_num} ({first_name}) 自动追发服务在线！")
             retry_count = 0
+
+            # 初始离线历史扫尾：检查最近私聊，若有客户最新发言未被回复，立即触发补发！
+            try:
+                dialogs = await client.get_dialogs(limit=25)
+                for d in dialogs:
+                    if d.is_user and not (getattr(d.entity, 'bot', False)):
+                        c_msgs = await client.get_messages(d.entity, limit=3)
+                        if c_msgs and not c_msgs[0].out:
+                            # 最新一条是客户发言！说明我们还没回！
+                            latest_incoming = c_msgs[0]
+                            c_sender_id = str(d.entity.id)
+                            c_sender_name = getattr(d.entity, 'first_name', '') or getattr(d.entity, 'username', '') or 'Cliente'
+                            c_text = str(latest_incoming.message or latest_incoming.text or '')
+                            await process_and_reply_customer(
+                                client=client,
+                                session_basename=session_basename,
+                                chat_id=d.entity.id,
+                                incoming_msg_id=latest_incoming.id,
+                                msg_text=c_text,
+                                sender_name=c_sender_name
+                            )
+            except Exception as sweep_err:
+                print(f"ℹ️ [初始离线扫尾提示]: {sweep_err}")
+
+            if scan_once:
+                print(f"✅ 账号 +{phone_num} 扫描补发完毕。")
+                return
 
             @client.on(events.NewMessage(incoming=True))
             async def handle_incoming_message(event):
                 try:
-                    # 过滤群聊消息，只处理私聊
                     if not event.is_private:
                         return
-                    
-                    sender_id = str(event.chat_id or event.sender_id or "")
-                    if not sender_id:
-                        return
-
-                    track_key = f"{session_basename}_{sender_id}"
-
-                    # 检查持久化去重记录 (sessions/replied_chats.json)
-                    replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
-                    replied_history = {}
-                    if os.path.exists(replied_chats_file):
-                        try:
-                            with open(replied_chats_file, "r", encoding="utf-8") as rf:
-                                replied_history = json.load(rf)
-                        except Exception:
-                            replied_history = {}
-
-                    incoming_msg_id = getattr(event.message, 'id', 0)
-                    last_recorded_id = replied_history.get(track_key, 0)
-
-                    # 如果此消息ID已被记录过，直接跳过，防止并发轰炸
-                    if incoming_msg_id > 0 and incoming_msg_id <= last_recorded_id:
-                        return
-
-                    # 检查该会话最新消息是否我们已经回复过 (例如 tg_dispatcher.py 刚才已秒级发出过彩金和祝福)
-                    try:
-                        recent_msgs = await client.get_messages(event.chat_id, limit=6)
-                        has_replied_already = False
-                        if recent_msgs:
-                            for rm in recent_msgs:
-                                if rm.out and rm.id > incoming_msg_id:
-                                    has_replied_already = True
-                                    break
-                        if has_replied_already:
-                            # 记录防重
-                            replied_history[track_key] = incoming_msg_id
-                            try:
-                                with open(replied_chats_file, "w", encoding="utf-8") as wf:
-                                    json.dump(replied_history, wf, ensure_ascii=False, indent=2)
-                            except Exception:
-                                pass
-                            return
-                    except Exception:
-                        pass
-
-                    # 20秒防抖：防止客户连发两句话重复轰炸，但间隔20秒以上或后续说话时必定正常推送引流
-                    if not check_and_mark_reply(track_key, cooldown_seconds=20):
-                        return
-
-                    # 标记此 incoming_msg_id 已被接管处理
-                    replied_history[track_key] = incoming_msg_id
-                    try:
-                        os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
-                        with open(replied_chats_file, "w", encoding="utf-8") as wf:
-                            json.dump(replied_history, wf, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
-
                     sender_name = ""
                     try:
                         sender = await event.get_sender()
@@ -510,60 +609,17 @@ async def start_account_listener(session_path: str):
                             sender_name = getattr(sender, 'first_name', '') or getattr(sender, 'username', '') or ''
                     except Exception:
                         pass
-
                     msg_text = str(event.text or event.raw_text or "").strip()
-                    lower_msg = msg_text.lower()
-                    print(f"\n📩 [收到客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'}) | 内容: \"{msg_text}\"")
-
-                    # 智能客户意图匹配：根据客户说的话匹配真人回复
-                    if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
-                        matched_intent = "身份释疑"
-                        rand_template = random.choice(INTENT_WHO_ARE_YOU_TEMPLATES)
-                    elif any(k in lower_msg for k in ['como', 'funciona', 'paga', 'verdade', 'golpe', 'quero', 'manda', 'passa', 'link', 'pix', 'onde clica']):
-                        matched_intent = "玩法/领福利"
-                        rand_template = random.choice(INTENT_HOW_IT_WORKS_TEMPLATES)
-                    else:
-                        matched_intent = "通用问候"
-                        rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
-
-                    print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
-
-                    # 拟人延时 2.0 ~ 3.8 秒后发送第 2 阶段彩金链接
-                    await asyncio.sleep(random.uniform(2.0, 3.8))
-                    
-                    rand_url = get_random_url()
-                    second_msg = parse_spintax(rand_template).replace("{URL}", rand_url)
-                    
-                    try:
-                        try:
-                            await client.send_message(event.chat_id, second_msg, parse_mode='html')
-                        except Exception:
-                            await client.send_message(event.chat_id, second_msg)
-                        print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
-                        # 记录补发持久化统计
-                        record_auto_reply_stat(session_basename, sender_id, sender_name, second_msg, rand_url)
-                    except Exception as e2:
-                        print(f"❌ [第2条发送失败]: {e2}")
-                        return
-
-                    # 拟人打字 (Typing) 3.5 ~ 6 秒
-                    human_delay = random.uniform(3.5, 6.0)
-                    print(f"⏳ [模拟真人打字]: 延时 {human_delay:.1f}s 后发送第3阶段中奖祝福语...")
-                    try:
-                        await client(SetTypingRequest(peer=event.chat_id, action=SendMessageTypingAction()))
-                    except Exception:
-                        pass
-                    await asyncio.sleep(human_delay)
-
-                    # 发送第 3 阶段祝福语
-                    third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
-                    try:
-                        await client.send_message(event.chat_id, third_msg)
-                        print(f"🍀 [自动补发第3条成功] 已向客户 {sender_id} 推送祝福语: \"{third_msg}\"")
-                    except Exception as e3:
-                        print(f"❌ [第3条发送失败]: {e3}")
-                except Exception as handler_err:
-                    print(f"⚠️ [处理消息事件异常]: {handler_err}")
+                    await process_and_reply_customer(
+                        client=client,
+                        session_basename=session_basename,
+                        chat_id=event.chat_id,
+                        incoming_msg_id=getattr(event.message, 'id', 0),
+                        msg_text=msg_text,
+                        sender_name=sender_name
+                    )
+                except Exception as e:
+                    print(f"⚠️ [事件分发异常]: {e}")
 
             # 保持长连接常驻
             await client.run_until_disconnected()
@@ -571,27 +627,34 @@ async def start_account_listener(session_path: str):
 
         except Exception as err:
             retry_count += 1
-            print(f"⚠️ [账号 {session_basename} 守护异常]: {err} (3秒后进行第 {retry_count} 次自愈重连...)")
+            print(f"⚠️ [账号 {session_basename} 守护异常]: {err}")
+            if scan_once:
+                return
         finally:
             if client:
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
+            if scan_once:
+                return
             await asyncio.sleep(3.0)
 
 async def main():
+    scan_once = "--scan-once" in sys.argv
+    mode_name = "单次全网扫描补发" if scan_once else "24小时自动追发常驻守护 (Daemon)"
     print("==================================================")
-    print("🤖 Telegram 24小时自动追发守护引擎 (Auto-Responder Daemon)")
+    print(f"🤖 Telegram {mode_name}")
     print("==================================================")
 
-    # 智能全路径扫描 (支持绝对路径、脚本同级目录、/root/tg-dispatcher/ 等)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     possible_dirs = [
         os.path.join(script_dir, "sessions"),
         script_dir,
         os.path.join(os.getcwd(), "sessions"),
         os.getcwd(),
+        "/root/tg-dispatcher-v2/sessions",
+        "/root/tg-dispatcher-v2",
         "/root/tg-dispatcher/sessions",
         "/root/tg-dispatcher"
     ]
@@ -601,6 +664,10 @@ async def main():
     for p_dir in possible_dirs:
         if os.path.exists(p_dir):
             for sf in glob.glob(os.path.join(p_dir, "*.session")):
+                basename = os.path.basename(sf)
+                digits = re.sub(r'[^0-9]', '', basename)
+                if digits in BANNED_OBSOLETE_PHONES:
+                    continue
                 if sf not in seen and is_valid_telethon_session(sf):
                     seen.add(sf)
                     session_files.append(sf)
@@ -610,8 +677,8 @@ async def main():
         print("未发现有效 .session 文件，退出")
         return
 
-    # 并发运行所有账号的 24 小时长连接监听
-    tasks = [start_account_listener(sf) for sf in session_files]
+    # 并发执行
+    tasks = [start_account_listener(sf, scan_once=scan_once) for sf in session_files]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

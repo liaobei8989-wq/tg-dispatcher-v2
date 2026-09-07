@@ -57,6 +57,11 @@ def is_valid_telethon_session(session_path: str) -> bool:
     except Exception:
         return False
 
+BANNED_OBSOLETE_PHONES = {
+    '5586994428117', '5586994581839', '5586994709226', '5586994684213',
+    '5586994687152', '5586994850500', '5586994918471', '5586994783355'
+}
+
 DEFAULT_API_ID = 2040
 DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
 
@@ -126,9 +131,23 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
     proxy_str = item_data.get("proxy") or proxy_map.get(session_basename)
     proxy_tuple = parse_proxy_str(proxy_str)
 
-    first_name = item_data.get("firstName") or random.choice(BRAZILIAN_FEMALE_NAMES).split()[0]
-    last_name = item_data.get("lastName") or (random.choice(BRAZILIAN_FEMALE_NAMES).split()[1] if len(random.choice(BRAZILIAN_FEMALE_NAMES).split()) > 1 else "")
-    about = item_data.get("about") or random.choice(BRAZILIAN_BIOS)
+    raw_first = str(item_data.get("firstName") or "").strip()
+    raw_last = str(item_data.get("lastName") or "").strip()
+    raw_about = str(item_data.get("about") or "").strip()
+
+    # 清洗卡商默认垃圾简介 (如 suiLnRU 或过短的随机无序字符串)
+    is_junk_about = not raw_about or len(raw_about) < 4 or (len(raw_about.split()) <= 1 and len(raw_about) <= 10)
+    about = random.choice(BRAZILIAN_BIOS) if is_junk_about else raw_about
+
+    # 清洗无效名字
+    if not raw_first or raw_first.isdigit() or len(raw_first) < 2:
+        rand_name = random.choice(BRAZILIAN_FEMALE_NAMES).split()
+        first_name = rand_name[0]
+        last_name = rand_name[1] if len(rand_name) > 1 else ""
+    else:
+        first_name = raw_first
+        last_name = raw_last
+
     username = item_data.get("username")
     avatar_base64 = item_data.get("avatarBase64")
 
@@ -304,6 +323,8 @@ async def main():
         script_dir,
         os.path.join(os.getcwd(), "sessions"),
         os.getcwd(),
+        "/root/tg-dispatcher-v2/sessions",
+        "/root/tg-dispatcher-v2",
         "/root/tg-dispatcher/sessions",
         "/root/tg-dispatcher"
     ]
@@ -313,6 +334,10 @@ async def main():
     for p_dir in possible_dirs:
         if os.path.exists(p_dir):
             for sf in glob.glob(os.path.join(p_dir, "*.session")):
+                base_p = os.path.basename(sf).replace('.session', '')
+                clean_p = re.sub(r'\D', '', base_p)
+                if clean_p in BANNED_OBSOLETE_PHONES or base_p in BANNED_OBSOLETE_PHONES:
+                    continue
                 if sf not in seen and is_valid_telethon_session(sf):
                     seen.add(sf)
                     session_files.append(sf)
@@ -321,25 +346,35 @@ async def main():
     logs.append("==================================================")
     logs.append("👤 Telegram 账号真实资料与头像 MTProto 同步上传引擎 (Python Telethon)")
     logs.append("==================================================")
-    logs.append(f"📱 扫描到服务器现有协议号文件: {len(session_files)} 个")
+    logs.append(f"📱 扫描到可用协议号文件: {len(session_files)} 个 (已自动剔除废弃黑名单)")
 
+    # 建立并发控制（最多 6 个账号同时连接 TG 服务器，避免触发官方连接频控，15秒内快速完结）
+    sem = asyncio.Semaphore(6)
     updated_count = 0
 
+    async def run_with_sem(sf, data):
+        nonlocal updated_count
+        async with sem:
+            res = await update_single_account(sf, data, logs)
+            if res:
+                updated_count += 1
+            await asyncio.sleep(0.3)
+            return res
+
+    tasks = []
     if not items and session_files:
-        # Default batch modification
         for idx, sf in enumerate(session_files):
             item_data = {
                 "firstName": BRAZILIAN_FEMALE_NAMES[idx % len(BRAZILIAN_FEMALE_NAMES)].split()[0],
                 "lastName": BRAZILIAN_FEMALE_NAMES[idx % len(BRAZILIAN_FEMALE_NAMES)].split()[1] if len(BRAZILIAN_FEMALE_NAMES[idx % len(BRAZILIAN_FEMALE_NAMES)].split()) > 1 else "",
                 "about": BRAZILIAN_BIOS[idx % len(BRAZILIAN_BIOS)]
             }
-            res = await update_single_account(sf, item_data, logs)
-            if res:
-                updated_count += 1
-            await asyncio.sleep(1.0)
+            tasks.append(run_with_sem(sf, item_data))
     else:
         for idx, item in enumerate(items):
             phone = str(item.get("phone", "")).replace("+", "").replace(" ", "").replace("-", "")
+            if phone in BANNED_OBSOLETE_PHONES:
+                continue
             target_sf = None
             for sf in session_files:
                 if phone and phone in sf:
@@ -349,10 +384,10 @@ async def main():
                 target_sf = session_files[idx % len(session_files)]
 
             if target_sf:
-                res = await update_single_account(target_sf, item, logs)
-                if res:
-                    updated_count += 1
-                await asyncio.sleep(1.0)
+                tasks.append(run_with_sem(target_sf, item))
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     logs.append("==================================================")
     logs.append(f"🎯 [物理更新完成] 成功更新 {updated_count} 个 Telegram 账号真实资料与头像！")

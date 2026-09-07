@@ -1365,6 +1365,43 @@ async function startServer() {
   app.post("/api/telegram/scan-and-reply", async (req, res) => {
     console.log("[Telegram Reply Scanner] 正在启动 Telegram 全网客户回复自动扫描与彩金补发...");
     try {
+      const pythonScript = path.join(process.cwd(), "tg_auto_responder.py");
+      if (fs.existsSync(pythonScript)) {
+        console.log("[TG Scanner]: 优先调用 Python Telethon 原生高并发扫描追发引擎...");
+        const child = spawn("python3", [pythonScript, "--scan-once"], {
+          cwd: process.cwd(),
+          env: { ...process.env, PYTHONUNBUFFERED: "1" }
+        });
+
+        let outputLines: string[] = [];
+        child.stdout.on("data", (data) => {
+          const text = data.toString();
+          console.log(`[TG Auto-Responder stdout]: ${text}`);
+          outputLines.push(...text.split("\n"));
+        });
+        child.stderr.on("data", (data) => {
+          console.error(`[TG Auto-Responder stderr]: ${data.toString()}`);
+        });
+
+        const timer = setTimeout(() => {
+          try { child.kill("SIGKILL"); } catch (e) {}
+        }, 35000);
+
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          const fullOutput = outputLines.join("\n");
+          const newlySent = (fullOutput.match(/自动补发第2条成功|自动补发第3条成功/g) || []).length;
+          return res.json({
+            success: true,
+            output: fullOutput,
+            newlySent: Math.ceil(newlySent / 2),
+            totalCompleted: Math.ceil(newlySent / 2),
+            timestamp: new Date().toISOString()
+          });
+        });
+        return;
+      }
+
       const result = await executeTelegramReplyScanner((line) => {
         console.log(`[TG Scanner]: ${line}`);
       });
@@ -1810,7 +1847,7 @@ async function startServer() {
       try {
         fs.writeFileSync(tempPayloadPath, JSON.stringify({ items }), 'utf-8');
         const pythonOutput = execSync(`python3 "${pyScriptPath}" "${tempPayloadPath}"`, {
-          timeout: 60000,
+          timeout: 180000,
           encoding: 'utf-8'
         });
 
@@ -3284,6 +3321,23 @@ Return ONLY a JSON array with this schema:
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+
+    // 守护启动 Telegram 24h 自动追发守护引擎 (Auto-Responder Daemon)
+    const autoResponderPath = path.join(process.cwd(), "tg_auto_responder.py");
+    if (fs.existsSync(autoResponderPath)) {
+      try {
+        console.log("🤖 [Auto-Responder] 正在自动启动后台 24 小时自动追发守护进程 (tg_auto_responder.py)...");
+        const responderProcess = spawn("python3", [autoResponderPath], {
+          cwd: process.cwd(),
+          detached: true,
+          stdio: "ignore",
+          env: { ...process.env, PYTHONUNBUFFERED: "1" }
+        });
+        responderProcess.unref();
+      } catch (err) {
+        console.warn("⚠️ [Auto-Responder Spawn Error]:", err);
+      }
+    }
   });
 }
 
