@@ -78,31 +78,31 @@ ALL_100_SUBDOMAINS = [
 
 # 意图 1：当客户询问身份（"Quem é?", "De onde me conhece?", "Não te conheço", "O que é?"）
 INTENT_WHO_ARE_YOU_TEMPLATES = [
-    "Opa amigo! Sou eu da plataforma parceira do Telegram. Seu número foi selecionado hoje pra receber um saldo teste de R$ 15 no PIX sem precisar depositar! Dá pra testar no Tigrinho 🐯 e se forrar o saque cai direto na sua conta. O link oficial pra resgatar é esse: {URL}",
-    "Fala parceiro! Sou do suporte VIP de jogos. Te mandei mensagem porque liberou uma cortesia de R$ 10 a R$ 20 grátis pro seu perfil hoje pra rodar o Fortune Tiger 🎰. Sem pegadinha de depósito! Ativa rapidinho por aqui antes que expire: {URL}",
-    "Opa! Vi você participando de canais de apostas e o sistema liberou um código VIP pro seu Telegram: R$ 15 de crédito grátis de boas-vindas sem depósito no PIX. Entra por aqui e testa a sorte no Tigrinho: {URL}",
-    "E aí meu amigo, tudo joia? Sou da equipe da nova plataforma. Como você joga, liberaram giros grátis + saldo de cortesia de cadastro pra você testar a banca hoje! Resgata aqui direto: {URL}"
+    "Haha sou eu do grupo de apostas/slots do Telegram! Vim te avisar porque liberou um saldo teste de R$ 15 a R$ 20 grátis no cadastro hoje 🐯 Sem depósito, se forrar o saque cai direto no seu PIX. Dá uma olhada aqui antes de fecharem: {URL}",
+    "Opa, te vi num dos grupos de jogos! Passei pra te avisar que a plataforma nova liberou bônus de teste pro pessoal do TG hoje 🎰💵 Sem pegadinha de depósito, paga no PIX na hora: {URL}",
+    "Haha sou jogadora também! Vi seu perfil no grupo e lembrei de mandar: liberou um saldo de cortesia de R$ 15 no cadastro com saque imediato no PIX! O link é esse: {URL}",
+    "E aí! Sou eu que te mandei um oi antes. Vim te dar a dica do bônus sem depósito que liberou hoje no Tigrinho 🐯 Aproveita pra rodar de graça: {URL}"
 ]
 
 # 意图 2：当客户询问玩法/真假/索要链接（"Como funciona?", "É verdade?", "Paga mesmo?", "Quero", "Manda", "Passa o link"）
 INTENT_HOW_IT_WORKS_TEMPLATES = [
-    "É bem simples mano! É só cadastrar rapidinho pelo link oficial que o saldo teste cai na hora pra você rodar o Tigrinho 🐯. Não precisa por dinheiro do bolso, e se forrar o saque vai direto pro seu PIX em menos de 1 minuto: {URL}",
-    "Paga sim chefe, 100% no PIX! O sistema tá dando R$ 15 grátis no cadastro pras primeiras contas hoje. Cria a conta em 30 segundos e vai direto no Fortune Tiger que tá soltando carta agora: {URL}",
-    "Com certeza irmão! Plataforma nova com licença oficial e pagamento instantâneo. Pega seu bônus de cortesia sem depósito aqui e boa forra: {URL}",
-    "Super fácil amigo! Clica no link, faz o cadastro básico e o bônus já ativa na conta pra você jogar. Link direto sem enrolação: {URL}"
+    "É bem simples mano! É só cadastrar rapidinho pelo link oficial que o saldo teste cai na hora pra você rodar o Tigrinho 🐯 Não precisa pôr dinheiro do bolso, e se forrar o PIX cai em menos de 1 minuto: {URL}",
+    "Paga sim chefe, 100% no PIX! O sistema tá dando de R$ 15 a R$ 20 grátis pras primeiras contas hoje. Cria a conta em 30 segundos e vai direto no Fortune Tiger que tá pagando agora: {URL}",
+    "Com certeza irmão! Plataforma oficial com saque instantâneo no PIX. Pega seu bônus de cortesia sem depósito aqui e boa forra: {URL}",
+    "Super fácil amigo! Clica no link, faz o cadastro básico e o bônus já ativa na conta pra você jogar sem arriscar seu dinheiro: {URL}"
 ]
 
-# 意图 3：通用回复与问候（"Oi", "Olá", "Bom dia", "Boa tarde", "E aí", 或其他一般回复）
+# 意图 3：通用回复与问候（"Oi", "Olá", "1", "Bom dia", "Boa tarde", "E aí", 或其他一般回复）
 SECOND_MESSAGE_TEMPLATES = [
-    "Opa parceiro, tudo bem? Passando pra te avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {URL}",
-    "E aí amigo! A plataforma nova tá com evento hoje dando rodadas grátis + bônus de cortesia no PIX pra quem se cadastrar agora. Tá soltando muita carta no Tigrinho 🎰! Resgata a sua parte aqui: {URL}",
-    "Fala jogador! Liberamos um bônus especial de boas-vindas pro seu perfil hoje: sem pegadinha de depósito, só cadastrar e rodar! O link oficial é esse: {URL}",
-    "Opa! Tá sabendo do bug dos minutos pagantes no Tigrinho hoje? 🐯 Liberou saldo de teste grátis pra você testar agora na plataforma nova. Dá uma conferida aqui: {URL}",
-    "Oi amigo! Consegui liberar um voucher de bônus VIP pro seu número: R$ 15 a R$ 20 grátis no cadastro com saque imediato no PIX! Acesse e aproveite: {URL}"
+    "Haha então! Vim te avisar que liberou teste grátis no Tigrinho hoje! 🐯 Tá pagando de R$ 15 a R$ 20 no cadastro com saque direto no PIX sem depósito. Aproveita enquanto tá soltando carta: {URL}",
+    "Opa! É que liberou um evento de bônus na plataforma nova hoje! 🎁 De R$ 15 a R$ 20 de cortesia no cadastro com saque rápido no PIX. Testa aí antes que acabe: {URL}",
+    "Olha só, liberaram giros de cortesia + saldo no cadastro pra testar hoje! 🎰💵 Sem pegadinha de depósito, o dinheiro cai na hora no PIX se forrar. Confere aqui: {URL}",
+    "E aí! Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste grátis no cadastro pro pessoal rodar e sacar no PIX: {URL}",
+    "Haha vi você online e lembrei de te mandar: liberou um saldo de teste de R$ 15 a R$ 20 grátis pra novos cadastros no PIX! 🔥 Dá uma rodada lá: {URL}"
 ]
 
 # 默认官方沉淀频道/社群（支持环境变量 TG_CHANNEL_LINK 或 sessions/tg_channel.txt 自定义）
-DEFAULT_TG_CHANNEL = "t.me/brazilgo_chat"
+DEFAULT_TG_CHANNEL = "https://t.me/brazilgo_chat (@brazilgo_chat)"
 
 def get_tg_channel_link() -> str:
     chan = os.environ.get("TG_CHANNEL_LINK")
@@ -119,11 +119,11 @@ def get_tg_channel_link() -> str:
                 pass
     return DEFAULT_TG_CHANNEL
 
-# 第 3 阶段：真人有温度的关照与指导 + 沉淀到官方 TG 频道/社群
+# 第 3 阶段：真人有温度的关照与指导 + 沉淀到官方 TG 频道/社群（100% 可点击完整链接）
 THIRD_BLESSING_TEMPLATES = [
     "🎯 Torcendo pelo seu forro hoje! {Se precisar de dicas de slots é só chamar|Bora lucrar muito}! 🎲💎 Não esquece de acompanhar nosso canal VIP de sinais e horários pagantes: 👉 {CHANNEL} 🚀👑",
-    "🐯 {Qualquer dúvida me dá um toque aqui que te ajudo a resgatar|Vai com tudo amigo}! E entra também no nosso grupo oficial de estratégias do Tigrinho: 👉 {CHANNEL} {pra pegar os minutos pagantes|onde a gente solta as melhores dicas}! 🍀💵",
-    "✨ {Dica de ouro: joga no Tigrinho com calma que a cartinha vem rápido hoje|Hoje a forra é certa}! 🎰💵 Cola no nosso canal VIP pra não perder os bônus diários: 👉 {CHANNEL} 😉💎",
+    "✨ Dica de ouro: joga no Tigrinho na aposta mínima com calma que a cartinha tá solta hoje! 🎰💵 Cola no nosso canal VIP pra não perder os bônus diários: 👉 {CHANNEL} 😉💎",
+    "🐯 {Qualquer dúvida me dá um toque aqui que te ajudo a resgatar|Vai com tudo amigo}! E entra também no nosso grupo oficial de estratégias do Tigrinho: 👉 {CHANNEL} {pra pegar os minutos pagantes|onde a gente solta as melhores brechas}! 🍀💵",
     "💸 {Lembrete importante: usa a mesma chave PIX do CPF pro saque cair na hora|Bons giros irmão}! Dá uma passada no nosso grupo VIP de sinais: 👉 {CHANNEL} {Tamo junto|Qualquer dúvida estou por aqui}! 👑✨"
 ]
 
@@ -446,14 +446,16 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             print(f"❌ [第2条发送失败]: {e2}")
             return False
 
-        # 拟人打字 (Typing) 3.5 ~ 6 秒
-        human_delay = random.uniform(3.5, 6.0)
-        print(f"⏳ [模拟真人打字]: 延时 {human_delay:.1f}s 后发送第3阶段中奖祝福语...")
-        try:
-            await client(SetTypingRequest(peer=chat_id, action=SendMessageTypingAction()))
-        except Exception:
-            pass
-        await asyncio.sleep(human_delay)
+        # 拟人打字 (Typing) 5.0 ~ 7.5 秒，循环持续发送 typing 动作，确保客户手机端持续显示 "digitando..." (正在打字)
+        human_delay = random.uniform(5.0, 7.5)
+        print(f"⏳ [模拟真人打字]: 持续输入态 {human_delay:.1f}s 后发送第3阶段频道引流与祝福语...")
+        typing_start = time.time()
+        while time.time() - typing_start < human_delay:
+            try:
+                await client(SetTypingRequest(peer=chat_id, action=SendMessageTypingAction()))
+            except Exception:
+                pass
+            await asyncio.sleep(2.0)
 
         # 发送第 3 阶段祝福语
         third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))

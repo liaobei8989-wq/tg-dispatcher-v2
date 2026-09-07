@@ -1714,8 +1714,8 @@ async function startServer() {
         const payloadStr = JSON.stringify({
           targets: targets,
           message: message || "{Olá|Oi}! {Tudo bem|Como vai}? 👍",
-          second_message: second_message || "🔥 500% Bônus exclusivo: {URL}",
-          third_message: third_message || "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
+          second_message: second_message || "Haha então! Vim te avisar que liberou teste grátis no Tigrinho hoje! 🐯 Tá pagando de R$ 15 a R$ 20 no cadastro com saque no PIX sem depósito: {URL}",
+          third_message: third_message || "{🎯 Torcendo pelo seu forro hoje!|✨ Dica de ouro: joga no Tigrinho na aposta mínima que a cartinha vem rápido hoje!|🍀 Bora forrar hoje!} 🎰💵 {Aproveita e entra no nosso canal VIP de estratégias e horários pagantes|Cola no nosso grupo oficial de sinais e bônus diários}: 👉 https://t.me/brazilgo_chat (@brazilgo_chat) {Tamo junto|Qualquer dúvida estou por aqui}! 🐯💎",
           wait_for_reply: true,
           delay_min: 45.0,
           delay_max: 60.0
