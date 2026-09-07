@@ -599,6 +599,7 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                 print(f"✅ 账号 +{phone_num} 扫描补发完毕。")
                 return
 
+            # 引擎 1：实时长连接 NewMessage 监听事件
             @client.on(events.NewMessage(incoming=True))
             async def handle_incoming_message(event):
                 try:
@@ -623,9 +624,62 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                 except Exception as e:
                     print(f"⚠️ [事件分发异常]: {e}")
 
-            # 保持长连接常驻
-            await client.run_until_disconnected()
-            print(f"ℹ️ [连接断开] 账号 {session_basename} 守护连接已断开，3秒后自动重新建立...")
+            # 引擎 2（双保险）：后台定时巡检扫尾协程（每 20~30 秒自动巡检一次最近对话，防止网络断流、事件漏推）
+            async def background_periodic_sweep():
+                while True:
+                    try:
+                        await asyncio.sleep(random.uniform(20.0, 30.0))
+                        if not client.is_connected():
+                            continue
+                        recent_dialogs = await client.get_dialogs(limit=25)
+                        for d in recent_dialogs:
+                            if d.is_user and not (getattr(d.entity, 'bot', False)):
+                                c_msgs = await client.get_messages(d.entity, limit=2)
+                                if c_msgs and not c_msgs[0].out:
+                                    latest_incoming = c_msgs[0]
+                                    c_text = str(latest_incoming.message or latest_incoming.text or '')
+                                    c_sender_name = getattr(d.entity, 'first_name', '') or getattr(d.entity, 'username', '') or 'Cliente'
+                                    await process_and_reply_customer(
+                                        client=client,
+                                        session_basename=session_basename,
+                                        chat_id=d.entity.id,
+                                        incoming_msg_id=latest_incoming.id,
+                                        msg_text=c_text,
+                                        sender_name=c_sender_name
+                                    )
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as loop_sweep_err:
+                        await asyncio.sleep(10.0)
+
+            # 引擎 3（保活心跳）：长连接防假死与心跳探活（每 45 秒向 TG 发送轻量探针，一旦假死立即自愈重连）
+            async def background_keep_alive():
+                while True:
+                    try:
+                        await asyncio.sleep(45.0)
+                        if client.is_connected():
+                            from telethon.tl.functions.updates import GetStateRequest
+                            await asyncio.wait_for(client(GetStateRequest()), timeout=10.0)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as hb_err:
+                        print(f"⚠️ [心跳检测到网络断开] 账号 {session_basename}: {hb_err}，立即触发自愈重连...")
+                        try:
+                            await client.disconnect()
+                        except Exception:
+                            pass
+                        break
+
+            sweep_task = asyncio.create_task(background_periodic_sweep())
+            hb_task = asyncio.create_task(background_keep_alive())
+
+            try:
+                # 保持长连接常驻
+                await client.run_until_disconnected()
+                print(f"ℹ️ [连接断开] 账号 {session_basename} 守护连接已断开，3秒后自动重新建立...")
+            finally:
+                sweep_task.cancel()
+                hb_task.cancel()
 
         except Exception as err:
             retry_count += 1
@@ -648,6 +702,30 @@ async def main():
     print("==================================================")
     print(f"🤖 Telegram {mode_name}")
     print("==================================================")
+
+    # 单例进程锁保护（防止后台与 PM2 重复启动两个实例导致 SQLite 文件锁冲突）
+    if not scan_once:
+        pid_file = os.path.join(os.getcwd(), "sessions", "auto_responder.pid")
+        try:
+            os.makedirs(os.path.dirname(pid_file), exist_ok=True)
+            if os.path.exists(pid_file):
+                try:
+                    with open(pid_file, "r") as pf:
+                        old_pid = int(pf.read().strip())
+                    if old_pid != os.getpid():
+                        # 检查旧 PID 是否还存活
+                        try:
+                            os.kill(old_pid, 0)
+                            print(f"ℹ️ [单例保护] 已有守护实例在运行 (PID: {old_pid})，当前进程直接退出，避免冲突。")
+                            return
+                        except OSError:
+                            pass
+                except Exception:
+                    pass
+            with open(pid_file, "w") as pf:
+                pf.write(str(os.getpid()))
+        except Exception:
+            pass
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     possible_dirs = [
@@ -679,9 +757,9 @@ async def main():
         print("未发现有效 .session 文件，退出")
         return
 
-    # 并发执行
+    # 并发执行每个账号的独立监听，return_exceptions=True 保证任意单个账号报错不影响集群
     tasks = [start_account_listener(sf, scan_once=scan_once) for sf in session_files]
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
