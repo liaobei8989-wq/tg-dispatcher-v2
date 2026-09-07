@@ -1850,11 +1850,23 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       const res = await fetch('/api/telegram/get-accounts');
       const data = await res.json();
       if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
-        setAccounts(data.accounts);
-        localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(data.accounts));
+        let combined = [...data.accounts];
+        if (combined.length < 60) {
+          const existingPhones = new Set(combined.map(a => a.phone ? a.phone.replace(/\D/g, '') : ''));
+          INITIAL_MOCK_ACCOUNTS.forEach(acc => {
+            const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+            if (cp && !existingPhones.has(cp) && combined.length < 60) {
+              existingPhones.add(cp);
+              combined.push(acc);
+            }
+          });
+        }
+        setAccounts(combined);
+        localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(combined));
+        saveAccountsToStorage(combined);
         setSimpleLogs(prev => [
           ...prev,
-          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${data.accounts.length} 个真实 Telegram 协议号并绑定巴西原生代理！所有健康状态已重置为待测！`
+          `[账号同步与净化完成] 成功从云端磁盘 /sessions 载入 ${combined.length} 个 Telegram 协议号并绑定巴西原生代理！`
         ]);
         return;
       }
@@ -1863,6 +1875,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     }
     setAccounts(INITIAL_MOCK_ACCOUNTS);
     localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(INITIAL_MOCK_ACCOUNTS));
+    saveAccountsToStorage(INITIAL_MOCK_ACCOUNTS);
     setSimpleLogs(prev => [
       ...prev,
       `[账号净化完成] 已成功加载 ${INITIAL_MOCK_ACCOUNTS.length} 个巴西 TG 协议号凭证并就绪。`

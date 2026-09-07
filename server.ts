@@ -278,8 +278,8 @@ async function startServer() {
       const rootDirFiles = fs.readdirSync(rootDir);
       const allFiles = Array.from(new Set([...files, ...rootDirFiles]));
 
-      const jsonFiles = allFiles.filter(f => f.endsWith(".json") && !f.startsWith("auto_") && f !== "package.json" && f !== "package-lock.json" && f !== "tsconfig.json" && f !== "metadata.json" && f !== "stats.json" && !f.toLowerCase().includes("2fa") && /^\+?\d{6,16}/.test(f));
-      const sessionFiles = allFiles.filter(f => f.endsWith(".session") && !f.toLowerCase().includes("2fa") && /^\+?\d{6,16}/.test(f));
+      const jsonFiles = allFiles.filter(f => f.endsWith(".json") && !f.startsWith("auto_") && f !== "package.json" && f !== "package-lock.json" && f !== "tsconfig.json" && f !== "metadata.json" && f !== "stats.json" && !f.toLowerCase().includes("2fa") && /\d{6,}/.test(f));
+      const sessionFiles = allFiles.filter(f => f.endsWith(".session") && !f.toLowerCase().includes("2fa") && /\d{6,}/.test(f));
       
       let accountsList: any[] = [];
       const processedPhones = new Set<string>();
