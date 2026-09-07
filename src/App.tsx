@@ -73,6 +73,16 @@ export default function App() {
             }
           });
 
+          // Ensure full 60 accounts matrix is maintained even if local storage had fewer
+          if (uniqueMap.size < 60) {
+            INITIAL_MOCK_ACCOUNTS.forEach(acc => {
+              const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+              if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
+                uniqueMap.set(cp, acc);
+              }
+            });
+          }
+
           const sanitizedList = Array.from(uniqueMap.values()).slice(0, 60);
           if (sanitizedList.length > 0) return sanitizedList;
         }
@@ -135,6 +145,25 @@ export default function App() {
                 });
               }
             });
+
+            // If server returned fewer than 60, replenish from prev accounts or INITIAL_MOCK_ACCOUNTS
+            if (uniqueMap.size < 60) {
+              prev.forEach(acc => {
+                const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+                if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
+                  uniqueMap.set(cp, acc);
+                }
+              });
+            }
+            if (uniqueMap.size < 60) {
+              INITIAL_MOCK_ACCOUNTS.forEach(acc => {
+                const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+                if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
+                  uniqueMap.set(cp, acc);
+                }
+              });
+            }
+
             const list = Array.from(uniqueMap.values()).slice(0, 60);
             safeSaveAccountsToLocalStorage(list);
             return list;
@@ -182,7 +211,15 @@ export default function App() {
             });
           }
         });
-        const list = Array.from(uniqueMap.values());
+        if (uniqueMap.size < 60) {
+          INITIAL_MOCK_ACCOUNTS.forEach(acc => {
+            const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+            if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
+              uniqueMap.set(cp, acc);
+            }
+          });
+        }
+        const list = Array.from(uniqueMap.values()).slice(0, 60);
         setAccounts(list);
         safeSaveAccountsToLocalStorage(list);
       }
