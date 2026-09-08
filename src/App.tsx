@@ -42,7 +42,8 @@ export default function App() {
           parsed.forEach((acc: AccountSession, idx: number) => {
             // Telegram only verification
             const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone)) return;
+            // Auto purge dummy generated phone numbers (55869952011xx) and obsolete phones
+            if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
@@ -73,24 +74,14 @@ export default function App() {
             }
           });
 
-          // Ensure full 60 accounts matrix is maintained even if local storage had fewer
-          if (uniqueMap.size < 60) {
-            INITIAL_MOCK_ACCOUNTS.forEach(acc => {
-              const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-              if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
-                uniqueMap.set(cp, acc);
-              }
-            });
-          }
-
-          const sanitizedList = Array.from(uniqueMap.values()).slice(0, 60);
+          const sanitizedList = Array.from(uniqueMap.values());
           if (sanitizedList.length > 0) return sanitizedList;
         }
       }
     } catch (e) {
       console.warn('Initial localStorage account load warning:', e);
     }
-    return INITIAL_MOCK_ACCOUNTS.slice(0, 60);
+    return INITIAL_MOCK_ACCOUNTS;
   });
 
   // Async hydration from server API and IndexedDB on initial load
@@ -107,7 +98,7 @@ export default function App() {
             const prevMap = new Map<string, AccountSession>();
             prev.forEach((a, idx) => {
               const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
-              if (cp && !obsoletePhones.has(cp)) {
+              if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
                 prevMap.set(cp, a);
               }
             });
@@ -116,7 +107,7 @@ export default function App() {
             // Strictly base on server-side disk accounts
             data.accounts.forEach((acc: AccountSession, idx: number) => {
               const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-              if (cp && !obsoletePhones.has(cp)) {
+              if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
                 const existing = prevMap.get(cp);
                 const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
                 const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
@@ -146,25 +137,7 @@ export default function App() {
               }
             });
 
-            // If server returned fewer than 60, replenish from prev accounts or INITIAL_MOCK_ACCOUNTS
-            if (uniqueMap.size < 60) {
-              prev.forEach(acc => {
-                const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-                if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
-                  uniqueMap.set(cp, acc);
-                }
-              });
-            }
-            if (uniqueMap.size < 60) {
-              INITIAL_MOCK_ACCOUNTS.forEach(acc => {
-                const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-                if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
-                  uniqueMap.set(cp, acc);
-                }
-              });
-            }
-
-            const list = Array.from(uniqueMap.values()).slice(0, 60);
+            const list = Array.from(uniqueMap.values());
             safeSaveAccountsToLocalStorage(list);
             return list;
           });
@@ -174,54 +147,62 @@ export default function App() {
         console.warn('Server accounts sync skipped:', err);
       });
 
-    // 2. Load from IndexedDB if available
+    // 2. Load from IndexedDB only if server accounts haven't arrived yet
     loadAccountsFromStorage().then(idbAccounts => {
       if (idbAccounts && idbAccounts.length > 0) {
-        const uniqueMap = new Map<string, AccountSession>();
-        idbAccounts.forEach((acc: AccountSession, idx: number) => {
-          // Telegram only verification
-          const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-          if (!cleanPhone || cleanPhone.length < 8) return;
-
-          if (!uniqueMap.has(cleanPhone)) {
-            const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
-            const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
-            const todayStr = new Date().toISOString().split('T')[0];
-            const defaultDay = isTop5 ? 7 : 1;
-            const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;
-            const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (acc.warmupDay || defaultDay));
-            const createdAt = hasCorruptDay ? todayStr : (acc.createdAt || todayStr);
-            const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
-            const isMature = validWarmupDay >= 4;
-            const rawGroup = acc.groupTag;
-            const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
-              ? (isTop5 ? '主力爆破A组' : '新买养号B组')
-              : rawGroup;
-
-            uniqueMap.set(cleanPhone, {
-              ...acc,
-              proxy: dedicatedProxy,
-              createdAt: createdAt,
-              baseWarmupDay: baseDay,
-              warmupDay: validWarmupDay,
-              dailyLimit: isMature ? 120 : 60,
-              status: isMature ? 'active' : 'warming',
-              avatarUrl: acc.avatarUrl || '',
-              groupTag: normalizedGroup
-            });
+        setAccounts(currentAccounts => {
+          // If server already returned real accounts (more than 20 accounts), keep server accounts!
+          if (currentAccounts && currentAccounts.length >= 40) {
+            return currentAccounts;
           }
-        });
-        if (uniqueMap.size < 60) {
+
+          const uniqueMap = new Map<string, AccountSession>();
+          idbAccounts.forEach((acc: AccountSession, idx: number) => {
+            // Telegram only verification
+            const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+            if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
+
+            if (!uniqueMap.has(cleanPhone)) {
+              const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
+              const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              const todayStr = new Date().toISOString().split('T')[0];
+              const defaultDay = isTop5 ? 7 : 1;
+              const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;
+              const baseDay = hasCorruptDay ? defaultDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (acc.warmupDay || defaultDay));
+              const createdAt = hasCorruptDay ? todayStr : (acc.createdAt || todayStr);
+              const validWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
+              const isMature = validWarmupDay >= 4;
+              const rawGroup = acc.groupTag;
+              const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+                ? (isTop5 ? '主力爆破A组' : '新买养号B组')
+                : rawGroup;
+
+              uniqueMap.set(cleanPhone, {
+                ...acc,
+                proxy: dedicatedProxy,
+                createdAt: createdAt,
+                baseWarmupDay: baseDay,
+                warmupDay: validWarmupDay,
+                dailyLimit: isMature ? 120 : 60,
+                status: isMature ? 'active' : 'warming',
+                avatarUrl: acc.avatarUrl || '',
+                groupTag: normalizedGroup
+              });
+            }
+          });
+
+          // Replenish from INITIAL_MOCK_ACCOUNTS (which has all 50 real accounts)
           INITIAL_MOCK_ACCOUNTS.forEach(acc => {
             const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp) && uniqueMap.size < 60) {
+            if (cp && !obsoletePhones.has(cp) && !uniqueMap.has(cp)) {
               uniqueMap.set(cp, acc);
             }
           });
-        }
-        const list = Array.from(uniqueMap.values()).slice(0, 60);
-        setAccounts(list);
-        safeSaveAccountsToLocalStorage(list);
+
+          const list = Array.from(uniqueMap.values());
+          safeSaveAccountsToLocalStorage(list);
+          return list;
+        });
       }
     }).catch(err => {
       console.warn('IndexedDB account hydration skipped:', err);

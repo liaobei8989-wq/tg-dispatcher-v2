@@ -607,50 +607,8 @@ async function startServer() {
         '5586995201146', '5586995201147', '5586995201148', '5586995201149', '5586995201150'
       ];
 
-      // 3. Ensure exactly 60 protocol accounts are maintained (matching the 60 dedicated proxies)
-      if (accountsList.length < 60) {
-        for (let idx = 0; idx < BRAZIL_60_PHONES.length && accountsList.length < 60; idx++) {
-          const rawPhone = BRAZIL_60_PHONES[idx];
-          if (!processedPhones.has(rawPhone)) {
-            processedPhones.add(rawPhone);
-            const isTop5 = idx < 5;
-            const isMature = idx < 20;
-            const assignedProxy = allocateUnusedProxy(rawPhone);
-            const name = defaultNames[idx % defaultNames.length].split(' ')[0];
-            const warmupDay = isTop5 ? 7 : isMature ? 5 : 3;
-
-            accountsList.push({
-              id: `acc-tg-${rawPhone}`,
-              phone: formatPhoneDisplay(rawPhone),
-              alias: `TG-BR-${rawPhone} (${name})`,
-              platform: 'telegram',
-              type: 'tg_userbot',
-              status: isMature ? 'active' : 'warming',
-              proxy: assignedProxy,
-              healthScore: 99,
-              sentToday: 0,
-              dailyLimit: isMature ? 120 : 60,
-              totalSent: isMature ? 120 : 0,
-              successRate: 100,
-              createdAt: '2026-08-31',
-              lastActive: '刚刚',
-              warmupDay: warmupDay,
-              twoFactorPassword: '548508',
-              avatarUrl: '',
-              tgApiId: '2040',
-              tgApiHash: 'b18441a1ff607e10a989891a5462e627',
-              spambotStatus: 'clean',
-              sessionValid: true,
-              deviceModel: 'PC (Win10)',
-              sessionFile: `${rawPhone}.session`,
-              groupTag: idx < 20 ? '主力爆破A组' : idx < 40 ? '新买养号B组' : '矩阵预备C组'
-            });
-          }
-        }
-      } else if (accountsList.length > 60) {
-        accountsList = accountsList.slice(0, 60);
-      }
-
+      // 3. Only return accounts that genuinely exist on the server's disk (no fake generated accounts)
+      // If user uploaded 10 accounts, exactly those 10 are loaded and used.
       if (proxyMapUpdated) {
         try {
           fs.writeFileSync(proxyJsonPath, JSON.stringify(accountProxiesMap, null, 2), 'utf-8');

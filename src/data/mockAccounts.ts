@@ -125,20 +125,18 @@ const BRAZILIAN_FEMALE_NAMES: string[] = [
   'Maya', 'Aurora', 'Antonella', 'Luna', 'Vitoria'
 ];
 
-// Fixed 60 Brazilian Phones (558699...) matching all 60 proxies 1:1
-const BRAZIL_60_PHONES: string[] = [
-  '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
-  '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
-  '5586995201101', '5586995201102', '5586995201103', '5586995201104', '5586995201105',
-  '5586995201106', '5586995201107', '5586995201108', '5586995201109', '5586995201110',
-  '5586995201111', '5586995201112', '5586995201113', '5586995201114', '5586995201115',
-  '5586995201116', '5586995201117', '5586995201118', '5586995201119', '5586995201120',
-  '5586995201121', '5586995201122', '5586995201123', '5586995201124', '5586995201125',
-  '5586995201126', '5586995201127', '5586995201128', '5586995201129', '5586995201130',
-  '5586995201131', '5586995201132', '5586995201133', '5586995201134', '5586995201135',
-  '5586995201136', '5586995201137', '5586995201138', '5586995201139', '5586995201140',
-  '5586995201141', '5586995201142', '5586995201143', '5586995201144', '5586995201145',
-  '5586995201146', '5586995201147', '5586995201148', '5586995201149', '5586995201150'
+// Real 50 Brazilian Phones uploaded by user (matches session and json files 1:1)
+export const USER_50_REAL_PHONES: string[] = [
+  '5598984569687', '5598984627175', '5598984670055', '5598984671221', '5598984730611',
+  '5598984731615', '5598984734606', '5598984804947', '5598984844174', '5598984845235',
+  '5598984887183', '5598984906227', '5598984949562', '5598984953483', '5598984955625',
+  '5598985089834', '5598985109474', '5598985162664', '5598985254155', '5598985259933',
+  '5598985323153', '5598985338413', '5598985369605', '5598985432467', '5598985473494',
+  '5598985487547', '5598985535121', '5598985583075', '5598985585283', '5598985602056',
+  '5598985656993', '5598985703552', '5598985709101', '5598985759825', '5598985864741',
+  '5598985926947', '5598985966188', '5598986270576', '5598987077789', '5598987743687',
+  '5599984026594', '5599984139898', '5599984168673', '5599984179798', '5599984185644',
+  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026'
 ];
 
 function formatBrPhone(raw: string): string {
@@ -148,14 +146,13 @@ function formatBrPhone(raw: string): string {
   return `+${raw}`;
 }
 
-export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = BRAZIL_60_PHONES.map((rawPhone, idx) => {
+export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = USER_50_REAL_PHONES.map((rawPhone, idx) => {
   const isTop5 = idx < 5;
-  const isMature = idx < 20;
   const proxy = BRAZIL_PROXIES_POOL[idx] || BRAZIL_PROXIES_POOL[idx % BRAZIL_PROXIES_POOL.length];
-  const name = BRAZILIAN_FEMALE_NAMES[idx] || `Atendente ${idx + 1}`;
-  const warmupDay = isTop5 ? 7 : isMature ? 5 : 3;
-  const groupTag = idx < 20 ? '主力爆破A组' : idx < 40 ? '新买养号B组' : '矩阵预备C组';
-  const dailyLimit = isMature ? 120 : 60;
+  const name = BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length] || `Atendente ${idx + 1}`;
+  const warmupDay = isTop5 ? 7 : (idx < 20 ? 5 : 4);
+  const groupTag = idx < 25 ? '主力爆破A组' : '新买养号B组';
+  const dailyLimit = 120;
 
   return {
     id: `acc-tg-${rawPhone}`,
@@ -163,12 +160,12 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = BRAZIL_60_PHONES.map((raw
     alias: `TG-BR-${rawPhone} (${name})`,
     platform: 'telegram',
     type: 'tg_userbot',
-    status: isMature ? 'active' : 'warming',
+    status: 'active',
     proxy: proxy,
-    healthScore: isMature ? 99 : 98,
+    healthScore: 99,
     sentToday: 0,
     dailyLimit: dailyLimit,
-    totalSent: isMature ? 120 : 0,
+    totalSent: 120,
     successRate: 100,
     createdAt: '2026-08-31',
     lastActive: '刚刚',
@@ -180,6 +177,7 @@ export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = BRAZIL_60_PHONES.map((raw
     tgApiHash: 'b18441a1ff607e10a989891a5462e627',
     spambotStatus: 'clean',
     sessionValid: true,
+    sessionFile: `${rawPhone}.session`,
     groupTag: groupTag
   };
 });

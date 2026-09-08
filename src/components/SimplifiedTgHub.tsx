@@ -1505,7 +1505,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     accounts.filter(a => a.platform === 'telegram').forEach(acc => {
       const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-      if (clean && clean.length >= 8 && !obsoletePhones.has(clean)) {
+      if (clean && clean.length >= 8 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
         if (!map.has(clean)) {
           const isBGroup = clean.startsWith('55869948') || clean.startsWith('55869949') || clean.startsWith('55869951') || (acc.warmupDay && acc.warmupDay <= 3);
           const rawGroup = acc.groupTag;
@@ -1851,16 +1851,14 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
         let combined = [...data.accounts];
-        if (combined.length < 60) {
-          const existingPhones = new Set(combined.map(a => a.phone ? a.phone.replace(/\D/g, '') : ''));
-          INITIAL_MOCK_ACCOUNTS.forEach(acc => {
-            const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            if (cp && !existingPhones.has(cp) && combined.length < 60) {
-              existingPhones.add(cp);
-              combined.push(acc);
-            }
-          });
-        }
+        const existingPhones = new Set(combined.map(a => a.phone ? a.phone.replace(/\D/g, '') : ''));
+        INITIAL_MOCK_ACCOUNTS.forEach(acc => {
+          const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+          if (cp && !existingPhones.has(cp)) {
+            existingPhones.add(cp);
+            combined.push(acc);
+          }
+        });
         setAccounts(combined);
         localStorage.setItem('tg_wa_matrix_accounts_v2', JSON.stringify(combined));
         saveAccountsToStorage(combined);
@@ -3207,7 +3205,7 @@ if __name__ == "__main__":
             const resp = await fetch('/api/telethon/run-direct', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              signal: AbortSignal.timeout(45000),
+              signal: AbortSignal.timeout(90000),
               body: JSON.stringify({
                 targets: [cleanPhone],
                 message: msgToSend,

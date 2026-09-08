@@ -1,0 +1,16 @@
+{
+  "phone": "5599984139898",
+  "app_id": 2040,
+  "app_hash": "b18441a1ff607e10a989891a5462e627",
+  "device_model": "PC (Win10)",
+  "system_version": "Windows 10",
+  "app_version": "3.4.3 x64",
+  "twofa": "548508",
+  "proxy": {
+    "addr": "200.160.43.132",
+    "port": 12323,
+    "username": "14aade52b86e6",
+    "password": "70dd653fc2",
+    "proxy_type": "socks5"
+  }
+}

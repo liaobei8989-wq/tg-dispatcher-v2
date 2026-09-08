@@ -519,25 +519,33 @@ async def run_worker(
 
     try:
         try:
-            await asyncio.wait_for(client.connect(), timeout=8.0)
+            # 强化代理连接超时，给予 SOCKS5/HTTP 代理充分的握手时间 (15秒)
+            await asyncio.wait_for(client.connect(), timeout=15.0)
         except Exception as conn_err:
             if proxy_tuple:
-                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理响应受阻]: 立即无缝切入原生直连...")
+                # 严格禁止直接切换为 VPS 原生 IP 直连！因为同一个 Telegram session 在短时间内跨 IP 会触发官方硬封控：
+                # "The same session cannot be used under two different IP addresses simultaneously"
+                # 正确做法：重试一次代理连接，保持 IP 纯净一致性
+                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立代理环境重试连接 (15s)...")
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(1.0)
                 client = TelegramClient(
                     session_prefix,
                     api_id_int,
                     str(api_hash),
-                    proxy=None,
+                    proxy=proxy_tuple,
                     device_model=str(device_model),
                     system_version=str(system_version),
                     app_version=str(app_version)
                 )
-                await asyncio.wait_for(client.connect(), timeout=10.0)
+                try:
+                    await asyncio.wait_for(client.connect(), timeout=15.0)
+                except Exception as retry_err:
+                    worker_logs.append(f"❌ [Worker #{worker_id} 代理连接失败]: 巴西住宅代理节点响应超时，已安全跳过该目标以保护账号 IP 纯度")
+                    raise retry_err
             else:
                 raise conn_err
 
