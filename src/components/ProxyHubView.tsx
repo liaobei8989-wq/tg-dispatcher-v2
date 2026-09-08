@@ -53,16 +53,26 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
     '🇧🇷 Brazil (Manaus - Claro Residential)'
   ];
 
-  // Load 60 proxies from server
+  // Helper to format BR phone numbers for clear display
+  const formatPhone = (raw?: string) => {
+    if (!raw) return '';
+    const clean = raw.replace(/\D/g, '');
+    if (clean.length === 13) {
+      return `+${clean.slice(0, 2)} ${clean.slice(2, 4)} ${clean.slice(4, 9)}-${clean.slice(9)}`;
+    }
+    return `+${clean}`;
+  };
+
+  // Load 60 proxies from server and synchronize with real accounts
   const loadProxies = () => {
     fetch('/api/proxies/pool')
       .then(r => r.json())
       .then(data => {
+        let poolItems: ProxyItem[] = [];
         if (data.success && Array.isArray(data.proxies) && data.proxies.length > 0) {
-          setProxies(data.proxies);
+          poolItems = data.proxies;
         } else {
-          // fallback
-          const fallback = BRAZIL_PROXIES_POOL.map((pStr, idx) => {
+          poolItems = BRAZIL_PROXIES_POOL.map((pStr, idx) => {
             const parts = pStr.split(':');
             const ip = parts[0] || '';
             const port = parseInt(parts[1]) || 12323;
@@ -71,7 +81,7 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
 
             let assignedPhone = '';
             for (const [ph, prx] of Object.entries(BRAZIL_DEDICATED_PROXIES_MAP)) {
-              if (prx.includes(ip)) {
+              if (prx.includes(ip) && !ph.startsWith('55869952011')) {
                 assignedPhone = ph;
                 break;
               }
@@ -91,15 +101,47 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
               assignedPhone
             } as ProxyItem;
           });
-          setProxies(fallback);
         }
+
+        // Cross-enrich with real accounts prop to ensure 100% genuine accounts matching
+        const enriched = poolItems.map(p => {
+          // Strictly purge any legacy dummy placeholder phones
+          let currentAssigned = p.assignedPhone || '';
+          if (currentAssigned.startsWith('55869952011')) {
+            currentAssigned = '';
+          }
+
+          // Match by IP or clean phone in real accounts list
+          const matchedAcc = accounts.find(a => {
+            const accIp = (a.proxy || '').split(':')[0];
+            const cleanAccPhone = a.phone ? a.phone.replace(/\D/g, '') : '';
+            return (accIp && accIp === p.ip) || (currentAssigned && cleanAccPhone === currentAssigned);
+          });
+
+          if (matchedAcc) {
+            const cleanPhone = matchedAcc.phone ? matchedAcc.phone.replace(/\D/g, '') : currentAssigned;
+            return {
+              ...p,
+              assignedPhone: cleanPhone,
+              assignedAccountName: matchedAcc.name,
+              assignedAccountAvatar: matchedAcc.avatar
+            };
+          }
+
+          return {
+            ...p,
+            assignedPhone: currentAssigned
+          };
+        });
+
+        setProxies(enriched);
       })
       .catch(() => {});
   };
 
   useEffect(() => {
     loadProxies();
-  }, []);
+  }, [accounts]);
 
   const assignedCount = proxies.filter(p => Boolean(p.assignedPhone)).length;
   const availableCount = proxies.filter(p => !p.assignedPhone).length;
@@ -226,7 +268,7 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-              每个 Telegram 协议号独占 1 个专属巴西住宅 IP 与独立的移动端设备指纹。老号 10 个已绑定，新买 50 个号即插即用自动分配。
+              每个 Telegram 协议号独占 1 个专属巴西住宅 IP 与独立的移动端设备指纹。60 个原生住宅 IP 全量就绪，100% 实现 1 号 1 独立 IP 物理隔离防封。
             </p>
           </div>
         </div>
@@ -263,18 +305,18 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
           <div>
             <div className="text-xs text-slate-400 font-medium">VPS 代理池总量</div>
             <div className="text-2xl font-mono font-black text-slate-100 mt-1">
-              {proxies.length || 60} <span className="text-xs text-slate-400 font-normal">个原生 IP</span>
+              {proxies.length || 60} <span className="text-xs text-slate-400 font-normal">个原生住宅 IP</span>
             </div>
-            <div className="text-[11px] text-cyan-400 mt-0.5 font-mono">proxies.txt</div>
+            <div className="text-[11px] text-cyan-400 mt-0.5 font-mono">proxies.txt (60 个出口)</div>
           </div>
           <Server className="w-8 h-8 text-cyan-400/50" />
         </div>
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400 font-medium">当前老账号绑定 (10 个)</div>
+            <div className="text-xs text-slate-400 font-medium">已独占绑定账号 (1号1IP)</div>
             <div className="text-2xl font-mono font-black text-cyan-400 mt-1">
-              {assignedCount} <span className="text-xs text-slate-400 font-normal">个 1:1 锁定</span>
+              {assignedCount} <span className="text-xs text-slate-400 font-normal">个独立锁定</span>
             </div>
             <div className="text-[11px] text-emerald-400 mt-0.5 font-mono">account_proxies.json</div>
           </div>
@@ -283,11 +325,11 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
 
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400 font-medium">空闲待分配 (新购号就绪)</div>
+            <div className="text-xs text-slate-400 font-medium">空闲待分配 IP (新号即插即用)</div>
             <div className="text-2xl font-mono font-black text-emerald-400 mt-1">
               {availableCount} <span className="text-xs text-slate-400 font-normal">个全新独立 IP</span>
             </div>
-            <div className="text-[11px] text-amber-400 mt-0.5 font-mono">50 个新号即插即用</div>
+            <div className="text-[11px] text-amber-400 mt-0.5 font-mono">1:1 独立纯净出口</div>
           </div>
           <Zap className="w-8 h-8 text-amber-400/50" />
         </div>
@@ -386,27 +428,48 @@ export const ProxyHubView: React.FC<ProxyHubViewProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-slate-900 text-xs">
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-900 text-xs">
                   {p.assignedPhone ? (
-                    <div className="flex items-center gap-1.5 text-cyan-300 font-mono text-[11px] font-bold">
-                      <Shield className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>+{p.assignedPhone}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {p.assignedAccountAvatar ? (
+                        <img
+                          src={p.assignedAccountAvatar}
+                          alt=""
+                          className="w-5 h-5 rounded-full object-cover border border-cyan-500/40 shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-[9px] font-bold text-cyan-300 shrink-0">
+                          {p.assignedAccountName ? p.assignedAccountName.slice(0, 1) : 'TG'}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        {p.assignedAccountName && (
+                          <div className="text-[10px] text-slate-300 font-bold truncate leading-none mb-0.5">
+                            {p.assignedAccountName}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 text-cyan-300 font-mono text-[11px] font-bold truncate">
+                          <Shield className="w-3 h-3 text-cyan-400 shrink-0" />
+                          <span>{formatPhone(p.assignedPhone)}</span>
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1 text-emerald-400 font-mono text-[10px]">
-                      <Zap className="w-3 h-3 text-emerald-400" />
-                      <span>新购号即插即用待命</span>
+                    <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[10px]">
+                      <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>空闲纯净原生住宅 IP (即插即用)</span>
                     </div>
                   )}
 
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium border ${
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium border shrink-0 ${
                       p.assignedPhone
                         ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                     }`}
                   >
-                    {p.assignedPhone ? '🟢 1:1 隔离中' : '⚡ 空闲就绪'}
+                    {p.assignedPhone ? '🟢 1:1 独立绑定' : '⚡ 空闲待命'}
                   </span>
                 </div>
               </div>

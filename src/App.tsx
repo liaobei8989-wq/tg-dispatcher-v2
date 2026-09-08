@@ -110,7 +110,7 @@ export default function App() {
               if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
                 const existing = prevMap.get(cp);
                 const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
-                const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
+                const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cp] || getDedicatedProxyForPhone(cp, idx);
                 const todayStr = new Date().toISOString().split('T')[0];
                 const defaultDay = isTop5 ? 7 : 1;
                 const hasCorruptDay = (existing?.warmupDay === 16 || existing?.warmupDay === 8 || acc.warmupDay === 16 || acc.warmupDay === 8);
@@ -165,7 +165,7 @@ export default function App() {
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
-              const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
               const todayStr = new Date().toISOString().split('T')[0];
               const defaultDay = isTop5 ? 7 : 1;
               const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;

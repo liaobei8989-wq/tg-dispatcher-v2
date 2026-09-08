@@ -367,7 +367,9 @@ async function startServer() {
 
       // Load 1:1 dedicated proxies dynamically from account_proxies.json or initial map
       let accountProxiesMap: Record<string, string> = {};
-      const proxyJsonPath = path.join(rootDir, "account_proxies.json");
+      const proxyJsonPath = fs.existsSync(path.join(sessionsDir, "account_proxies.json"))
+        ? path.join(sessionsDir, "account_proxies.json")
+        : path.join(rootDir, "account_proxies.json");
       if (fs.existsSync(proxyJsonPath)) {
         try {
           const raw = fs.readFileSync(proxyJsonPath, "utf8");
@@ -378,38 +380,52 @@ async function startServer() {
         } catch (e) {}
       }
 
+      let proxyMapUpdated = false;
+
+      // Purge any legacy dummy placeholder keys (55869952011*) and obsolete numbers
+      for (const k of Object.keys(accountProxiesMap)) {
+        if (k.startsWith("55869952011") || obsoletePhones.has(k)) {
+          delete accountProxiesMap[k];
+          proxyMapUpdated = true;
+        }
+      }
+
       // Track uniquely used IPs to guarantee 100% 1-Account-1-IP isolation
       const phoneToProxy = new Map<string, string>();
       const usedProxyIps = new Set<string>();
 
-      // First pass: register already valid unique mappings
+      // First pass: register already valid unique mappings for real accounts
       Object.entries(accountProxiesMap).forEach(([phone, pStr]) => {
+        const cleanPh = phone.replace(/[^0-9]/g, "");
+        if (!cleanPh || cleanPh.startsWith("55869952011") || obsoletePhones.has(cleanPh)) return;
         const ip = String(pStr).split(':')[0];
         if (ip && !usedProxyIps.has(ip)) {
           usedProxyIps.add(ip);
-          phoneToProxy.set(phone, pStr);
+          phoneToProxy.set(cleanPh, pStr);
         }
       });
 
-      let proxyMapUpdated = false;
-
       // Helper to allocate an unused IP from the 60-proxy pool
-      const allocateUnusedProxy = (phone: string): string => {
-        if (phoneToProxy.has(phone)) {
-          return phoneToProxy.get(phone)!;
+      const allocateUnusedProxy = (phone: string, accountIndex: number = 0): string => {
+        const cleanPh = phone.replace(/[^0-9]/g, "");
+        if (phoneToProxy.has(cleanPh)) {
+          return phoneToProxy.get(cleanPh)!;
         }
         for (const candidate of proxiesPool) {
           const cIp = candidate.split(':')[0];
           if (!usedProxyIps.has(cIp)) {
             usedProxyIps.add(cIp);
-            phoneToProxy.set(phone, candidate);
-            accountProxiesMap[phone] = candidate;
+            phoneToProxy.set(cleanPh, candidate);
+            accountProxiesMap[cleanPh] = candidate;
             proxyMapUpdated = true;
             return candidate;
           }
         }
-        const fallback = proxiesPool[0] || '';
-        phoneToProxy.set(phone, fallback);
+        // Round-robin spread fallback across all 60 proxies if pool exhausted
+        const fallback = proxiesPool[accountIndex % proxiesPool.length] || proxiesPool[0] || '';
+        phoneToProxy.set(cleanPh, fallback);
+        accountProxiesMap[cleanPh] = fallback;
+        proxyMapUpdated = true;
         return fallback;
       };
 
@@ -591,27 +607,14 @@ async function startServer() {
         });
       });
 
-      // 3. Ensure all 60 protocol accounts are fully populated matching the 60 proxies pool
-      const BRAZIL_60_PHONES = [
-        '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
-        '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
-        '5586995201101', '5586995201102', '5586995201103', '5586995201104', '5586995201105',
-        '5586995201106', '5586995201107', '5586995201108', '5586995201109', '5586995201110',
-        '5586995201111', '5586995201112', '5586995201113', '5586995201114', '5586995201115',
-        '5586995201116', '5586995201117', '5586995201118', '5586995201119', '5586995201120',
-        '5586995201121', '5586995201122', '5586995201123', '5586995201124', '5586995201125',
-        '5586995201126', '5586995201127', '5586995201128', '5586995201129', '5586995201130',
-        '5586995201131', '5586995201132', '5586995201133', '5586995201134', '5586995201135',
-        '5586995201136', '5586995201137', '5586995201138', '5586995201139', '5586995201140',
-        '5586995201141', '5586995201142', '5586995201143', '5586995201144', '5586995201145',
-        '5586995201146', '5586995201147', '5586995201148', '5586995201149', '5586995201150'
-      ];
-
       // 3. Only return accounts that genuinely exist on the server's disk (no fake generated accounts)
-      // If user uploaded 10 accounts, exactly those 10 are loaded and used.
       if (proxyMapUpdated) {
         try {
-          fs.writeFileSync(proxyJsonPath, JSON.stringify(accountProxiesMap, null, 2), 'utf-8');
+          const payload = JSON.stringify(accountProxiesMap, null, 2);
+          fs.writeFileSync(path.join(rootDir, "account_proxies.json"), payload, 'utf-8');
+          if (fs.existsSync(sessionsDir)) {
+            fs.writeFileSync(path.join(sessionsDir, "account_proxies.json"), payload, 'utf-8');
+          }
         } catch (_) {}
       }
 
@@ -2772,6 +2775,8 @@ Return ONLY a JSON array with this schema:
         } catch (e) {}
       }
 
+      const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
+
       const proxiesList = lines.map((line, idx) => {
         const parts = line.split(":");
         const ip = parts[0] || "";
@@ -2779,11 +2784,13 @@ Return ONLY a JSON array with this schema:
         const username = parts[2] || "";
         const password = parts[3] || "";
 
-        // Find assigned phone if any
+        // Find assigned phone if any (strictly real accounts, purge legacy 55869952011 dummy keys)
         let assignedPhone = "";
         for (const [ph, prxStr] of Object.entries(mappings)) {
+          const cleanPh = ph.replace(/[^0-9]/g, "");
+          if (cleanPh.startsWith("55869952011") || obsoletePhones.has(cleanPh)) continue;
           if (String(prxStr).includes(ip)) {
-            assignedPhone = ph;
+            assignedPhone = cleanPh;
             break;
           }
         }

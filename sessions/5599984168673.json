@@ -7,10 +7,10 @@
   "app_version": "3.4.3 x64",
   "twofa": "548508",
   "proxy": {
-    "addr": "200.160.43.132",
+    "addr": "144.225.0.160",
     "port": 12323,
-    "username": "14aade52b86e6",
-    "password": "70dd653fc2",
+    "username": "14abdb1a0db2e",
+    "password": "cb8f30f1a9",
     "proxy_type": "socks5"
   }
 }

@@ -1403,7 +1403,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
               const list: AccountSession[] = accData.accounts.map((acc: AccountSession) => {
                 const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
                 const existing = cp ? prevMap.get(cp) : undefined;
-                return existing ? { ...acc, ...existing } : acc;
+                return existing ? { ...acc, ...existing, proxy: acc.proxy || existing.proxy } : acc;
               });
               return list;
             });

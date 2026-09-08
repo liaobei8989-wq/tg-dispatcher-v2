@@ -264,6 +264,8 @@ export interface ProxyItem {
   pingMs?: number;
   status: 'active' | 'testing' | 'dead' | 'slow';
   assignedPhone?: string;
+  assignedAccountName?: string;
+  assignedAccountAvatar?: string;
   lastChecked?: string;
 }
 
