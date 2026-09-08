@@ -8080,6 +8080,15 @@ if __name__ == "__main__":
           </div>
 
           <div className="flex items-center space-x-2">
+            <a
+              href="/api/download-vps-update"
+              download="dist_update.tar.gz"
+              className="px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1 transition-all"
+              title="一键下载包含最新前端与 1:1 独立原生 IP 映射表的 VPS 升级包 (dist_update.tar.gz)"
+            >
+              <Download className="w-3.5 h-3.5" /> 📦 下载 VPS 升级包 (.tar.gz)
+            </a>
+
             <button
               onClick={handleDownloadPythonScript}
               className="px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold flex items-center gap-1 transition-all"

@@ -92,6 +92,28 @@ async function startServer() {
     }
   });
 
+  // API: Download VPS Update Package (dist_update.tar.gz)
+  app.get(["/api/download-vps-update", "/dist_update.tar.gz"], (req, res) => {
+    try {
+      const publicTar = path.join(process.cwd(), "public", "dist_update.tar.gz");
+      const distTar = path.join(process.cwd(), "dist", "dist_update.tar.gz");
+      const targetPath = fs.existsSync(publicTar) ? publicTar : distTar;
+      
+      if (fs.existsSync(targetPath)) {
+        res.setHeader('Content-Type', 'application/gzip');
+        res.setHeader('Content-Disposition', 'attachment; filename="dist_update.tar.gz"');
+        const stream = fs.createReadStream(targetPath);
+        stream.pipe(res);
+      } else {
+        // Automatically package if missing
+        execSync('tar -czf public/dist_update.tar.gz dist/ account_proxies.json', { timeout: 10000 });
+        res.download(publicTar, 'dist_update.tar.gz');
+      }
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // API: List Uploaded .session & .json Protocol Files
   app.get("/api/telegram/list-sessions", (req, res) => {
     try {
