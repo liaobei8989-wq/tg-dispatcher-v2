@@ -125,8 +125,12 @@ const BRAZILIAN_FEMALE_NAMES: string[] = [
   'Maya', 'Aurora', 'Antonella', 'Luna', 'Vitoria'
 ];
 
-// Real 50 Brazilian Phones uploaded by user (matches session and json files 1:1)
-export const USER_50_REAL_PHONES: string[] = [
+// Real 60+1 Brazilian Phones uploaded by user (10 original + 51 newly uploaded session & json files)
+export const USER_60_REAL_PHONES: string[] = [
+  // 10 Original accounts
+  '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
+  '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
+  // 51 Newly uploaded accounts
   '5598984569687', '5598984627175', '5598984670055', '5598984671221', '5598984730611',
   '5598984731615', '5598984734606', '5598984804947', '5598984844174', '5598984845235',
   '5598984887183', '5598984906227', '5598984949562', '5598984953483', '5598984955625',
@@ -136,22 +140,27 @@ export const USER_50_REAL_PHONES: string[] = [
   '5598985656993', '5598985703552', '5598985709101', '5598985759825', '5598985864741',
   '5598985926947', '5598985966188', '5598986270576', '5598987077789', '5598987743687',
   '5599984026594', '5599984139898', '5599984168673', '5599984179798', '5599984185644',
-  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026'
+  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026',
+  '5599984388206'
 ];
+
+export const USER_50_REAL_PHONES = USER_60_REAL_PHONES;
 
 function formatBrPhone(raw: string): string {
   if (raw.length === 13) {
     return `+${raw.slice(0, 2)} ${raw.slice(2, 4)} ${raw.slice(4, 9)}-${raw.slice(9)}`;
+  } else if (raw.length === 12) {
+    return `+${raw.slice(0, 2)} ${raw.slice(2, 4)} ${raw.slice(4, 8)}-${raw.slice(8)}`;
   }
   return `+${raw}`;
 }
 
-export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = USER_50_REAL_PHONES.map((rawPhone, idx) => {
+export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = USER_60_REAL_PHONES.map((rawPhone, idx) => {
   const isTop5 = idx < 5;
   const proxy = BRAZIL_PROXIES_POOL[idx] || BRAZIL_PROXIES_POOL[idx % BRAZIL_PROXIES_POOL.length];
   const name = BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length] || `Atendente ${idx + 1}`;
-  const warmupDay = isTop5 ? 7 : (idx < 20 ? 5 : 4);
-  const groupTag = idx < 25 ? '主力爆破A组' : '新买养号B组';
+  const warmupDay = isTop5 ? 7 : (idx < 25 ? 5 : 4);
+  const groupTag = idx < 30 ? '主力爆破A组' : '新买养号B组';
   const dailyLimit = 120;
 
   return {

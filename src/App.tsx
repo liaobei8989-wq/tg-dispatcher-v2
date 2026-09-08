@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { DashboardOverview } from './components/DashboardOverview';
 import { FileImportHub } from './components/FileImportHub';
@@ -139,6 +139,7 @@ export default function App() {
 
             const list = Array.from(uniqueMap.values());
             safeSaveAccountsToLocalStorage(list);
+            saveAccountsToStorage(list);
             return list;
           });
         }
@@ -400,8 +401,23 @@ export default function App() {
     setActiveTab('import');
   };
 
-  const activeAccountCount = accounts.filter((a) => a.status === 'active' || a.status === 'warming').length;
-  const totalSentToday = accounts.reduce((sum, a) => sum + a.sentToday, 0);
+  // Strictly deduplicate and sanitize real Telegram accounts (purging any legacy 55869952011 dummy records)
+  const realTgAccounts = useMemo(() => {
+    const map = new Map<string, AccountSession>();
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
+    accounts.filter((a) => a.platform === 'telegram').forEach((acc) => {
+      const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+      if (clean && clean.length >= 8 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
+        if (!map.has(clean)) {
+          map.set(clean, acc);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [accounts]);
+
+  const activeAccountCount = realTgAccounts.filter((a) => a.status === 'active' || a.status === 'warming').length;
+  const totalSentToday = realTgAccounts.reduce((sum, a) => sum + a.sentToday, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500/30 selection:text-emerald-300">
