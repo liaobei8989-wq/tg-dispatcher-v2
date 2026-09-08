@@ -19,7 +19,7 @@ import { ProxyHubView } from './components/ProxyHubView';
 import { RepliedCustomersModal } from './components/RepliedCustomersModal';
 
 import { AccountSession, AntiBanSettings, CampaignLog, AccountStatus, ScrubbedContact } from './types';
-import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, getDedicatedProxyForPhone, BRAZIL_DEDICATED_PROXIES_MAP } from './data/mockAccounts';
+import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, getDedicatedProxyForPhone, BRAZIL_DEDICATED_PROXIES_MAP, BRAZIL_PROXIES_POOL } from './data/mockAccounts';
 import { PRESET_TEMPLATES } from './data/presetTemplates';
 import { saveAccountsToStorage, loadAccountsFromStorage, safeSaveAccountsToLocalStorage } from './utils/accountStorage';
 
@@ -38,6 +38,7 @@ export default function App() {
           const uniqueMap = new Map<string, AccountSession>();
           const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
           const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
+          const usedIps = new Set<string>();
 
           parsed.forEach((acc: AccountSession, idx: number) => {
             // Telegram only verification
@@ -47,7 +48,23 @@ export default function App() {
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
-              const dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              
+              // 严格防关联：如果历史 proxy 为空、被错误批量赋予同一 IP 或冲突，自动按 1号1IP 原生代理池分配
+              let dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              let proxyIp = (dedicatedProxy || '').replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+              if (!proxyIp || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cleanPhone !== '5586994428117')) {
+                dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
+                proxyIp = dedicatedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+                if (usedIps.has(proxyIp)) {
+                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]));
+                  if (freeProxy) {
+                    dedicatedProxy = freeProxy;
+                    proxyIp = freeProxy.split(':')[0];
+                  }
+                }
+              }
+              usedIps.add(proxyIp);
+
               const todayStr = new Date().toISOString().split('T')[0];
               const defaultDay = isTop5 ? 7 : 1;
               const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8 || !acc.warmupDay;
@@ -89,61 +106,82 @@ export default function App() {
     const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
 
-    // 1. Fetch live accounts from server sessions directory
-    fetch('/api/telegram/get-accounts')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
-          setAccounts(prev => {
-            const prevMap = new Map<string, AccountSession>();
-            prev.forEach((a, idx) => {
-              const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
-              if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
-                prevMap.set(cp, a);
-              }
-            });
+    // 1. Fetch live accounts and dedicated 1-to-1 proxy mappings from server disk
+    Promise.all([
+      fetch('/api/telegram/get-accounts').then(res => res.json()).catch(() => ({ success: false })),
+      fetch('/api/proxies/get-mapping').then(res => res.json()).catch(() => ({ success: false }))
+    ]).then(([data, mapData]) => {
+      const serverProxyMappings: Record<string, string> = (mapData?.success && mapData?.mappings) ? mapData.mappings : {};
 
-            const uniqueMap = new Map<string, AccountSession>();
-            // Strictly base on server-side disk accounts
-            data.accounts.forEach((acc: AccountSession, idx: number) => {
-              const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-              if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
-                const existing = prevMap.get(cp);
-                const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
-                const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cp] || getDedicatedProxyForPhone(cp, idx);
-                const todayStr = new Date().toISOString().split('T')[0];
-                const defaultDay = isTop5 ? 7 : 1;
-                const hasCorruptDay = (existing?.warmupDay === 16 || existing?.warmupDay === 8 || acc.warmupDay === 16 || acc.warmupDay === 8);
-                const baseDay = hasCorruptDay ? defaultDay : (existing?.baseWarmupDay !== undefined ? existing.baseWarmupDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (existing?.warmupDay || acc.warmupDay || defaultDay)));
-                const createdAt = hasCorruptDay ? todayStr : (existing?.createdAt || acc.createdAt || todayStr);
-                const dynamicWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
-                const isMature = dynamicWarmupDay >= 4;
-                const rawGroup = existing?.groupTag || acc.groupTag;
-                const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
-                  ? (isTop5 ? '主力爆破A组' : '新买养号B组')
-                  : rawGroup;
-
-                uniqueMap.set(cp, {
-                  ...acc,
-                  ...(existing || {}),
-                  proxy: dedicatedProxy,
-                  createdAt: createdAt,
-                  baseWarmupDay: baseDay,
-                  warmupDay: dynamicWarmupDay,
-                  dailyLimit: isMature ? 120 : 60,
-                  status: isMature ? 'active' : 'warming',
-                  groupTag: normalizedGroup
-                });
-              }
-            });
-
-            const list = Array.from(uniqueMap.values());
-            safeSaveAccountsToLocalStorage(list);
-            saveAccountsToStorage(list);
-            return list;
+      if (data.success && Array.isArray(data.accounts) && data.accounts.length > 0) {
+        setAccounts(prev => {
+          const prevMap = new Map<string, AccountSession>();
+          prev.forEach((a) => {
+            const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
+            if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
+              prevMap.set(cp, a);
+            }
           });
-        }
-      })
+
+          const uniqueMap = new Map<string, AccountSession>();
+          const usedIps = new Set<string>();
+
+          // Strictly base on server-side disk accounts
+          data.accounts.forEach((acc: AccountSession, idx: number) => {
+            const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
+            if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
+              const existing = prevMap.get(cp);
+              const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
+              
+              // 优先级：服务端 account_proxies.json 权威映射 > 账号自带 proxy > 内置独享映射 > 60原生池
+              let dedicatedProxy = serverProxyMappings[cp] || BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
+              let proxyIp = (dedicatedProxy || '').replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+              if (!proxyIp || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cp !== '5586994428117')) {
+                dedicatedProxy = serverProxyMappings[cp] || BRAZIL_DEDICATED_PROXIES_MAP[cp] || getDedicatedProxyForPhone(cp, idx);
+                proxyIp = dedicatedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+                if (usedIps.has(proxyIp)) {
+                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]));
+                  if (freeProxy) {
+                    dedicatedProxy = freeProxy;
+                    proxyIp = freeProxy.split(':')[0];
+                  }
+                }
+              }
+              usedIps.add(proxyIp);
+
+              const todayStr = new Date().toISOString().split('T')[0];
+              const defaultDay = isTop5 ? 7 : 1;
+              const hasCorruptDay = (existing?.warmupDay === 16 || existing?.warmupDay === 8 || acc.warmupDay === 16 || acc.warmupDay === 8);
+              const baseDay = hasCorruptDay ? defaultDay : (existing?.baseWarmupDay !== undefined ? existing.baseWarmupDay : (acc.baseWarmupDay !== undefined ? acc.baseWarmupDay : (existing?.warmupDay || acc.warmupDay || defaultDay)));
+              const createdAt = hasCorruptDay ? todayStr : (existing?.createdAt || acc.createdAt || todayStr);
+              const dynamicWarmupDay = hasCorruptDay ? defaultDay : calculateWarmupDays(createdAt, baseDay);
+              const isMature = dynamicWarmupDay >= 4;
+              const rawGroup = existing?.groupTag || acc.groupTag;
+              const normalizedGroup = (!rawGroup || rawGroup === '新进拓展B组' || rawGroup === '新进养号B组')
+                ? (isTop5 ? '主力爆破A组' : '新买养号B组')
+                : rawGroup;
+
+              uniqueMap.set(cp, {
+                ...acc,
+                ...(existing || {}),
+                proxy: dedicatedProxy,
+                createdAt: createdAt,
+                baseWarmupDay: baseDay,
+                warmupDay: dynamicWarmupDay,
+                dailyLimit: isMature ? 120 : 60,
+                status: isMature ? 'active' : 'warming',
+                groupTag: normalizedGroup
+              });
+            }
+          });
+
+          const list = Array.from(uniqueMap.values());
+          safeSaveAccountsToLocalStorage(list);
+          saveAccountsToStorage(list);
+          return list;
+        });
+      }
+    })
       .catch(err => {
         console.warn('Server accounts sync skipped:', err);
       });

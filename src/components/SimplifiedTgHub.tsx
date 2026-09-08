@@ -52,7 +52,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { AccountSession, CampaignLog, ScheduledCampaignConfig } from '../types';
-import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, BRAZIL_PROXIES_POOL } from '../data/mockAccounts';
+import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, BRAZIL_PROXIES_POOL, BRAZIL_DEDICATED_PROXIES_MAP, getDedicatedProxyForPhone } from '../data/mockAccounts';
 import { PRESET_TEMPLATES } from '../data/presetTemplates';
 import { PRESET_BLESSING_TEMPLATES, DEFAULT_BLESSING_SPINTAX, BlessingTemplate } from '../data/blessingTemplates';
 import { parseSpintax } from '../utils/spintax';
@@ -114,19 +114,6 @@ interface ServerSessionFile {
   modifiedAt: string;
   isValid: boolean;
 }
-
-// 10 Brazilian Dedicated Proxies (100% Native Brazilian IP 1:1 mapped to user's 10 accounts)
-const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
-  '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-  '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-  '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-  '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-  '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-  '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-  '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-  '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-  '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
-};
 
 const brazilProxies: string[] = [
   '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
@@ -549,6 +536,44 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   };
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('ALL');
   const [massSendGroupFilter, setMassSendGroupFilter] = useState<string>('ALL');
+
+  // 🌐 服务端原生 1号1IP 映射表实时同步 (account_proxies.json 权威数据)
+  const [serverProxyMappings, setServerProxyMappings] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/api/proxies/get-mapping')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.mappings) {
+          setServerProxyMappings(data.mappings);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // 严格按 1:1 独立原生 IP 规则为账号解析独享代理
+  const getAccountProxy = (account: AccountSession, index: number = 0): string => {
+    const clean = account.phone ? account.phone.replace(/\D/g, '') : account.id;
+    // 1. 服务端 account_proxies.json 权威独立绑定
+    if (serverProxyMappings[clean]) {
+      return serverProxyMappings[clean];
+    }
+    // 2. 账号自身 proxy 且非被误批赋的 200.160.43.132（除非是该 IP 的真正归属账号 5586994428117）
+    if (account.proxy && (!account.proxy.startsWith('200.160.43.132') || clean === '5586994428117')) {
+      return account.proxy;
+    }
+    // 3. 巴西原生独享代理字典
+    if (BRAZIL_DEDICATED_PROXIES_MAP[clean]) {
+      return BRAZIL_DEDICATED_PROXIES_MAP[clean];
+    }
+    // 4. 原生池按位分配
+    return getDedicatedProxyForPhone(clean, index);
+  };
+
+  const formatProxyIp = (proxyStr: string): string => {
+    if (!proxyStr) return '200.160.*';
+    return proxyStr.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0] || '200.160.*';
+  };
 
   // 🛡️ 账号受限自动熔断隔离开关 (体检/发信一旦检测到双向受限/封号，立即自动退出养号B组与群发队列，移至【⚠️ 风控隔离组】)
   const [autoQuarantineRestricted, setAutoQuarantineRestricted] = useState<boolean>(() => {
@@ -1400,10 +1425,11 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
                 const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
                 if (cp) prevMap.set(cp, a);
               });
-              const list: AccountSession[] = accData.accounts.map((acc: AccountSession) => {
+              const list: AccountSession[] = accData.accounts.map((acc: AccountSession, aIdx: number) => {
                 const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
                 const existing = cp ? prevMap.get(cp) : undefined;
-                return existing ? { ...acc, ...existing, proxy: acc.proxy || existing.proxy } : acc;
+                const dedicated = getAccountProxy(acc, aIdx);
+                return existing ? { ...acc, ...existing, proxy: dedicated } : { ...acc, proxy: dedicated };
               });
               return list;
             });
@@ -5049,20 +5075,35 @@ if __name__ == "__main__":
                             </span>
                           </td>
                           <td className="py-1.5 px-2.5 font-mono text-emerald-300">
-                            <span
-                              className="cursor-pointer hover:underline flex items-center gap-1 truncate max-w-[160px]"
-                              title={acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.* (巴西原生)'}
-                              onClick={() => {
-                                const currentProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
-                                const newProxy = prompt(`请输入账号 [${acc.phone || acc.alias}] 的独享代理 IP:`, currentProxy);
-                                if (newProxy !== null && newProxy.trim()) {
-                                  setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: newProxy.trim() } : a));
-                                }
-                              }}
-                            >
-                              🌐 {(acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.*').split(':')[0]}
-                              <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1 rounded border border-emerald-600/50">改</span>
-                            </span>
+                            {(() => {
+                              const accountProxy = getAccountProxy(acc, idx);
+                              const displayIp = formatProxyIp(accountProxy);
+                              return (
+                                <span
+                                  className="cursor-pointer hover:underline flex items-center gap-1 truncate max-w-[160px]"
+                                  title={`独享原生代理: ${accountProxy} (点击修改)`}
+                                  onClick={() => {
+                                    const newProxy = prompt(`请输入账号 [${acc.phone || acc.alias}] 的独享代理 IP:`, accountProxy);
+                                    if (newProxy !== null && newProxy.trim()) {
+                                      const trimmed = newProxy.trim();
+                                      setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: trimmed } : a));
+                                      const cp = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
+                                      if (cp) {
+                                        setServerProxyMappings(prev => ({ ...prev, [cp]: trimmed }));
+                                        fetch('/api/proxies/save-mapping', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ mappings: { ...serverProxyMappings, [cp]: trimmed } })
+                                        }).catch(() => {});
+                                      }
+                                    }
+                                  }}
+                                >
+                                  🌐 {displayIp}
+                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1 rounded border border-emerald-600/50">改</span>
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-1.5 px-2.5 text-center font-mono text-[10px]">
                             <span className={hasSession ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
@@ -5103,7 +5144,7 @@ if __name__ == "__main__":
           ) : (
             /* 📱 极紧凑多列网格卡片 (6列超密排版，卡片变小，单屏容纳上百个账号) */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-6 gap-2">
-              {visibleAccounts.map((acc) => {
+              {visibleAccounts.map((acc, accIdx) => {
                 const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
                 const hasSession = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.session'));
                 const hasJson = uploadedSessions.some(f => f.fileName.includes(cleanPhone) && f.fileName.endsWith('.json'));
@@ -5265,22 +5306,37 @@ if __name__ == "__main__":
                         </span>
                       </div>
 
-                      <div 
-                        className="flex items-center justify-between cursor-pointer hover:text-emerald-300"
-                        title="点击修改独享 IP"
-                        onClick={() => {
-                          const currentProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.43.132:12323:14aade52b86e6:70dd653fc2';
-                          const newProxy = prompt(`请输入账号 [${acc.phone || acc.alias}] 的独享代理 IP:`, currentProxy);
-                          if (newProxy !== null && newProxy.trim()) {
-                            setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: newProxy.trim() } : a));
-                          }
-                        }}
-                      >
-                        <span className="text-slate-500">IP:</span>
-                        <span className="text-emerald-300 font-bold truncate max-w-[90px]" title={acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.*'}>
-                          {(acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || '200.160.*').split(':')[0]} <span className="underline text-[8px]">改</span>
-                        </span>
-                      </div>
+                      {(() => {
+                        const accountProxy = getAccountProxy(acc, accIdx);
+                        const displayIp = formatProxyIp(accountProxy);
+                        return (
+                          <div 
+                            className="flex items-center justify-between cursor-pointer hover:text-emerald-300"
+                            title={`独享原生代理: ${accountProxy} (点击修改)`}
+                            onClick={() => {
+                              const newProxy = prompt(`请输入账号 [${acc.phone || acc.alias}] 的独享代理 IP:`, accountProxy);
+                              if (newProxy !== null && newProxy.trim()) {
+                                const trimmed = newProxy.trim();
+                                setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, proxy: trimmed } : a));
+                                const cp = acc.phone ? acc.phone.replace(/\D/g, '') : acc.id;
+                                if (cp) {
+                                  setServerProxyMappings(prev => ({ ...prev, [cp]: trimmed }));
+                                  fetch('/api/proxies/save-mapping', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ mappings: { ...serverProxyMappings, [cp]: trimmed } })
+                                  }).catch(() => {});
+                                }
+                              }
+                            }}
+                          >
+                            <span className="text-slate-500">IP:</span>
+                            <span className="text-emerald-300 font-bold truncate max-w-[90px]" title={accountProxy}>
+                              {displayIp} <span className="underline text-[8px]">改</span>
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Footer: Health & Session Status */}
