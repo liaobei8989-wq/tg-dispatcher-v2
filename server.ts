@@ -3164,6 +3164,14 @@ Return ONLY a JSON array with this schema:
   // 手动重置今日补发计数 API (24小时自动重置的辅助手动清零入口)
   app.post("/api/tg-matrix/reset-today-stats", (req, res) => {
     const statsFile = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
+    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
+    
+    if (fs.existsSync(repliedChatsFile)) {
+      try {
+        fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
+      } catch (e) {}
+    }
+
     let statsData: any = {};
     if (fs.existsSync(statsFile)) {
       try {
@@ -3171,6 +3179,7 @@ Return ONLY a JSON array with this schema:
       } catch (e) {}
     }
     statsData.todayCount = 0;
+    statsData.uniqueRepliedCustomers = 0;
     if (statsData.accountStats) {
       Object.keys(statsData.accountStats).forEach(phone => {
         if (statsData.accountStats[phone]) {

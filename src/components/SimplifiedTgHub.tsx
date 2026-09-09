@@ -3148,7 +3148,7 @@ if __name__ == "__main__":
       let lastErrorDetail = '';
       let nextTaskQueueIndex = currentIndex;
       let activeHttpSendingCount = 0;
-      const MAX_ACTIVE_HTTP_SENDERS = 5; // 🛡️ 限制最多 5 个通道同时发起底层发信 HTTP 请求，完美适配浏览器 6 连接上限，杜绝队列堆积导致的 signal timed out 与代理端口过载
+      const MAX_ACTIVE_HTTP_SENDERS = 3; // 🛡️ 限制最多 3 个通道同时向云端握手发信，大幅降低代理并发压力，彻底杜绝握手超时与并发踩踏
 
       // 线程安全原子任务取模器 (支持频控失败目标放回 retryTasks，由其他健康通道接手)
       const retryTasks: { taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }[] = [];
@@ -3275,36 +3275,45 @@ if __name__ == "__main__":
             } else {
               runFailCount++;
               setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));
+              const rawLines = resData.output?.split('\n') || [];
+              const errorLines = rawLines.filter((l: string) => l.includes('❌'));
+              const warnLines = rawLines.filter((l: string) => l.includes('⚠️'));
+              const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || '发件号凭证鉴权失败');
               const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const errDetail = isUnregistered 
                 ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
                 : (isDbCorrupt
                     ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
-                    : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号凭证鉴权失败'));
+                    : selectedLog);
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 强力频控绝对熔断机制：发信遭遇官方限制/频控 (PeerFlood/FloodWait/限制)，强制 100% 立即退出本次发信任务！
-              const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限/i.test(errDetail);
+              // 🛡️ 强力频控与死号智能接力机制：遇到官方频控、凭证失效、未登录或握手异常，自动换健康号重试，并退出该死号
+              const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限|未登录|失效|鉴权失败/i.test(errDetail);
               if (isTgRestricted) {
-                // 1. 本次目标由于发信号自身频控未送达，放回重试队列让其他健康通道接力发送
+                // 1. 本次目标由于发信号自身原因未送达，放回重试队列让其他健康在线通道接力发送！
                 if ((task.retries || 0) < 2) {
                   runFailCount = Math.max(0, runFailCount - 1);
+                  setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
+                  setSimpleLogs(prev => [
+                    ...prev,
+                    `🔄 [智能无缝接力] 账号 +${acc.phone} 凭证异常/受限，未送达目标 (${targetItem}) 已自动转入健康在线账号队列接力重发！`
+                  ]);
                 }
 
                 // 2. 若开启了风控隔离组，自动归档
                 if (autoQuarantineRestricted) {
-                  quarantineAccounts([acc.phone], `发件中遇到官方限制: ${errDetail}`);
+                  quarantineAccounts([acc.phone], `发件中遇到账号失效或限制: ${errDetail}`);
                 }
 
-                // 3. 打印醒目的红字停止日志并退出
+                // 3. 打印醒目的红字停止日志并退出该失效账号 Worker
                 setSimpleLogs(prev => [
                   ...prev,
-                  `🛑 [通道 #${workerIdx + 1} 频控绝对熔断退出] 账号 +${acc.phone} 遇到 Telegram 官方频控限制 (${errDetail.slice(0, 50)})！系统已强制该账号【立即退出】本次任务进入休眠，严禁继续发信以保护账号！未送达目标 (${targetItem}) 已自动转由其余健康通道接力发送。`
+                  `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
                 ]);
-                break; // 🚨 无论开关如何，该账号必须 100% 立即退出发信任务！
+                break; // 🚨 该异常账号必须立即退出发信任务！
               }
             }
           } catch (err: any) {
