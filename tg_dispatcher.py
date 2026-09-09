@@ -278,17 +278,6 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
     Creates an isolated copy of the session file to avoid SQLite lock contention
     between concurrent workers and background listener processes.
     """
-    try:
-        if os.path.exists(orig_session_path):
-            conn = sqlite3.connect(orig_session_path, timeout=60.0)
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA busy_timeout=60000;")
-            conn.execute("PRAGMA synchronous=NORMAL;")
-            conn.commit()
-            conn.close()
-    except Exception:
-        pass
-
     tmp_dir = os.path.join(os.getcwd(), "sessions", "tmp_workers")
     os.makedirs(tmp_dir, exist_ok=True)
     basename = os.path.basename(orig_session_path).replace('.session', '')
@@ -296,14 +285,24 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
     safe_path = os.path.join(tmp_dir, safe_name)
     try:
         shutil.copy2(orig_session_path, safe_path)
-        # Ensure copy has WAL enabled
-        c = sqlite3.connect(safe_path, timeout=30.0)
-        c.execute("PRAGMA journal_mode=WAL;")
-        c.execute("PRAGMA busy_timeout=30000;")
-        c.commit()
+        # Also copy WAL and SHM if they exist
+        for ext in ['-wal', '-shm']:
+            src_ext = orig_session_path + ext
+            dst_ext = safe_path + ext
+            if os.path.exists(src_ext):
+                try:
+                    shutil.copy2(src_ext, dst_ext)
+                except Exception:
+                    pass
+
+        # Verify copy integrity
+        c = sqlite3.connect(safe_path, timeout=10.0)
+        c.execute("PRAGMA busy_timeout=10000;")
+        c.execute("SELECT 1 FROM sqlite_master LIMIT 1;")
         c.close()
         return safe_path
     except Exception:
+        # If safe copy fails or isn't a valid DB, use original directly
         return orig_session_path
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
@@ -519,14 +518,11 @@ async def run_worker(
 
     try:
         try:
-            # 强化代理连接超时，给予 SOCKS5/HTTP 代理充分的握手时间 (15秒)
-            await asyncio.wait_for(client.connect(), timeout=15.0)
+            # 强化代理连接超时，给予住宅代理充分的握手时间 (25秒)
+            await asyncio.wait_for(client.connect(), timeout=25.0)
         except Exception as conn_err:
             if proxy_tuple:
-                # 严格禁止直接切换为 VPS 原生 IP 直连！因为同一个 Telegram session 在短时间内跨 IP 会触发官方硬封控：
-                # "The same session cannot be used under two different IP addresses simultaneously"
-                # 正确做法：重试一次代理连接，保持 IP 纯净一致性
-                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立代理环境重试连接 (15s)...")
+                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立巴西代理重试连接 (25s)...")
                 try:
                     await client.disconnect()
                 except Exception:
@@ -542,10 +538,30 @@ async def run_worker(
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=15.0)
-                except Exception as retry_err:
-                    worker_logs.append(f"❌ [Worker #{worker_id} 代理连接失败]: 巴西住宅代理节点响应超时，已安全跳过该目标以保护账号 IP 纯度")
-                    raise retry_err
+                    await asyncio.wait_for(client.connect(), timeout=25.0)
+                except Exception:
+                    # 原代理节点超时，平滑轮换至备用巴西住宅代理节点，保持同国家住宅 IP 纯净环境
+                    backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3) % len(BRAZIL_PROXY_POOL)]
+                    backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
+                    worker_logs.append(f"🔄 [Worker #{worker_id} 智能换线]: 原住宅节点连接超时，自动切换至备用巴西节点 ({backup_proxy_str.split(':')[0]}) 续连...")
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+                    client = TelegramClient(
+                        session_prefix,
+                        api_id_int,
+                        str(api_hash),
+                        proxy=backup_tuple,
+                        device_model=str(device_model),
+                        system_version=str(system_version),
+                        app_version=str(app_version)
+                    )
+                    try:
+                        await asyncio.wait_for(client.connect(), timeout=25.0)
+                    except Exception as final_retry_err:
+                        worker_logs.append(f"❌ [Worker #{worker_id} 代理重试超时]: 巴西住宅代理节点响应超时，已跳过该目标以保护账号")
+                        raise final_retry_err
             else:
                 raise conn_err
 
