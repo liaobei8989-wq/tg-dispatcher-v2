@@ -518,16 +518,16 @@ async def run_worker(
 
     try:
         try:
-            # 强化代理连接超时，给予住宅代理充分的握手时间 (25秒)
-            await asyncio.wait_for(client.connect(), timeout=25.0)
+            # 强化代理连接超时，给予住宅代理充分的握手时间 (18秒)
+            await asyncio.wait_for(client.connect(), timeout=18.0)
         except Exception as conn_err:
             if proxy_tuple:
-                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立巴西代理重试连接 (25s)...")
+                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立巴西代理重试连接 (18s)...")
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)
                 client = TelegramClient(
                     session_prefix,
                     api_id_int,
@@ -538,10 +538,10 @@ async def run_worker(
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=25.0)
+                    await asyncio.wait_for(client.connect(), timeout=18.0)
                 except Exception:
                     # 原代理节点超时，平滑轮换至备用巴西住宅代理节点，保持同国家住宅 IP 纯净环境
-                    backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3) % len(BRAZIL_PROXY_POOL)]
+                    backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3 + 1) % len(BRAZIL_PROXY_POOL)]
                     backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
                     worker_logs.append(f"🔄 [Worker #{worker_id} 智能换线]: 原住宅节点连接超时，自动切换至备用巴西节点 ({backup_proxy_str.split(':')[0]}) 续连...")
                     try:
@@ -558,7 +558,7 @@ async def run_worker(
                         app_version=str(app_version)
                     )
                     try:
-                        await asyncio.wait_for(client.connect(), timeout=25.0)
+                        await asyncio.wait_for(client.connect(), timeout=18.0)
                     except Exception as final_retry_err:
                         worker_logs.append(f"❌ [Worker #{worker_id} 代理重试超时]: 巴西住宅代理节点响应超时，已跳过该目标以保护账号")
                         raise final_retry_err

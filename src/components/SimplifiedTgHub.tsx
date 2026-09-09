@@ -3147,6 +3147,8 @@ if __name__ == "__main__":
       let runFailCount = 0;
       let lastErrorDetail = '';
       let nextTaskQueueIndex = currentIndex;
+      let activeHttpSendingCount = 0;
+      const MAX_ACTIVE_HTTP_SENDERS = 5; // 🛡️ 限制最多 5 个通道同时发起底层发信 HTTP 请求，完美适配浏览器 6 连接上限，杜绝队列堆积导致的 signal timed out 与代理端口过载
 
       // 线程安全原子任务取模器 (支持频控失败目标放回 retryTasks，由其他健康通道接手)
       const retryTasks: { taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }[] = [];
@@ -3222,16 +3224,23 @@ if __name__ == "__main__":
           await interruptibleSleep(typingDurationMs);
           if (isAbortedRef.current) break;
 
+          // 🛡️ 浏览器并发管道与 VPS 进程防挤压信号量：若同时有 5 个通道正在向服务器执行发信，其余通道稍微等候，绝不阻塞浏览器网络栈
+          while (activeHttpSendingCount >= MAX_ACTIVE_HTTP_SENDERS && !isAbortedRef.current) {
+            await interruptibleSleep(300);
+          }
+          if (isAbortedRef.current) break;
+
           setSimpleLogs(prev => [
             ...prev,
             `[📡 正在握手 TG 云端 | 通道 #${workerIdx + 1} (${acc.phone.slice(-4)})] 正在通过巴西代理 (${proxyIp}) 发信 ➔ 目标 #${taskIndex + 1} (${cleanPhone})...`
           ]);
 
+          activeHttpSendingCount++;
           try {
             const resp = await fetch('/api/telethon/run-direct', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              signal: AbortSignal.timeout(90000),
+              signal: AbortSignal.timeout(180000),
               body: JSON.stringify({
                 targets: [cleanPhone],
                 message: msgToSend,
@@ -3303,6 +3312,8 @@ if __name__ == "__main__":
             runFailCount++;
             lastErrorDetail = `网络通信异常: ${err.message}`;
             setSimpleLogs(prev => [...prev, `[云端 ❌ 网络异常] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${err.message}`]);
+          } finally {
+            activeHttpSendingCount = Math.max(0, activeHttpSendingCount - 1);
           }
 
           if (isAbortedRef.current) break;
