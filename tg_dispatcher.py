@@ -518,32 +518,32 @@ async def run_worker(
 
     try:
         try:
-            # 强化代理连接超时，给予住宅代理充分的握手时间 (18秒)
-            await asyncio.wait_for(client.connect(), timeout=18.0)
+            # 强化代理连接超时，若代理可在 6 秒内握手则优先使用住宅代理
+            await asyncio.wait_for(client.connect(), timeout=6.0)
         except Exception as conn_err:
             if proxy_tuple:
-                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 正在保持独立巴西代理重试连接 (18s)...")
+                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 切换备用巴西节点测试重连...")
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.3)
+                backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3 + 1) % len(BRAZIL_PROXY_POOL)]
+                backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
                 client = TelegramClient(
                     session_prefix,
                     api_id_int,
                     str(api_hash),
-                    proxy=proxy_tuple,
+                    proxy=backup_tuple,
                     device_model=str(device_model),
                     system_version=str(system_version),
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=18.0)
+                    await asyncio.wait_for(client.connect(), timeout=6.0)
                 except Exception:
-                    # 原代理节点超时，平滑轮换至备用巴西住宅代理节点，保持同国家住宅 IP 纯净环境
-                    backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3 + 1) % len(BRAZIL_PROXY_POOL)]
-                    backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
-                    worker_logs.append(f"🔄 [Worker #{worker_id} 智能换线]: 原住宅节点连接超时，自动切换至备用巴西节点 ({backup_proxy_str.split(':')[0]}) 续连...")
+                    # 原代理节点与备用节点均超时，自动无缝切入 VPS 原生高速通道直连 TG 官方服务器保底，确保发信必达！
+                    worker_logs.append(f"⚡ [Worker #{worker_id} 极速保底]: 住宅代理节点无响应，自动切换 VPS 原生通道直连 TG 官方数据中心发信...")
                     try:
                         await client.disconnect()
                     except Exception:
@@ -552,16 +552,16 @@ async def run_worker(
                         session_prefix,
                         api_id_int,
                         str(api_hash),
-                        proxy=backup_tuple,
+                        proxy=None,
                         device_model=str(device_model),
                         system_version=str(system_version),
                         app_version=str(app_version)
                     )
                     try:
-                        await asyncio.wait_for(client.connect(), timeout=18.0)
-                    except Exception as final_retry_err:
-                        worker_logs.append(f"❌ [Worker #{worker_id} 代理重试超时]: 巴西住宅代理节点响应超时，已跳过该目标以保护账号")
-                        raise final_retry_err
+                        await asyncio.wait_for(client.connect(), timeout=8.0)
+                    except Exception as direct_err:
+                        worker_logs.append(f"❌ [Worker #{worker_id} 连接异常]: 代理与直连均不可达: {direct_err}")
+                        raise direct_err
             else:
                 raise conn_err
 
