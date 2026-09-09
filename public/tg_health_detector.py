@@ -248,12 +248,11 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         err_msg = str(e)
         if "file is not a database" in err_msg or "database" in err_msg.lower():
-            # 文本类/字符串 Session 格式凭证，在 Node MTProto 下原生正常使用，绝非死号
-            result["auth_status"] = "✅ 协议凭证完好 (在线)"
-            result["spambot_status"] = "🟢 100% 完全健康 (无限制)"
-            result["restriction_detail"] = "凭证校验通过，可正常自由发信"
-            result["can_send_today"] = True
-            result["health_score"] = 99
+            result["auth_status"] = "❌ 凭证损坏 (非有效SQLite数据库)"
+            result["spambot_status"] = "⚠️ 文件损坏 (128B空文件/非Telethon格式)"
+            result["restriction_detail"] = "该.session文件并非有效数据库(仅128字节空数据)，需重新上传原始完整.session凭证"
+            result["can_send_today"] = False
+            result["health_score"] = 10
         elif any(k in err_msg.lower() for k in ["timeout", "timed out", "connection", "socks", "proxy", "network", "unreachable", "reset by peer"]):
             result["auth_status"] = "⏳ 代理网络超时 (未封号)"
             result["spambot_status"] = "🌐 代理超时 (非死号)"

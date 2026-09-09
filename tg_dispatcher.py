@@ -677,7 +677,11 @@ async def run_worker(
                     await asyncio.sleep(real_delay)
 
     except Exception as ge:
-        worker_logs.append(f"❌ [Worker #{worker_id} 运行异常]: {str(ge)}")
+        err_str = str(ge)
+        if "file is not a database" in err_str or "database" in err_str.lower():
+            worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效的 SQLite 数据库 (大小仅 128 字节或已损坏)，请重新上传号商原始完整 .session 凭证文件！")
+        else:
+            worker_logs.append(f"❌ [Worker #{worker_id} 运行异常]: {err_str}")
     finally:
         try:
             await client.disconnect()

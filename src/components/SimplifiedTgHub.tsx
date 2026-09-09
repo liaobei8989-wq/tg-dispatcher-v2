@@ -3267,9 +3267,12 @@ if __name__ == "__main__":
               runFailCount++;
               setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));
               const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
+              const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const errDetail = isUnregistered 
                 ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
-                : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号凭证鉴权失败');
+                : (isDbCorrupt
+                    ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
+                    : (resData.error || resData.output?.split('\n').filter((l: string) => l.includes('❌') || l.includes('⚠️')).join(' | ') || '发件号凭证鉴权失败'));
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
