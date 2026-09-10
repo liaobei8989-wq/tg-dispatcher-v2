@@ -206,7 +206,8 @@ export default function App() {
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
-              const dedicatedProxy = acc.proxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
+              const validAccProxy = (acc.proxy && !acc.proxy.includes('144.') && acc.proxy.includes('200.')) ? acc.proxy : '';
+              const dedicatedProxy = validAccProxy || BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
               const todayStr = new Date().toISOString().split('T')[0];
               const defaultDay = isTop5 ? 7 : 1;
               const hasCorruptDay = acc.warmupDay === 16 || acc.warmupDay === 8;

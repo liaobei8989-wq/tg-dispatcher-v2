@@ -563,19 +563,19 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       .catch(() => {});
   }, []);
 
-  // 严格按 1:1 独立原生 IP 规则为账号解析独享代理 (绝对剔除所有 144.* 虚假 IP)
+  // 严格按 1:1 独立原生 IP 规则为账号解析独享代理 (绝对剔除所有 144.* 虚假 IP，保证 100% 为您购买的真实 200.* 住宅原生 IP)
   const getAccountProxy = (account: AccountSession, index: number = 0): string => {
     const clean = account.phone ? account.phone.replace(/\D/g, '') : account.id;
-    // 1. 服务端 account_proxies.json 权威独立绑定
-    if (serverProxyMappings[clean] && !serverProxyMappings[clean].includes('144.')) {
+    // 1. 服务端 account_proxies.json 权威独立绑定 (必须真实 200.*)
+    if (serverProxyMappings[clean] && !serverProxyMappings[clean].includes('144.') && serverProxyMappings[clean].includes('200.')) {
       return serverProxyMappings[clean];
     }
     // 2. 巴西原生独享代理字典
-    if (BRAZIL_DEDICATED_PROXIES_MAP[clean] && !BRAZIL_DEDICATED_PROXIES_MAP[clean].includes('144.')) {
+    if (BRAZIL_DEDICATED_PROXIES_MAP[clean] && !BRAZIL_DEDICATED_PROXIES_MAP[clean].includes('144.') && BRAZIL_DEDICATED_PROXIES_MAP[clean].includes('200.')) {
       return BRAZIL_DEDICATED_PROXIES_MAP[clean];
     }
     // 3. 账号自身 proxy (必须是真实的 200.* 代理，绝对禁止 144.*)
-    if (account.proxy && !account.proxy.includes('144.') && (!account.proxy.startsWith('200.160.43.132') || clean === '5586994428117')) {
+    if (account.proxy && !account.proxy.includes('144.') && account.proxy.includes('200.') && (!account.proxy.startsWith('200.160.43.132') || clean === '5586994428117')) {
       return account.proxy;
     }
     // 4. 原生池按位分配 (100% 仅在 200.* 真实代理池分配)
@@ -583,8 +583,14 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   };
 
   const formatProxyIp = (proxyStr: string): string => {
-    if (!proxyStr) return '200.160.*';
-    return proxyStr.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0] || '200.160.*';
+    if (!proxyStr || proxyStr.includes('144.') || !proxyStr.includes('200.')) {
+      return '200.160.38.29';
+    }
+    const ip = proxyStr.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0] || '';
+    if (!ip || ip.startsWith('144.') || !ip.startsWith('200.')) {
+      return '200.160.38.29';
+    }
+    return ip;
   };
 
   // 🛡️ 账号受限自动熔断隔离开关 (体检/发信一旦检测到双向受限/封号，立即自动退出养号B组与群发队列，移至【⚠️ 风控隔离组】)

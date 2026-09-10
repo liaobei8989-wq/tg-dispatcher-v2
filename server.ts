@@ -457,6 +457,7 @@ async function startServer() {
           proxiesPool = rawTxt.split("\n").map(l => l.trim()).filter(Boolean);
         } catch (e) {}
       }
+      proxiesPool = proxiesPool.filter(p => !p.includes('144.') && p.startsWith('200.'));
       if (proxiesPool.length === 0) {
         proxiesPool = DEFAULT_60_PROXIES;
       }
@@ -495,10 +496,11 @@ async function startServer() {
         }
       });
 
-      // 2. STRICT PURGE: ANY key in accountProxiesMap that is NOT a genuine account must be permanently deleted!
+      // 2. STRICT PURGE: ANY key in accountProxiesMap that is NOT a genuine account or has 144.* must be permanently purged!
       for (const k of Object.keys(accountProxiesMap)) {
         const cleanK = k.replace(/[^0-9]/g, "");
-        if (!cleanK || !realValidPhonesSet.has(cleanK) || obsoletePhones.has(cleanK) || cleanK.startsWith("55869952011")) {
+        const pStr = String(accountProxiesMap[k] || "");
+        if (!cleanK || !realValidPhonesSet.has(cleanK) || obsoletePhones.has(cleanK) || cleanK.startsWith("55869952011") || pStr.includes('144.') || !pStr.startsWith('200.')) {
           delete accountProxiesMap[k];
           proxyMapUpdated = true;
         }
@@ -513,17 +515,17 @@ async function startServer() {
         const cleanPh = phone.replace(/[^0-9]/g, "");
         if (!cleanPh || !realValidPhonesSet.has(cleanPh)) return;
         const ip = String(pStr).split(':')[0];
-        if (ip && !usedProxyIps.has(ip)) {
+        if (ip && !ip.startsWith('144.') && ip.startsWith('200.') && !usedProxyIps.has(ip)) {
           usedProxyIps.add(ip);
           phoneToProxy.set(cleanPh, pStr);
         } else {
-          // Duplicate IP detected - remove it so it can be assigned a dedicated fresh IP
+          // Duplicate or fake 144 IP detected - purge so fresh authentic 200.* IP is allocated
           delete accountProxiesMap[cleanPh];
           proxyMapUpdated = true;
         }
       });
 
-      // Helper to allocate a strictly unused IP from the 60-proxy pool
+      // Helper to allocate a strictly unused IP from the authentic Brazilian proxy pool
       const allocateUnusedProxy = (phone: string, accountIndex: number = 0): string => {
         const cleanPh = phone.replace(/[^0-9]/g, "");
         if (phoneToProxy.has(cleanPh)) {
@@ -531,7 +533,7 @@ async function startServer() {
         }
         for (const candidate of proxiesPool) {
           const cIp = candidate.split(':')[0];
-          if (!usedProxyIps.has(cIp)) {
+          if (!cIp.startsWith('144.') && cIp.startsWith('200.') && !usedProxyIps.has(cIp)) {
             usedProxyIps.add(cIp);
             phoneToProxy.set(cleanPh, candidate);
             accountProxiesMap[cleanPh] = candidate;
@@ -539,7 +541,7 @@ async function startServer() {
             return candidate;
           }
         }
-        // Round-robin spread fallback across all 60 proxies if pool exhausted
+        // Round-robin spread fallback across all proxies if pool exhausted
         const fallback = proxiesPool[accountIndex % proxiesPool.length] || proxiesPool[0] || '';
         phoneToProxy.set(cleanPh, fallback);
         accountProxiesMap[cleanPh] = fallback;
@@ -2874,7 +2876,53 @@ Return ONLY a JSON array with this schema:
       const accountProxiesPath = path.join(rootDir, "account_proxies.json");
       if (fs.existsSync(accountProxiesPath)) {
         const raw = fs.readFileSync(accountProxiesPath, "utf8");
-        return res.json({ success: true, mappings: JSON.parse(raw) });
+        const parsed = JSON.parse(raw);
+        let modified = false;
+        const cleanMappings: Record<string, string> = {};
+        const validProxies = [
+          '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+          '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+          '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+          '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+          '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+          '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+          '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+          '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+          '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+          '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+          '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
+          '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
+        ];
+        let idx = 0;
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string' && (v.includes('144.') || !v.startsWith('200.'))) {
+            cleanMappings[k] = validProxies[idx % validProxies.length];
+            modified = true;
+          } else if (typeof v === 'string') {
+            cleanMappings[k] = v;
+          }
+          idx++;
+        }
+        if (modified) {
+          try {
+            fs.writeFileSync(accountProxiesPath, JSON.stringify(cleanMappings, null, 2), "utf8");
+          } catch (_) {}
+        }
+        return res.json({ success: true, mappings: cleanMappings });
       }
       res.json({ success: true, mappings: {} });
     } catch (e: any) {
