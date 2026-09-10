@@ -458,7 +458,48 @@ export default function App() {
     return Array.from(map.values());
   }, [accounts]);
 
-  const activeAccountCount = realTgAccounts.filter((a) => a.status === 'active' || a.status === 'warming').length;
+  const healthMap = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('tg_account_health_map_v2');
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return {};
+  }, [accounts]);
+
+  const totalAccountCount = realTgAccounts.length;
+
+  const { healthyAccountCount, quarantinedAccountCount } = useMemo(() => {
+    let healthy = 0;
+    let quarantined = 0;
+
+    realTgAccounts.forEach((acc) => {
+      const clean = (acc.phone || acc.id).replace(/\D/g, '');
+      const hi = healthMap[clean];
+      const isQuarantined = acc.groupTag === '⚠️ 风控隔离组' || acc.status === 'restricted' || acc.status === 'banned' || acc.status === 'risk';
+
+      if (hi) {
+        if (hi.status === 'healthy' || /自由|无限制|健康/i.test(hi.label || '')) {
+          healthy++;
+        } else if (hi.status === 'restricted' || hi.status === 'banned' || isQuarantined) {
+          quarantined++;
+        }
+      } else {
+        if (isQuarantined) {
+          quarantined++;
+        } else if (acc.status === 'active' || acc.status === 'warming') {
+          healthy++;
+        }
+      }
+    });
+
+    if (healthy === 0 && quarantined === 0) {
+      healthy = realTgAccounts.filter(a => a.status === 'active' || a.status === 'warming').length;
+    }
+
+    return { healthyAccountCount: healthy, quarantinedAccountCount: quarantined };
+  }, [realTgAccounts, healthMap]);
+
+  const activeAccountCount = healthyAccountCount;
   const totalSentToday = realTgAccounts.reduce((sum, a) => sum + a.sentToday, 0);
 
   return (
@@ -467,6 +508,9 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         activeAccountCount={activeAccountCount}
+        totalAccountCount={totalAccountCount}
+        healthyAccountCount={healthyAccountCount}
+        quarantinedAccountCount={quarantinedAccountCount}
         totalSentToday={totalSentToday}
         totalFollowupToday={totalFollowupToday}
         isCampaignRunning={isCampaignRunning}

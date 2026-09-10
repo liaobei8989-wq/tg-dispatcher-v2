@@ -2087,6 +2087,33 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           quarantineAccounts(restrictedPhones, '官方临时双向限制静默冷却');
         }
 
+        // 🟢 健康号确保状态统一置为 active (健康可发信)
+        const healthyPhones = new Set<string>();
+        for (const [phone, info] of Object.entries(newMap)) {
+          if (info.status === 'healthy' || /自由|无限制|健康/i.test(info.label || '')) {
+            healthyPhones.add(phone.replace(/\D/g, ''));
+          }
+        }
+        if (healthyPhones.size > 0) {
+          setAccounts(prev => {
+            const updated = prev.map(acc => {
+              const clean = (acc.phone || acc.id).replace(/\D/g, '');
+              if (healthyPhones.has(clean)) {
+                return {
+                  ...acc,
+                  status: 'active' as const,
+                  healthScore: Math.max(acc.healthScore || 0, 98),
+                  spambotStatus: 'clean' as const
+                };
+              }
+              return acc;
+            });
+            safeSaveAccountsToLocalStorage(updated);
+            saveAccountsToStorage(updated);
+            return updated;
+          });
+        }
+
         setSimpleLogs(prev => [
           ...prev,
           `🎉 [真实体检完成 | ${scopeDesc}] 共完成 ${data.total} 个账号穿透检测！`,

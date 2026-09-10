@@ -23,6 +23,9 @@ interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   activeAccountCount: number;
+  totalAccountCount?: number;
+  healthyAccountCount?: number;
+  quarantinedAccountCount?: number;
   totalSentToday: number;
   totalFollowupToday?: number;
   isCampaignRunning: boolean;
@@ -36,6 +39,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   activeAccountCount,
+  totalAccountCount,
+  healthyAccountCount,
+  quarantinedAccountCount = 0,
   totalSentToday,
   totalFollowupToday = 0,
   isCampaignRunning,
@@ -96,12 +102,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }, 100);
                 }}
                 className="flex items-center space-x-1.5 hover:bg-slate-900 px-2 py-0.5 rounded-lg border border-transparent hover:border-emerald-500/30 transition cursor-pointer group"
-                title="点击直达 TG 账号列表与挂载中心"
+                title={`共挂载 ${totalAccountCount || activeAccountCount} 个 TG 协议号 (其中 🟢 ${healthyAccountCount ?? activeAccountCount} 个健康可发信${quarantinedAccountCount ? `, ⚠️ ${quarantinedAccountCount} 个风控隔离` : ''})`}
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-slate-400 group-hover:text-slate-200">TG 协议号:</span>
-                <span className="text-emerald-400 font-bold font-mono group-hover:underline flex items-center gap-0.5">
-                  {activeAccountCount} 个 <span className="text-[10px] text-emerald-400">↑</span>
+                <span className="text-emerald-400 font-bold font-mono group-hover:underline flex items-center gap-1.5">
+                  <span>{(totalAccountCount !== undefined && totalAccountCount > 0) ? totalAccountCount : activeAccountCount} 个</span>
+                  {healthyAccountCount !== undefined && healthyAccountCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-normal border border-emerald-500/30 whitespace-nowrap">
+                      🟢 {healthyAccountCount} 可发
+                    </span>
+                  )}
+                  {quarantinedAccountCount !== undefined && quarantinedAccountCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-normal border border-amber-500/30 whitespace-nowrap">
+                      ⚠️ {quarantinedAccountCount} 隔离
+                    </span>
+                  )}
                 </span>
               </button>
               <div className="h-3 w-px bg-slate-800"></div>
