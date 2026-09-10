@@ -49,14 +49,15 @@ export default function App() {
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
               
-              // 严格防关联：如果历史 proxy 为空、被错误批量赋予同一 IP 或冲突，自动按 1号1IP 原生代理池分配
-              let dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || acc.proxy || getDedicatedProxyForPhone(cleanPhone, idx);
+              // 严格防关联：如果历史 proxy 为空、包含 144.* 虚假 IP、被错误批量赋予同一 IP 或冲突，自动按 1号1IP 原生代理池分配
+              let candidateProxy = (acc.proxy && !acc.proxy.includes('144.')) ? acc.proxy : '';
+              let dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || candidateProxy || getDedicatedProxyForPhone(cleanPhone, idx);
               let proxyIp = (dedicatedProxy || '').replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
-              if (!proxyIp || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cleanPhone !== '5586994428117')) {
+              if (!proxyIp || proxyIp.startsWith('144.') || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cleanPhone !== '5586994428117')) {
                 dedicatedProxy = BRAZIL_DEDICATED_PROXIES_MAP[cleanPhone] || getDedicatedProxyForPhone(cleanPhone, idx);
                 proxyIp = dedicatedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
-                if (usedIps.has(proxyIp)) {
-                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]));
+                if (usedIps.has(proxyIp) || proxyIp.startsWith('144.')) {
+                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]) && !p.startsWith('144.'));
                   if (freeProxy) {
                     dedicatedProxy = freeProxy;
                     proxyIp = freeProxy.split(':')[0];
@@ -133,14 +134,16 @@ export default function App() {
               const existing = prevMap.get(cp);
               const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
               
-              // 优先级：服务端 account_proxies.json 权威映射 > 账号自带 proxy > 内置独享映射 > 60原生池
-              let dedicatedProxy = serverProxyMappings[cp] || BRAZIL_DEDICATED_PROXIES_MAP[cp] || acc.proxy || getDedicatedProxyForPhone(cp, idx);
+              // 优先级：服务端 account_proxies.json 权威映射 > 账号自带 proxy > 内置独享映射 > 巴西原生池 (严禁任何 144.*)
+              const cleanServerProxy = (serverProxyMappings[cp] && !serverProxyMappings[cp].includes('144.')) ? serverProxyMappings[cp] : '';
+              const cleanAccProxy = (acc.proxy && !acc.proxy.includes('144.')) ? acc.proxy : '';
+              let dedicatedProxy = cleanServerProxy || BRAZIL_DEDICATED_PROXIES_MAP[cp] || cleanAccProxy || getDedicatedProxyForPhone(cp, idx);
               let proxyIp = (dedicatedProxy || '').replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
-              if (!proxyIp || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cp !== '5586994428117')) {
-                dedicatedProxy = serverProxyMappings[cp] || BRAZIL_DEDICATED_PROXIES_MAP[cp] || getDedicatedProxyForPhone(cp, idx);
+              if (!proxyIp || proxyIp.startsWith('144.') || proxyIp === '200.160.*' || (usedIps.has(proxyIp) && cp !== '5586994428117')) {
+                dedicatedProxy = cleanServerProxy || BRAZIL_DEDICATED_PROXIES_MAP[cp] || getDedicatedProxyForPhone(cp, idx);
                 proxyIp = dedicatedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
-                if (usedIps.has(proxyIp)) {
-                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]));
+                if (usedIps.has(proxyIp) || proxyIp.startsWith('144.')) {
+                  const freeProxy = BRAZIL_PROXIES_POOL.find(p => !usedIps.has(p.split(':')[0]) && !p.startsWith('144.'));
                   if (freeProxy) {
                     dedicatedProxy = freeProxy;
                     proxyIp = freeProxy.split(':')[0];

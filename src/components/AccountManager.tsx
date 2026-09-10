@@ -710,8 +710,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
       '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
       '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
       '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-      '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-      '144.225.30.86:12323:14aade52b86e6:70dd653fc2'
+      '200.239.213.26:12323:14aade52b86e6:70dd653fc2'
     ];
 
     setAccounts((prev) =>
@@ -856,8 +855,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
         '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
         '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-        '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-        '144.225.30.86:12323:14aade52b86e6:70dd653fc2'
+        '200.239.213.26:12323:14aade52b86e6:70dd653fc2'
       ];
       return systemProxies[idx % systemProxies.length];
     };

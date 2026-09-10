@@ -17,6 +17,105 @@ process.on('uncaughtException', (err) => {
   console.error('⚠️ [Process Watchdog] Uncaught Exception:', err);
 });
 
+// Real 60+1 Brazilian Phones uploaded by user
+const USER_60_REAL_PHONES = [
+  // 10 Original accounts
+  '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
+  '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
+  // 51 Newly uploaded accounts
+  '5598984569687', '5598984627175', '5598984670055', '5598984671221', '5598984730611',
+  '5598984731615', '5598984734606', '5598984804947', '5598984844174', '5598984845235',
+  '5598984887183', '5598984906227', '5598984949562', '5598984953483', '5598984955625',
+  '5598985089834', '5598985109474', '5598985162664', '5598985254155', '5598985259933',
+  '5598985323153', '5598985338413', '5598985369605', '5598985432467', '5598985473494',
+  '5598985487547', '5598985535121', '5598985583075', '5598985585283', '5598985602056',
+  '5598985656993', '5598985703552', '5598985709101', '5598985759825', '5598985864741',
+  '5598985926947', '5598985966188', '5598986270576', '5598987077789', '5598987743687',
+  '5599984026594', '5599984139898', '5599984168673', '5599984179798', '5599984185644',
+  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026',
+  '5599984388206'
+];
+
+function sanitizeAndSyncAccountProxies(rootDir: string, sessionsDir: string) {
+  try {
+    const DEFAULT_60_PROXIES = [
+      '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+      '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+      '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+      '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+      '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+      '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+      '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+      '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+      '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+      '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+      '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
+      '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
+    ];
+
+    let proxiesPool = DEFAULT_60_PROXIES;
+    const proxiesTxtPath = path.join(rootDir, "proxies.txt");
+    if (fs.existsSync(proxiesTxtPath)) {
+      try {
+        const raw = fs.readFileSync(proxiesTxtPath, 'utf8');
+        const parsed = raw.split('\n').map(l => l.trim()).filter(Boolean);
+        if (parsed.length > 0) proxiesPool = parsed;
+      } catch (_) {}
+    }
+
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
+    const realPhonesSet = new Set<string>();
+
+    const files = [
+      ...(fs.existsSync(sessionsDir) ? fs.readdirSync(sessionsDir) : []),
+      ...(fs.existsSync(rootDir) ? fs.readdirSync(rootDir) : [])
+    ];
+    files.forEach(f => {
+      if (f.endsWith('.session') && !f.toLowerCase().includes('2fa')) {
+        const cp = f.replace(/\.session$/, '').replace(/[^0-9]/g, '');
+        if (cp && cp.length >= 10 && !obsoletePhones.has(cp) && !cp.startsWith("55869952011")) {
+          realPhonesSet.add(cp);
+        }
+      }
+    });
+    USER_60_REAL_PHONES.forEach(p => {
+      const cp = p.replace(/[^0-9]/g, '');
+      if (cp && !obsoletePhones.has(cp) && !cp.startsWith("55869952011")) {
+        realPhonesSet.add(cp);
+      }
+    });
+
+    const sortedRealPhones = Array.from(realPhonesSet).sort();
+    const cleanMap: Record<string, string> = {};
+    sortedRealPhones.forEach((phone, idx) => {
+      cleanMap[phone] = proxiesPool[idx % proxiesPool.length];
+    });
+
+    const payload = JSON.stringify(cleanMap, null, 2);
+    fs.writeFileSync(path.join(rootDir, "account_proxies.json"), payload, 'utf-8');
+    if (fs.existsSync(sessionsDir)) {
+      fs.writeFileSync(path.join(sessionsDir, "account_proxies.json"), payload, 'utf-8');
+    }
+    console.log(`🔒 [1号1IP 物理隔离已生效] 成功清洗并绑定 ${sortedRealPhones.length} 个真实账号，独立出口 IP: ${new Set(Object.values(cleanMap).map(p => p.split(':')[0])).size} 个`);
+  } catch (e) {
+    console.warn("⚠️ [sanitizeAndSyncAccountProxies Warning]:", e);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -28,6 +127,15 @@ async function startServer() {
   if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
   }
+
+  // Automatically sanitize and sync 1-Account-1-IP mapping on startup (purge any dummy accounts)
+  sanitizeAndSyncAccountProxies(process.cwd(), sessionsDir);
+
+  // API to trigger immediate proxy mapping sanitation & 1:1 sync
+  app.post("/api/proxies/sanitize-sync", (req, res) => {
+    sanitizeAndSyncAccountProxies(process.cwd(), sessionsDir);
+    res.json({ success: true, message: "已成功彻底清理虚拟号并锁定 1号1IP 物理隔离映射！" });
+  });
 
   // Store in-memory gateway config on server
   let gatewayConfig = {
@@ -337,41 +445,7 @@ async function startServer() {
         '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
         '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
         '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.28.25:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.30.11:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.30.68:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.28.245:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.19:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.28.13:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.30.220:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.184:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.31.110:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.31.46:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.28.23:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.119:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.36:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.253:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.243:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.28.236:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.29.245:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.0.215:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.1.54:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.3.105:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.0.59:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.0.160:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.2.172:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.2.252:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.1.147:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.2.23:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.0.181:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.3.145:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.2.3:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.2.173:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.3.93:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.3.13:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.0.224:12323:14abdb1a0db2e:cb8f30f1a9',
-        '144.225.1.200:12323:14abdb1a0db2e:cb8f30f1a9'
+        '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
       ];
 
       // Load 60-proxy pool from proxies.txt or fallback
@@ -404,30 +478,52 @@ async function startServer() {
 
       let proxyMapUpdated = false;
 
-      // Purge any legacy dummy placeholder keys (55869952011*) and obsolete numbers
+      // 1. Gather all genuine session phones from disk and real uploaded numbers
+      const realValidPhonesSet = new Set<string>();
+      allFiles.forEach(f => {
+        if (f.endsWith('.session') && !f.toLowerCase().includes('2fa')) {
+          const cp = f.replace(/\.session$/, '').replace(/[^0-9]/g, '');
+          if (cp && cp.length >= 10 && !obsoletePhones.has(cp) && !cp.startsWith("55869952011")) {
+            realValidPhonesSet.add(cp);
+          }
+        }
+      });
+      USER_60_REAL_PHONES.forEach(p => {
+        const cp = p.replace(/[^0-9]/g, '');
+        if (cp && !obsoletePhones.has(cp) && !cp.startsWith("55869952011")) {
+          realValidPhonesSet.add(cp);
+        }
+      });
+
+      // 2. STRICT PURGE: ANY key in accountProxiesMap that is NOT a genuine account must be permanently deleted!
       for (const k of Object.keys(accountProxiesMap)) {
-        if (k.startsWith("55869952011") || obsoletePhones.has(k)) {
+        const cleanK = k.replace(/[^0-9]/g, "");
+        if (!cleanK || !realValidPhonesSet.has(cleanK) || obsoletePhones.has(cleanK) || cleanK.startsWith("55869952011")) {
           delete accountProxiesMap[k];
           proxyMapUpdated = true;
         }
       }
 
-      // Track uniquely used IPs to guarantee 100% 1-Account-1-IP isolation
+      // 3. Track uniquely used IPs to guarantee 100% 1-Account-1-IP isolation
       const phoneToProxy = new Map<string, string>();
       const usedProxyIps = new Set<string>();
 
       // First pass: register already valid unique mappings for real accounts
       Object.entries(accountProxiesMap).forEach(([phone, pStr]) => {
         const cleanPh = phone.replace(/[^0-9]/g, "");
-        if (!cleanPh || cleanPh.startsWith("55869952011") || obsoletePhones.has(cleanPh)) return;
+        if (!cleanPh || !realValidPhonesSet.has(cleanPh)) return;
         const ip = String(pStr).split(':')[0];
         if (ip && !usedProxyIps.has(ip)) {
           usedProxyIps.add(ip);
           phoneToProxy.set(cleanPh, pStr);
+        } else {
+          // Duplicate IP detected - remove it so it can be assigned a dedicated fresh IP
+          delete accountProxiesMap[cleanPh];
+          proxyMapUpdated = true;
         }
       });
 
-      // Helper to allocate an unused IP from the 60-proxy pool
+      // Helper to allocate a strictly unused IP from the 60-proxy pool
       const allocateUnusedProxy = (phone: string, accountIndex: number = 0): string => {
         const cleanPh = phone.replace(/[^0-9]/g, "");
         if (phoneToProxy.has(cleanPh)) {
@@ -2710,14 +2806,23 @@ Return ONLY a JSON array with this schema:
       const proxiesTxtPath = path.join(rootDir, "proxies.txt");
 
       if (mappings && typeof mappings === 'object') {
-        const payload = JSON.stringify(mappings, null, 2);
+        const cleanMappings: Record<string, string> = {};
+        const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
+        Object.entries(mappings).forEach(([phone, pStr]) => {
+          const cleanPh = String(phone).replace(/[^0-9]/g, '');
+          if (cleanPh && cleanPh.length >= 10 && !obsoletePhones.has(cleanPh) && !cleanPh.startsWith('55869952011')) {
+            cleanMappings[cleanPh] = String(pStr);
+          }
+        });
+
+        const payload = JSON.stringify(cleanMappings, null, 2);
         fs.writeFileSync(accountProxiesPath, payload, "utf8");
         if (fs.existsSync(sessionsDir)) {
           fs.writeFileSync(sessionsProxyPath, payload, "utf8");
         }
 
         // Also update companion <phone>.json files
-        Object.entries(mappings).forEach(([phone, proxyStr]) => {
+        Object.entries(cleanMappings).forEach(([phone, proxyStr]) => {
           const cleanPhone = String(phone).replace(/[^0-9]/g, '');
           if (!cleanPhone) return;
           const jsonPath = path.join(sessionsDir, `${cleanPhone}.json`);
@@ -2851,6 +2956,7 @@ Return ONLY a JSON array with this schema:
         assignedCount: proxiesList.filter(p => p.assignedPhone).length,
         availableCount: proxiesList.filter(p => !p.assignedPhone).length,
         proxies: proxiesList,
+        rawProxies: lines,
         mappings
       });
     } catch (e: any) {

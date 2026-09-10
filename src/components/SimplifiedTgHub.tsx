@@ -549,24 +549,36 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         }
       })
       .catch(() => {});
+
+    fetch('/api/proxies/pool')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.proxies) && data.proxies.length > 0) {
+          const rawList = data.rawProxies || data.proxies.map((p: any) => `${p.ip}:${p.port}:${p.username}:${p.password}`);
+          if (rawList && rawList.length > 0) {
+            setBrazilProxies(rawList);
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  // 严格按 1:1 独立原生 IP 规则为账号解析独享代理
+  // 严格按 1:1 独立原生 IP 规则为账号解析独享代理 (绝对剔除所有 144.* 虚假 IP)
   const getAccountProxy = (account: AccountSession, index: number = 0): string => {
     const clean = account.phone ? account.phone.replace(/\D/g, '') : account.id;
     // 1. 服务端 account_proxies.json 权威独立绑定
-    if (serverProxyMappings[clean]) {
+    if (serverProxyMappings[clean] && !serverProxyMappings[clean].includes('144.')) {
       return serverProxyMappings[clean];
     }
-    // 2. 账号自身 proxy 且非被误批赋的 200.160.43.132（除非是该 IP 的真正归属账号 5586994428117）
-    if (account.proxy && (!account.proxy.startsWith('200.160.43.132') || clean === '5586994428117')) {
-      return account.proxy;
-    }
-    // 3. 巴西原生独享代理字典
-    if (BRAZIL_DEDICATED_PROXIES_MAP[clean]) {
+    // 2. 巴西原生独享代理字典
+    if (BRAZIL_DEDICATED_PROXIES_MAP[clean] && !BRAZIL_DEDICATED_PROXIES_MAP[clean].includes('144.')) {
       return BRAZIL_DEDICATED_PROXIES_MAP[clean];
     }
-    // 4. 原生池按位分配
+    // 3. 账号自身 proxy (必须是真实的 200.* 代理，绝对禁止 144.*)
+    if (account.proxy && !account.proxy.includes('144.') && (!account.proxy.startsWith('200.160.43.132') || clean === '5586994428117')) {
+      return account.proxy;
+    }
+    // 4. 原生池按位分配 (100% 仅在 200.* 真实代理池分配)
     return getDedicatedProxyForPhone(clean, index);
   };
 
@@ -931,6 +943,47 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     } catch (err: any) {
       alert(`清理出错: ${err.message}`);
     }
+  };
+
+  // 🟢 一键解除所有隔离并恢复账号正常待命状态 (清除误报/临时损坏状态，避免被误杀)
+  const handleBatchUnquarantineAll = () => {
+    // 1. 清理 accountHealthMap 中的 banned / restricted 记录
+    setAccountHealthMap(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(k => {
+        if (next[k].status === 'banned' || next[k].status === 'restricted') {
+          delete next[k];
+        }
+      });
+      try {
+        localStorage.setItem('tg_account_health_map_v2', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+
+    // 2. 将所有在【⚠️ 风控隔离组】或状态为 banned/restricted/risk 的账号恢复为准备就绪
+    setAccounts(prev => {
+      const updated = prev.map(acc => {
+        const isQuarantined = normalizeGroupTag(acc.groupTag) === '⚠️ 风控隔离组' || acc.status === 'banned' || acc.status === 'restricted' || acc.status === 'risk';
+        if (isQuarantined) {
+          const orig = (acc as any).originalGroupTag || '新买养号B组';
+          return {
+            ...acc,
+            groupTag: orig !== '⚠️ 风控隔离组' ? orig : '新买养号B组',
+            status: 'ready' as const
+          };
+        }
+        return acc;
+      });
+      safeSaveAccountsToLocalStorage(updated);
+      saveAccountsToStorage(updated);
+      return updated;
+    });
+
+    setSimpleLogs(prev => [
+      ...prev,
+      '🟢 [一键解除隔离完成] 已将所有被隔离账号恢复至正常业务分组，状态已重置为【准备就绪】！'
+    ]);
   };
 
   const [isAutoScanDaemon, setIsAutoScanDaemon] = useState<boolean>(true);
@@ -1318,14 +1371,13 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
     '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
     '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-    '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-    '144.225.30.86:12323:14aade52b86e6:70dd653fc2'
+    '200.239.213.26:12323:14aade52b86e6:70dd653fc2'
   ]);
 
   const [simpleLogs, setSimpleLogs] = useState<string[]>([
     '系统就绪，支持一键改资料、定时养号与高速群发',
     `已加载 ${initialTgCount} 个有效 TG 协议 Session 账号`,
-    `已绑定 ${initialTgCount} 组【1号1专属独立IP】(200.152.* / 144.225.* 等) 严格隔离护航 +55 协议号防封`
+    `已绑定 ${initialTgCount} 组【1号1专属独立IP】(200.152.* / 200.160.* 等) 严格隔离护航 +55 协议号防封`
   ]);
 
   // Server Session Files Management & Browser Persistence
@@ -2752,8 +2804,7 @@ BRAZIL_PROXIES = [
     "200.239.237.124:12323:14aade52b86e6:70dd653fc2",
     "200.160.43.132:12323:14aade52b86e6:70dd653fc2",
     "200.160.38.29:12323:14aade52b86e6:70dd653fc2",
-    "200.239.213.26:12323:14aade52b86e6:70dd653fc2",
-    "144.225.30.86:12323:14aade52b86e6:70dd653fc2"
+    "200.239.213.26:12323:14aade52b86e6:70dd653fc2"
 ]
 
 def parse_proxy(proxy_str):
@@ -3047,10 +3098,15 @@ if __name__ == "__main__":
         ? exactSession.fileName
         : (realSessionFiles.length > 0 ? realSessionFiles[idx % realSessionFiles.length].fileName : undefined);
 
+      // 🛡️ 1号1IP 物理独享绑定：严格绑定每个协议号专属的原生代理
+      const dedicatedProxy = getAccountProxy(acc, idx);
+
       return {
+        ...acc,
         phone: acc.phone,
         sessionFile,
-        groupTag: acc.groupTag || '主力爆破A组'
+        groupTag: acc.groupTag || '主力爆破A组',
+        proxy: dedicatedProxy
       };
     });
 
@@ -3205,8 +3261,9 @@ if __name__ == "__main__":
             msgToSend += `\n\n(Enviado por: ${acc.phone})`;
           }
 
-          const assignedProxy = brazilProxies[taskIndex % brazilProxies.length];
-          const proxyIp = assignedProxy.split(':')[0];
+          // 🛡️ 1号1IP 物理绝对隔离：必须严格使用当前执行工作通道账号的专属代理，绝不随目标序号轮换，确保每个协议号终身独享 1 个专属出口 IP！
+          const assignedProxy = (acc as any).proxy || getAccountProxy(acc as any, workerIdx);
+          const proxyIp = formatProxyIp(assignedProxy);
 
           // 拟人真实打字中 (Typing) 动作：根据发信挡位自适应轻量拟人
           const typingDurationMs = tgSendSpeedMode === 'turbo'
@@ -4432,6 +4489,15 @@ if __name__ == "__main__":
                 >
                   <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                   清理封号与文件
+                </button>
+
+                <button
+                  onClick={handleBatchUnquarantineAll}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/60"
+                  title="解除所有账号的风控隔离状态，清除失效误报记录，恢复至正常业务分组"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                  一键解除隔离/重置
                 </button>
 
                 <select
