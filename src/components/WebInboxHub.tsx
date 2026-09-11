@@ -333,7 +333,13 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts, onOpenReplie
                 );
               })
             ) : (
-              <div className="text-center py-12 text-slate-400 text-xs">暂无匹配的客户会话</div>
+              <div className="text-center py-12 px-3 text-slate-400 text-xs space-y-2">
+                <div className="text-2xl">📭</div>
+                <div className="font-semibold text-slate-300">暂无真实客户会话</div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  前往「🚀 TG 极速一键中台」启动一轮批量营销后，巴西客户一旦私信回复，系统将在 1 秒内自动在此捕获！
+                </p>
+              </div>
             )}
           </div>
         </div>

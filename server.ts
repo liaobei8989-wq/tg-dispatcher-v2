@@ -1574,13 +1574,30 @@ async function startServer() {
   // =========================================================================
   const REPLIED_CUSTOMERS_PATH = path.join(process.cwd(), "sessions", "replied_customers.json");
 
+  const DEMO_MOCK_NAMES = new Set([
+    'Gabriel Silva', 'César Vargas', 'Wesley Braga', 'Douglas Tavares', 'Leandro Siqueira',
+    'Matheus Oliveira', 'Lucas Santos', 'Thiago Lima'
+  ]);
+  const OBSOLETE_DEMO_ACCOUNT = '5586994428117';
+
+  function isLegacyMockRecord(item: any): boolean {
+    if (!item) return true;
+    const name = String(item.customerName || item.fullName || item.firstName || '').trim();
+    if (DEMO_MOCK_NAMES.has(name)) return true;
+    const timeStr = String(item.lastMessageTime || item.repliedAt || item.timestamp || '');
+    if (timeStr.includes('2026-09-06') || timeStr.includes('2026-09-05') || timeStr.includes('2026-09-04') || timeStr.includes('2026-08')) return true;
+    const acc = String(item.assignedAccountPhone || item.receivedByAccount || '');
+    if (acc.includes(OBSOLETE_DEMO_ACCOUNT)) return true;
+    return false;
+  }
+
   function getRepliedCustomersList(): any[] {
     if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
       try {
         const raw = fs.readFileSync(REPLIED_CUSTOMERS_PATH, "utf8");
         const list = JSON.parse(raw);
         if (Array.isArray(list)) {
-          return list.filter((c: any) => !String(c.repliedAt || '').startsWith('2026-09-06') && c.fullName !== 'Gabriel Silva');
+          return list.filter((c: any) => !isLegacyMockRecord(c));
         }
       } catch (e) {}
     }
@@ -2552,8 +2569,8 @@ Requirements:
         const raw = fs.readFileSync(inboxStoragePath, 'utf8');
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          // 彻底过滤掉 2026-09-06 的历史静态演示数据
-          savedList = parsed.filter((c: any) => !String(c.lastMessageTime || '').startsWith('2026-09-06') && c.customerName !== 'Gabriel Silva');
+          // 彻底过滤掉历史静态演示数据
+          savedList = parsed.filter((c: any) => !isLegacyMockRecord(c));
         }
       } catch (e) {}
     }
@@ -2568,6 +2585,7 @@ Requirements:
         const parsedStats = JSON.parse(rawStats);
         if (parsedStats && Array.isArray(parsedStats.logs)) {
           parsedStats.logs.forEach((logItem: any) => {
+            if (isLegacyMockRecord(logItem)) return;
             const targetId = logItem.target ? String(logItem.target) : '';
             if (targetId && !existingIds.has(`conv-${targetId}`)) {
               const accountNum = logItem.account || 'TG矩阵号';
@@ -2624,8 +2642,8 @@ Requirements:
         const rawReplied = fs.readFileSync(repliedCustomersFile, 'utf8');
         let parsedReplied = JSON.parse(rawReplied);
         if (Array.isArray(parsedReplied) && parsedReplied.length > 0) {
-          // 彻底过滤掉 2026-09-06 历史模拟数据
-          parsedReplied = parsedReplied.filter((r: any) => !String(r.repliedAt || '').startsWith('2026-09-06') && r.fullName !== 'Gabriel Silva');
+          // 彻底过滤掉历史模拟数据
+          parsedReplied = parsedReplied.filter((r: any) => !isLegacyMockRecord(r));
           
           parsedReplied.forEach((r: any, idx: number) => {
             const convId = `conv-${r.id || idx}`;
@@ -2645,7 +2663,7 @@ Requirements:
                 customerName: r.fullName || r.firstName || `Cliente ${r.id}`,
                 customerPhone: r.phone || r.id || '',
                 customerUsername: r.username || (r.username ? `@${r.username.replace('@','')}` : ''),
-                assignedAccountPhone: r.receivedByAccount || '5586994428117',
+                assignedAccountPhone: r.receivedByAccount || '',
                 assignedAccountName: r.receivedByAccountName || 'TG矩阵协议号',
                 tag: tag,
                 unreadCount: 1,
@@ -2698,7 +2716,18 @@ Requirements:
       if (fs.existsSync(repliedCustomersFile)) {
         fs.writeFileSync(repliedCustomersFile, JSON.stringify([]), 'utf8');
       }
-      res.json({ success: true, message: "聚合收件箱与已回复名单已完全清空，仅接收真实进线客户" });
+      const scannerStatsFile = path.join(sessionsDir, "auto_scanner_stats.json");
+      if (fs.existsSync(scannerStatsFile)) {
+        try {
+          const stats = JSON.parse(fs.readFileSync(scannerStatsFile, 'utf8'));
+          stats.logs = [];
+          stats.todayCount = 0;
+          stats.totalCount = 0;
+          stats.uniqueRepliedCustomers = 0;
+          fs.writeFileSync(scannerStatsFile, JSON.stringify(stats, null, 2), 'utf8');
+        } catch (e) {}
+      }
+      res.json({ success: true, message: "聚合收件箱与已回复名单已完全清空，仅接收后续真实进线客户" });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
