@@ -41,7 +41,10 @@ try:
         PeerFloodError,
         FloodWaitError,
         AuthKeyUnregisteredError,
-        SessionPasswordNeededError
+        SessionPasswordNeededError,
+        UserDeactivatedError,
+        UserDeactivatedBanError,
+        PhoneNumberBannedError
     )
 except ImportError:
     print(json.dumps({
@@ -239,11 +242,53 @@ def get_all_valid_session_files():
                         valid.append(f)
     return valid
 
+def is_valid_telethon_session(session_path: str) -> bool:
+    """检查文件是否为有效的 Telethon SQLite 数据库文件"""
+    try:
+        real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+        if not os.path.exists(real_path) or os.path.getsize(real_path) < 100:
+            return False
+        with open(real_path, 'rb') as f:
+            header = f.read(16)
+            if b'SQLite format 3' not in header:
+                return False
+        conn = sqlite3.connect(real_path, timeout=3.0)
+        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def backup_and_heal_session(session_path: str) -> bool:
+    """【SQLite 自动备份与自愈机制】自动建立 .session.bak 镜像；若损坏自动从备份无损还原"""
+    real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+    bak_path = f"{real_path}.bak"
+    
+    # 1. 若当前文件健康有效，自动同步创建最新镜像备份
+    if is_valid_telethon_session(real_path):
+        try:
+            shutil.copy2(real_path, bak_path)
+            return True
+        except Exception:
+            return True
+            
+    # 2. 若当前文件损坏/异常，但存在健康 .bak 镜像，立即自动无损还原救治
+    if os.path.exists(bak_path) and is_valid_telethon_session(bak_path):
+        try:
+            print(f"🛡️ [SQLite 自动自愈系统] 检测到主文件损坏/异常 ({os.path.basename(real_path)})，正在从健康备份 ({os.path.basename(bak_path)}) 秒级无损还原！")
+            shutil.copy2(bak_path, real_path)
+            return True
+        except Exception as heal_err:
+            print(f"❌ [自愈还原失败]: {heal_err}")
+            
+    return is_valid_telethon_session(real_path)
+
 def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str:
     """
-    Creates an isolated copy of the session file to avoid SQLite lock contention
-    between concurrent workers and background listener processes.
+    【读写分离与锁保护】运行前先行触发 .session.bak 镜像备份与自愈，
+    再生成独立的沙箱隔离副本，彻底隔离多进程 SQLite 锁竞争。
     """
+    backup_and_heal_session(orig_session_path)
     tmp_dir = os.path.join(os.getcwd(), "sessions", "tmp_workers")
     os.makedirs(tmp_dir, exist_ok=True)
     basename = os.path.basename(orig_session_path).replace('.session', '')
@@ -263,7 +308,8 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
 
         # Verify copy integrity
         c = sqlite3.connect(safe_path, timeout=10.0)
-        c.execute("PRAGMA busy_timeout=10000;")
+        c.execute("PRAGMA journal_mode=WAL;")
+        c.execute("PRAGMA busy_timeout=30000;")
         c.execute("SELECT 1 FROM sqlite_master LIMIT 1;")
         c.close()
         return safe_path
@@ -467,6 +513,14 @@ async def run_worker(
     proxy_tuple = parse_proxy_dict_or_str(proxy_entry)
     worker_logs.append(f"🚀 [Worker #{worker_id} 并发启动] 协议号: +{clean_digits} | 分配目标数: {len(target_subset)}")
 
+    # 【读写分离与锁保护】建立单进程独占锁文件，通知 24h 监听进程主动让出句柄避让
+    lock_file = os.path.join(os.getcwd(), "sessions", f".lock_{clean_digits}")
+    try:
+        with open(lock_file, "w") as lf:
+            lf.write(str(time.time()))
+    except Exception:
+        pass
+
     try:
         api_id_int = int(api_id)
     except Exception:
@@ -483,9 +537,11 @@ async def run_worker(
     )
 
     try:
+        connected_ok = False
         try:
-            # 强化代理连接超时，若代理可在 6 秒内握手则优先使用住宅代理
-            await asyncio.wait_for(client.connect(), timeout=6.0)
+            # 强化代理连接超时
+            await asyncio.wait_for(client.connect(), timeout=10.0)
+            connected_ok = True
         except Exception as conn_err:
             if proxy_tuple:
                 worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 切换备用巴西节点测试重连...")
@@ -493,7 +549,7 @@ async def run_worker(
                     await client.disconnect()
                 except Exception:
                     pass
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.5)
                 backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3 + 1) % len(BRAZIL_PROXY_POOL)]
                 backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
                 client = TelegramClient(
@@ -506,30 +562,45 @@ async def run_worker(
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=6.0)
+                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    connected_ok = True
                 except Exception:
-                    # 原代理节点与备用节点均超时，自动无缝切入 VPS 原生高速通道直连 TG 官方服务器保底，确保发信必达！
-                    worker_logs.append(f"⚡ [Worker #{worker_id} 极速保底]: 住宅代理节点无响应，自动切换 VPS 原生通道直连 TG 官方数据中心发信...")
+                    # 尝试第 3 组巴西备用节点，【绝对禁止使用 VPS 机房原生 IP 直连 proxy=None】
+                    worker_logs.append(f"🔄 [Worker #{worker_id} 切换第三备用节点]: 正在测试第 3 组独享巴西节点...")
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
+                    await asyncio.sleep(0.5)
+                    backup_proxy_str3 = BRAZIL_PROXY_POOL[(worker_id * 3 + 2) % len(BRAZIL_PROXY_POOL)]
+                    backup_tuple3 = parse_proxy_dict_or_str(backup_proxy_str3)
                     client = TelegramClient(
                         session_prefix,
                         api_id_int,
                         str(api_hash),
-                        proxy=None,
+                        proxy=backup_tuple3,
                         device_model=str(device_model),
                         system_version=str(system_version),
                         app_version=str(app_version)
                     )
                     try:
-                        await asyncio.wait_for(client.connect(), timeout=8.0)
-                    except Exception as direct_err:
-                        worker_logs.append(f"❌ [Worker #{worker_id} 连接异常]: 代理与直连均不可达: {direct_err}")
-                        raise direct_err
+                        await asyncio.wait_for(client.connect(), timeout=15.0)
+                        connected_ok = True
+                    except Exception as p3_err:
+                        worker_logs.append(f"🛑 [绝对防封阻断]: 账号 +{clean_digits} 代理节点暂不可达，严禁 VPS 机房 IP 直连裸发！跳过本轮等待代理网络恢复: {p3_err}")
+                        connected_ok = False
             else:
                 raise conn_err
+
+        if not connected_ok:
+            return {
+                "workerId": worker_id,
+                "accountPhone": clean_digits,
+                "successCount": 0,
+                "failCount": len(target_subset),
+                "results": [],
+                "logs": worker_logs
+            }
 
         if not await client.is_user_authorized():
             worker_logs.append(f"❌ [Worker #{worker_id} 鉴权失败] 凭证 +{clean_digits} 未登录或失效")
@@ -649,6 +720,11 @@ async def run_worker(
         else:
             worker_logs.append(f"❌ [Worker #{worker_id} 运行异常]: {err_str}")
     finally:
+        if os.path.exists(lock_file):
+            try:
+                os.unlink(lock_file)
+            except Exception:
+                pass
         try:
             await client.disconnect()
         except Exception:

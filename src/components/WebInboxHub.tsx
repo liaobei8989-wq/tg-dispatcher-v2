@@ -77,6 +77,11 @@ export const WebInboxHub: React.FC<WebInboxHubProps> = ({ accounts, onOpenReplie
 
   useEffect(() => {
     fetchConversations();
+    // 启动 4 秒自动巡检轮询，捕获实时客户进线消息
+    const interval = setInterval(() => {
+      fetchConversations();
+    }, 4000);
+    return () => clearInterval(interval);
   }, []);
 
   const activeConversation = conversations.find(c => c.id === selectedConvId) || conversations[0];

@@ -54,6 +54,55 @@ except ImportError:
 DEFAULT_API_ID = 2040
 DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
 
+import shutil
+import sqlite3
+
+BRAZIL_PROXY_POOL = [
+    "200.160.36.222:12323:14aade52b86e6:70dd653fc2",
+    "200.239.237.124:12323:14aade52b86e6:70dd653fc2",
+    "200.160.43.132:12323:14aade52b86e6:70dd653fc2",
+    "200.160.38.29:12323:14aade52b86e6:70dd653fc2",
+    "200.239.213.26:12323:14aade52b86e6:70dd653fc2"
+]
+
+def is_valid_telethon_session(session_path: str) -> bool:
+    """检查文件是否为有效的 Telethon SQLite 数据库文件"""
+    try:
+        real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+        if not os.path.exists(real_path) or os.path.getsize(real_path) < 100:
+            return False
+        with open(real_path, 'rb') as f:
+            header = f.read(16)
+            if b'SQLite format 3' not in header:
+                return False
+        conn = sqlite3.connect(real_path, timeout=3.0)
+        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def backup_and_heal_session(session_path: str) -> bool:
+    """【SQLite 自动备份与自愈机制】自动建立 .session.bak 镜像；若损坏自动从备份无损还原"""
+    real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+    bak_path = f"{real_path}.bak"
+    
+    if is_valid_telethon_session(real_path):
+        try:
+            shutil.copy2(real_path, bak_path)
+            return True
+        except Exception:
+            return True
+            
+    if os.path.exists(bak_path) and is_valid_telethon_session(bak_path):
+        try:
+            shutil.copy2(bak_path, real_path)
+            return True
+        except Exception:
+            pass
+            
+    return is_valid_telethon_session(real_path)
+
 def parse_proxy(proxy_str: str):
     """解析 host:port:user:pass 代理，支持 SOCKS5 与 HTTP"""
     if not proxy_str or not isinstance(proxy_str, str):
@@ -146,6 +195,9 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
         "unban_date": ""
     }
     
+    # 【SQLite 自动备份机制】运行前自动创建 .session.bak 镜像或损坏自愈
+    backup_and_heal_session(session_file)
+
     if not TelegramClient:
         # Node MTProto 原生就绪，凭证格式有效
         result["auth_status"] = "✅ 协议凭证完好 (Node MTProto)"
@@ -158,6 +210,7 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
     client = None
     try:
         # 优化连接超时时间：放宽至 25 秒，兼容高延迟海外住宅代理
+        connected_ok = False
         client = TelegramClient(
             session_file,
             acc["api_id"],
@@ -167,22 +220,40 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
         )
         try:
             await client.connect()
+            connected_ok = True
         except Exception as connect_err:
-            # 若带代理握手失败，尝试直连一次探测账号真实存活（海外VPS直连Telegram无障碍）
-            if proxy_tuple:
+            if proxy_tuple and len(BRAZIL_PROXY_POOL) > 0:
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
+                # 切换巴西备用节点，【绝对禁止 VPS 机房 IP 直连 proxy=None】
+                clean_p = re.sub(r'[^0-9]', '', phone)
+                idx = (int(clean_p[-4:]) if (clean_p and clean_p[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
+                backup_p_str = BRAZIL_PROXY_POOL[idx]
+                backup_tuple = parse_proxy(backup_p_str)
                 client = TelegramClient(
                     session_file,
                     acc["api_id"],
                     acc["api_hash"],
-                    timeout=18
+                    proxy=backup_tuple,
+                    timeout=25
                 )
-                await client.connect()
+                try:
+                    await client.connect()
+                    connected_ok = True
+                except Exception:
+                    connected_ok = False
             else:
-                raise connect_err
+                connected_ok = False
+        
+        if not connected_ok:
+            result["auth_status"] = "⚠️ 代理超时（已安全阻断直连防封）"
+            result["spambot_status"] = "⚠️ 代理未通，未直接连网"
+            result["restriction_detail"] = "住宅与备用代理均超时。已按安全红线阻断 VPS 原生 IP 直连裸测，避免导致封号。"
+            result["can_send_today"] = False
+            result["health_score"] = 50
+            return result
         
         if not await client.is_user_authorized():
             result["auth_status"] = "❌ 凭证失效/未登录"

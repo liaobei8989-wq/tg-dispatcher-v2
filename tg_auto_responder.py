@@ -56,6 +56,52 @@ def is_valid_telethon_session(session_path: str) -> bool:
     except Exception:
         return False
 
+def backup_and_heal_session(session_path: str) -> bool:
+    """【SQLite 自动备份机制】启动前自动建立 .session.bak 镜像；若检测到损坏，自动秒级无损还原！"""
+    real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+    bak_path = f"{real_path}.bak"
+    
+    # 1. 若当前文件健康有效，自动同步创建最新镜像备份
+    if is_valid_telethon_session(real_path):
+        try:
+            shutil.copy2(real_path, bak_path)
+            return True
+        except Exception:
+            return True
+            
+    # 2. 若当前文件损坏/异常，但存在健康 .bak 镜像，立即自动无损还原救治
+    if os.path.exists(bak_path) and is_valid_telethon_session(bak_path):
+        try:
+            print(f"🛡️ [SQLite 自动自愈系统] 检测到主文件损坏/异常 ({os.path.basename(real_path)})，正在从健康备份 ({os.path.basename(bak_path)}) 秒级无损还原！")
+            shutil.copy2(bak_path, real_path)
+            return True
+        except Exception as heal_err:
+            print(f"❌ [自愈还原失败]: {heal_err}")
+            
+    return is_valid_telethon_session(real_path)
+
+def is_session_locked_by_dispatcher(clean_digits: str) -> bool:
+    """【读写分离与锁保护】检查账号当前是否正由调度器 (tg-dispatcher) 独占进行批量发送"""
+    candidates = [
+        os.path.join(os.getcwd(), "sessions", f".lock_{clean_digits}"),
+        f"/root/tg-dispatcher/sessions/.lock_{clean_digits}",
+        f"/root/tg-dispatcher-v2/sessions/.lock_{clean_digits}",
+        os.path.join(os.getcwd(), "sessions", ".dispatcher_active.lock"),
+        "/root/tg-dispatcher/sessions/.dispatcher_active.lock"
+    ]
+    for lf in candidates:
+        if os.path.exists(lf):
+            try:
+                # 检查锁文件是否超过 10 分钟未更新，防止意外死锁
+                mtime = os.path.getmtime(lf)
+                if time.time() - mtime > 600:
+                    os.unlink(lf)
+                    return False
+                return True
+            except Exception:
+                return True
+    return False
+
 DEFAULT_API_ID = 2040
 DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
 
@@ -270,22 +316,26 @@ def parse_proxy_str(proxy_str):
         pass
     return None
 
-def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: str, second_msg: str, url: str):
-    """持久化记录 24 小时自动回复与追发彩金统计数据"""
+def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: str, incoming_msg: str, second_msg: str, url: str):
+    """持久化记录 24 小时自动回复与追发彩金统计数据，并实时同步写入真实客资库与聚合收件箱"""
     try:
         possible_dirs = [
             os.path.join(os.getcwd(), "sessions"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "sessions"),
-            "/root/tg-dispatcher/sessions"
+            "/root/tg-dispatcher/sessions",
+            "/root/tg-dispatcher-v2/sessions"
         ]
         stats_file = None
+        sessions_folder = None
         for p in possible_dirs:
             if os.path.exists(p):
+                sessions_folder = p
                 stats_file = os.path.join(p, "auto_scanner_stats.json")
                 break
         if not stats_file:
-            stats_file = os.path.join(os.getcwd(), "sessions", "auto_scanner_stats.json")
-            os.makedirs(os.path.dirname(stats_file), exist_ok=True)
+            sessions_folder = os.path.join(os.getcwd(), "sessions")
+            stats_file = os.path.join(sessions_folder, "auto_scanner_stats.json")
+            os.makedirs(sessions_folder, exist_ok=True)
 
         data = {}
         if os.path.exists(stats_file):
@@ -318,6 +368,7 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
             "msg": f"账号 +{session_basename} 自动感知客户 {sender_id} ({sender_name or '客户'}) 回复，已成功秒级补发第2条彩金链接",
             "account": session_basename,
             "target": sender_id,
+            "incoming": incoming_msg or "Oi",
             "url": url
         }
         data["logs"].insert(0, log_entry)
@@ -325,8 +376,107 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
 
         with open(stats_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # 📥 同步持久化写入真实已回复客资库 (replied_customers.json)
+        replied_cust_file = os.path.join(sessions_folder, "replied_customers.json")
+        cust_list = []
+        if os.path.exists(replied_cust_file):
+            try:
+                with open(replied_cust_file, "r", encoding="utf-8") as rf:
+                    cust_list = json.load(rf)
+                if not isinstance(cust_list, list):
+                    cust_list = []
+            except Exception:
+                cust_list = []
+
+        # 剔除旧 demo 数据 (2026-09-06) 和相同客户ID
+        cust_list = [c for c in cust_list if str(c.get("id")) != str(sender_id) and not str(c.get("repliedAt", "")).startswith("2026-09-06")]
+
+        new_cust_entry = {
+            "id": str(sender_id),
+            "username": "",
+            "firstName": sender_name or f"Cliente {sender_id}",
+            "lastName": "",
+            "fullName": sender_name or f"Cliente {sender_id}",
+            "phone": "",
+            "receivedByAccount": session_basename,
+            "receivedByAccountName": f"TG协议号-{session_basename[-4:]}",
+            "lastReplyText": incoming_msg or "Oi",
+            "repliedAt": now_str[:16],
+            "repliedAtIso": now_dt.isoformat(),
+            "directChatUrl": f"tg://user?id={sender_id}"
+        }
+        cust_list.insert(0, new_cust_entry)
+        with open(replied_cust_file, "w", encoding="utf-8") as wf:
+            json.dump(cust_list, wf, ensure_ascii=False, indent=2)
+
+        # 💬 同步持久化写入聚合收件箱 (inbox_conversations.json)
+        inbox_file = os.path.join(sessions_folder, "inbox_conversations.json")
+        inbox_list = []
+        if os.path.exists(inbox_file):
+            try:
+                with open(inbox_file, "r", encoding="utf-8") as ifile:
+                    inbox_list = json.load(ifile)
+                if not isinstance(inbox_list, list):
+                    inbox_list = []
+            except Exception:
+                inbox_list = []
+
+        # 剔除 demo 数据
+        inbox_list = [c for c in inbox_list if not str(c.get("lastMessageTime", "")).startswith("2026-09-06")]
+
+        conv_id = f"conv-{sender_id}"
+        existing_conv = next((c for c in inbox_list if c.get("id") == conv_id), None)
+        cur_ts = now_str[11:16]
+        m_in = {
+            "id": f"m-in-{int(time.time()*1000)}",
+            "conversationId": conv_id,
+            "senderType": "customer",
+            "senderName": sender_name or "Cliente",
+            "text": incoming_msg or "Oi",
+            "timestamp": cur_ts,
+            "status": "delivered"
+        }
+        m_out = {
+            "id": f"m-out-{int(time.time()*1000)+1}",
+            "conversationId": conv_id,
+            "senderType": "account",
+            "senderName": f"TG协议号-{session_basename[-4:]}",
+            "text": second_msg,
+            "timestamp": cur_ts,
+            "status": "read"
+        }
+
+        if existing_conv:
+            inbox_list.remove(existing_conv)
+            existing_conv["unreadCount"] = existing_conv.get("unreadCount", 0) + 1
+            existing_conv["lastMessageText"] = incoming_msg or second_msg
+            existing_conv["lastMessageTime"] = now_str[:16]
+            if "messages" not in existing_conv or not isinstance(existing_conv["messages"], list):
+                existing_conv["messages"] = []
+            existing_conv["messages"].extend([m_in, m_out])
+            inbox_list.insert(0, existing_conv)
+        else:
+            new_conv = {
+                "id": conv_id,
+                "customerName": sender_name or f"Cliente {sender_id}",
+                "customerPhone": "",
+                "customerUsername": "",
+                "assignedAccountPhone": session_basename,
+                "assignedAccountName": f"TG协议号-{session_basename[-4:]}",
+                "tag": "hot_lead",
+                "unreadCount": 1,
+                "lastMessageText": incoming_msg or "Oi",
+                "lastMessageTime": now_str[:16],
+                "messages": [m_in, m_out]
+            }
+            inbox_list.insert(0, new_conv)
+
+        with open(inbox_file, "w", encoding="utf-8") as iwf:
+            json.dump(inbox_list, iwf, ensure_ascii=False, indent=2)
+        print(f"✅ [收件箱同步成功] 客户 {sender_id} ({sender_name}) 已实时进入聚合收件箱第一位！")
     except Exception as e:
-        print(f"⚠️ [写入补发统计日志失败]: {e}")
+        print(f"⚠️ [写入客资库与收件箱失败]: {e}")
 
 async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name):
     try:
@@ -407,7 +557,7 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             except Exception:
                 await client.send_message(chat_id, second_msg)
             print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
-            record_auto_reply_stat(session_basename, sender_id, sender_name, second_msg, rand_url)
+            record_auto_reply_stat(session_basename, sender_id, sender_name, msg_text, second_msg, rand_url)
         except Exception as e2:
             print(f"❌ [第2条发送失败]: {e2}")
             return False
@@ -474,61 +624,97 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
     # 智能 100% 巴西专属独享代理分配
     proxy_tuple = get_proxy_for_account(session_basename, json_cfg)
 
-    if not is_valid_telethon_session(session_path):
-        print(f"⚠️ [跳过无效/空文件]: 账号文件 [{session_basename}.session] 并非有效 Telethon 数据库格式。")
+    # 【SQLite 自动备份机制】运行前自动创建 .session.bak 镜像或损坏自愈
+    if not backup_and_heal_session(session_path):
+        print(f"⚠️ [跳过无效/空文件]: 账号文件 [{session_basename}.session] 并非有效 Telethon 数据库格式且无健康备份。")
         return
 
     retry_count = 0
     while True:
+        # 【读写分离与锁保护】若调度器正在对此账号执行批量群发，主动让出句柄避让，防止 SQLite 锁死与坏块
+        if is_session_locked_by_dispatcher(clean_digits):
+            print(f"⏸️ [读写分离保护] 账号 +{clean_digits} 当前正由 tg-dispatcher 进行任务发送，自动让出句柄避让 12 秒...")
+            await asyncio.sleep(12)
+            continue
+
         client = None
         try:
             print(f"📡 [{'单次扫描' if scan_once else '24h常驻监听'}] 正在挂载并连接账号: {session_basename} ...")
             
             connected_ok = False
-            if proxy_tuple:
+            active_proxy = proxy_tuple
+            if active_proxy:
                 try:
                     client = TelegramClient(
                         session_prefix,
                         api_id,
                         api_hash,
-                        proxy=proxy_tuple,
+                        proxy=active_proxy,
                         device_model=device_model,
                         system_version=system_version,
                         app_version=app_version,
                         connection_retries=2,
                         retry_delay=1,
                         auto_reconnect=True,
-                        timeout=6
+                        timeout=8
                     )
-                    await asyncio.wait_for(client.connect(), timeout=10.0)
+                    await asyncio.wait_for(client.connect(), timeout=12.0)
                     connected_ok = True
-                except Exception:
+                except Exception as p1_err:
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
                     client = None
 
+            # 若主力代理握手超时，尝试备用巴西代理节点，【绝对禁止 VPS 机房 IP 直连 proxy=None】
+            if not connected_ok and len(BRAZIL_PROXY_POOL) > 0:
+                backup_idx = (int(clean_digits[-4:]) if (clean_digits and clean_digits[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
+                backup_proxy_str = BRAZIL_PROXY_POOL[backup_idx]
+                backup_tuple = parse_proxy_str(backup_proxy_str)
+                if backup_tuple:
+                    try:
+                        print(f"🔄 [代理故障转移] 账号 +{clean_digits} 主力代理响应慢，切换备用巴西节点重试...")
+                        client = TelegramClient(
+                            session_prefix,
+                            api_id,
+                            api_hash,
+                            proxy=backup_tuple,
+                            device_model=device_model,
+                            system_version=system_version,
+                            app_version=app_version,
+                            connection_retries=2,
+                            retry_delay=1,
+                            auto_reconnect=True,
+                            timeout=10
+                        )
+                        await asyncio.wait_for(client.connect(), timeout=15.0)
+                        connected_ok = True
+                    except Exception:
+                        try:
+                            await client.disconnect()
+                        except Exception:
+                            pass
+                        client = None
+
+            # 🚨 【绝对安全红线】：若全部代理均未通，宁可休眠重试，严禁直连裸连！
             if not connected_ok:
-                client = TelegramClient(
-                    session_prefix,
-                    api_id,
-                    api_hash,
-                    proxy=None,
-                    device_model=device_model,
-                    system_version=system_version,
-                    app_version=app_version,
-                    connection_retries=3,
-                    retry_delay=2,
-                    auto_reconnect=True,
-                    timeout=8
-                )
-                await asyncio.wait_for(client.connect(), timeout=15.0)
+                print(f"🛑 [绝对防封阻断] 账号 +{clean_digits} 代理节点暂不可达，严禁 VPS 机房 IP 裸连直连！休眠 25 秒后重试...")
+                await asyncio.sleep(25)
+                continue
 
             if not await client.is_user_authorized():
                 print(f"⚠️ [未授权] 账号 {session_basename} 未登录或 Session 已失效。")
                 if scan_once:
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
                     return
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
                 await asyncio.sleep(60)
                 continue
             

@@ -1579,7 +1579,9 @@ async function startServer() {
       try {
         const raw = fs.readFileSync(REPLIED_CUSTOMERS_PATH, "utf8");
         const list = JSON.parse(raw);
-        if (Array.isArray(list)) return list;
+        if (Array.isArray(list)) {
+          return list.filter((c: any) => !String(c.repliedAt || '').startsWith('2026-09-06') && c.fullName !== 'Gabriel Silva');
+        }
       } catch (e) {}
     }
     return [];
@@ -2538,6 +2540,8 @@ Requirements:
   // ==========================================
   // 💬 NEW DIMENSION 3: 统一客户消息聚合面板 (Web Inbox & AI 智能客服)
   // ==========================================
+  // 💬 聚合收件箱会话持久化与极速 API (Inbox Persistence)
+  // ==========================================
   const inboxStoragePath = path.join(sessionsDir, "inbox_conversations.json");
 
   function getInboxConversations() {
@@ -2547,78 +2551,130 @@ Requirements:
       try {
         const raw = fs.readFileSync(inboxStoragePath, 'utf8');
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) savedList = parsed;
+        if (Array.isArray(parsed)) {
+          // 彻底过滤掉 2026-09-06 的历史静态演示数据
+          savedList = parsed.filter((c: any) => !String(c.lastMessageTime || '').startsWith('2026-09-06') && c.customerName !== 'Gabriel Silva');
+        }
       } catch (e) {}
     }
 
-    // 2. If savedList is empty or to complement, sync from real replied_customers.json
+    const existingIds = new Set(savedList.map(c => c.id || c.customerPhone || c.customerUsername));
+
+    // 2. 检查 auto_scanner_stats.json 中的实时监听捕获日志（确保后台捕获的真实客户 100% 同步进收件箱）
+    const scannerStatsFile = path.join(sessionsDir, "auto_scanner_stats.json");
+    if (fs.existsSync(scannerStatsFile)) {
+      try {
+        const rawStats = fs.readFileSync(scannerStatsFile, 'utf8');
+        const parsedStats = JSON.parse(rawStats);
+        if (parsedStats && Array.isArray(parsedStats.logs)) {
+          parsedStats.logs.forEach((logItem: any) => {
+            const targetId = logItem.target ? String(logItem.target) : '';
+            if (targetId && !existingIds.has(`conv-${targetId}`)) {
+              const accountNum = logItem.account || 'TG矩阵号';
+              const logMsg = logItem.msg || '';
+              // 提取客户名称如 Muchal
+              let custName = `Cliente ${targetId}`;
+              const matchName = logMsg.match(/客户\s+\d+\s*\(([^)]+)\)/);
+              if (matchName && matchName[1]) custName = matchName[1];
+
+              const newRealConv = {
+                id: `conv-${targetId}`,
+                customerName: custName,
+                customerPhone: '',
+                customerUsername: '',
+                assignedAccountPhone: accountNum,
+                assignedAccountName: `TG协议号-${accountNum.slice(-4)}`,
+                tag: 'hot_lead',
+                unreadCount: 1,
+                lastMessageText: logItem.incoming || 'Oi',
+                lastMessageTime: logItem.timestamp ? `今日 ${logItem.timestamp}` : '刚刚',
+                messages: [
+                  {
+                    id: `m-in-${targetId}`,
+                    conversationId: `conv-${targetId}`,
+                    senderType: 'customer',
+                    senderName: custName,
+                    text: logItem.incoming || 'Oi',
+                    timestamp: logItem.timestamp || '刚刚',
+                    status: 'delivered'
+                  },
+                  {
+                    id: `m-out-${targetId}`,
+                    conversationId: `conv-${targetId}`,
+                    senderType: 'account',
+                    senderName: `TG协议号-${accountNum.slice(-4)}`,
+                    text: logItem.url ? `🔥 Olá! Liberamos R$ 50 de Bônus Grátis: ${logItem.url}` : '🔥 Olá! Liberamos Bônus Grátis!',
+                    timestamp: logItem.timestamp || '刚刚',
+                    status: 'read'
+                  }
+                ]
+              };
+              savedList.unshift(newRealConv);
+              existingIds.add(`conv-${targetId}`);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 3. 从 real replied_customers.json 同步真实客户
     const repliedCustomersFile = path.join(sessionsDir, "replied_customers.json");
     if (fs.existsSync(repliedCustomersFile)) {
       try {
         const rawReplied = fs.readFileSync(repliedCustomersFile, 'utf8');
-        const parsedReplied = JSON.parse(rawReplied);
+        let parsedReplied = JSON.parse(rawReplied);
         if (Array.isArray(parsedReplied) && parsedReplied.length > 0) {
-          const existingIds = new Set(savedList.map(c => c.id || c.customerPhone || c.customerUsername));
-          const convertedFromReplied = parsedReplied.map((r: any, idx: number) => {
+          // 彻底过滤掉 2026-09-06 历史模拟数据
+          parsedReplied = parsedReplied.filter((r: any) => !String(r.repliedAt || '').startsWith('2026-09-06') && r.fullName !== 'Gabriel Silva');
+          
+          parsedReplied.forEach((r: any, idx: number) => {
             const convId = `conv-${r.id || idx}`;
-            // Determine intent tag from reply text
-            let tag = 'asking_bonus';
-            const textLower = (r.lastReplyText || '').toLowerCase();
-            if (textLower.includes('pix') || textLower.includes('pagar') || textLower.includes('deposito')) {
-              tag = 'asking_pix';
-            } else if (textLower.includes('link') || textLower.includes('cadastro') || textLower.includes('como')) {
-              tag = 'hot_lead';
-            } else if (textLower.includes('sinais') || textLower.includes('vip')) {
-              tag = 'asking_bonus';
-            }
-
-            return {
-              id: convId,
-              customerName: r.fullName || r.firstName || `Cliente ${r.id}`,
-              customerPhone: r.phone || r.id || '',
-              customerUsername: r.username || (r.username ? `@${r.username.replace('@','')}` : ''),
-              assignedAccountPhone: r.receivedByAccount || '5586994428117',
-              assignedAccountName: r.receivedByAccountName || 'TG矩阵协议号',
-              tag: tag,
-              unreadCount: 1,
-              lastMessageText: r.lastReplyText || 'Oi, vi sua mensagem!',
-              lastMessageTime: r.repliedAt || '刚刚',
-              messages: [
-                {
-                  id: `m-out-${idx}`,
-                  conversationId: convId,
-                  senderType: 'account',
-                  senderName: r.receivedByAccountName || 'TG营销号',
-                  text: '🔥 Olá! Liberamos R$ 50 de Bônus Grátis sem depósito + 100 Giros no Tigrinho pra você testar agora! Quer o link de ativação?',
-                  timestamp: '10:00',
-                  status: 'read'
-                },
-                {
-                  id: `m-in-${idx}`,
-                  conversationId: convId,
-                  senderType: 'customer',
-                  senderName: r.fullName || 'Cliente',
-                  text: r.lastReplyText || 'Oi, como funciona?',
-                  timestamp: r.repliedAt ? r.repliedAt.split(' ')[1] || '10:31' : '10:31',
-                  status: 'delivered'
-                }
-              ]
-            };
-          });
-
-          if (savedList.length === 0) {
-            savedList = convertedFromReplied;
-            try {
-              fs.writeFileSync(inboxStoragePath, JSON.stringify(savedList, null, 2), 'utf8');
-            } catch (e) {}
-          } else {
-            // Append missing ones
-            convertedFromReplied.forEach(item => {
-              if (!existingIds.has(item.id)) {
-                savedList.push(item);
+            if (!existingIds.has(convId)) {
+              let tag = 'hot_lead';
+              const textLower = (r.lastReplyText || '').toLowerCase();
+              if (textLower.includes('pix') || textLower.includes('pagar') || textLower.includes('deposito')) {
+                tag = 'asking_pix';
+              } else if (textLower.includes('link') || textLower.includes('cadastro') || textLower.includes('como')) {
+                tag = 'hot_lead';
+              } else if (textLower.includes('sinais') || textLower.includes('vip')) {
+                tag = 'asking_bonus';
               }
-            });
-          }
+
+              savedList.unshift({
+                id: convId,
+                customerName: r.fullName || r.firstName || `Cliente ${r.id}`,
+                customerPhone: r.phone || r.id || '',
+                customerUsername: r.username || (r.username ? `@${r.username.replace('@','')}` : ''),
+                assignedAccountPhone: r.receivedByAccount || '5586994428117',
+                assignedAccountName: r.receivedByAccountName || 'TG矩阵协议号',
+                tag: tag,
+                unreadCount: 1,
+                lastMessageText: r.lastReplyText || 'Oi, vi sua mensagem!',
+                lastMessageTime: r.repliedAt || '刚刚',
+                messages: [
+                  {
+                    id: `m-in-${idx}`,
+                    conversationId: convId,
+                    senderType: 'customer',
+                    senderName: r.fullName || 'Cliente',
+                    text: r.lastReplyText || 'Oi, como funciona?',
+                    timestamp: r.repliedAt ? r.repliedAt.split(' ')[1] || '刚刚' : '刚刚',
+                    status: 'delivered'
+                  },
+                  {
+                    id: `m-out-${idx}`,
+                    conversationId: convId,
+                    senderType: 'account',
+                    senderName: r.receivedByAccountName || 'TG营销号',
+                    text: '🔥 Olá! Liberamos R$ 50 de Bônus Grátis sem depósito + 100 Giros no Tigrinho pra você testar agora!',
+                    timestamp: r.repliedAt ? r.repliedAt.split(' ')[1] || '刚刚' : '刚刚',
+                    status: 'read'
+                  }
+                ]
+              });
+              existingIds.add(convId);
+            }
+          });
         }
       } catch (e) {}
     }
@@ -2638,7 +2694,11 @@ Requirements:
   app.delete("/api/inbox/conversations", (req, res) => {
     try {
       fs.writeFileSync(inboxStoragePath, JSON.stringify([]), 'utf8');
-      res.json({ success: true, message: "聚合收件箱已完全清空，仅接收真实客户进线" });
+      const repliedCustomersFile = path.join(sessionsDir, "replied_customers.json");
+      if (fs.existsSync(repliedCustomersFile)) {
+        fs.writeFileSync(repliedCustomersFile, JSON.stringify([]), 'utf8');
+      }
+      res.json({ success: true, message: "聚合收件箱与已回复名单已完全清空，仅接收真实进线客户" });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

@@ -57,6 +57,30 @@ def is_valid_telethon_session(session_path: str) -> bool:
     except Exception:
         return False
 
+def backup_and_heal_session(session_path: str) -> bool:
+    """【SQLite 自动备份与自愈机制】自动建立 .session.bak 镜像；若损坏自动从备份无损还原"""
+    real_path = session_path if session_path.endswith('.session') else f"{session_path}.session"
+    bak_path = f"{real_path}.bak"
+    
+    # 1. 若当前文件健康有效，自动同步创建最新镜像备份
+    if is_valid_telethon_session(real_path):
+        try:
+            shutil.copy2(real_path, bak_path)
+            return True
+        except Exception:
+            return True
+            
+    # 2. 若当前文件损坏/异常，但存在健康 .bak 镜像，立即自动无损还原救治
+    if os.path.exists(bak_path) and is_valid_telethon_session(bak_path):
+        try:
+            print(f"🛡️ [SQLite 自动自愈系统] 检测到主文件损坏/异常 ({os.path.basename(real_path)})，正在从健康备份 ({os.path.basename(bak_path)}) 秒级无损还原！")
+            shutil.copy2(bak_path, real_path)
+            return True
+        except Exception as heal_err:
+            print(f"❌ [自愈还原失败]: {heal_err}")
+            
+    return is_valid_telethon_session(real_path)
+
 BANNED_OBSOLETE_PHONES = {
     '5586994428117', '5586994581839', '5586994709226', '5586994684213',
     '5586994687152', '5586994850500', '5586994918471', '5586994783355'
@@ -151,7 +175,8 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
     username = item_data.get("username")
     avatar_base64 = item_data.get("avatarBase64")
 
-    if not is_valid_telethon_session(session_path):
+    # 【SQLite 自动备份机制】运行前自动创建 .session.bak 镜像或损坏自愈
+    if not backup_and_heal_session(session_path):
         logs.append(f"⚠️ [跳过无效/空文件]: 账号文件 [{session_basename}.session] 并非标准的 Telethon 数据库格式或大小为空。")
         return False
 
@@ -172,27 +197,42 @@ async def update_single_account(session_path: str, item_data: dict, logs: list):
         return False
 
     try:
+        connected_ok = False
         try:
             await asyncio.wait_for(client.connect(), timeout=12.0)
+            connected_ok = True
         except Exception as ce:
-            if proxy_tuple:
-                logs.append(f"⚠️ [代理响应慢]: 切入直连更新 [{session_basename}]...")
+            if proxy_tuple and len(BRAZIL_PROXY_POOL) > 0:
+                logs.append(f"🔄 [代理故障转移]: 切换备用巴西节点更新 [{session_basename}]...")
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
+                clean_phone = re.sub(r'[^0-9]', '', session_basename)
+                idx = (int(clean_phone[-4:]) if (clean_phone and clean_phone[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
+                backup_proxy_str = BRAZIL_PROXY_POOL[idx]
+                backup_tuple = parse_proxy_str(backup_proxy_str)
                 client = TelegramClient(
                     session_prefix,
                     api_id_int,
                     str(api_hash),
-                    proxy=None,
+                    proxy=backup_tuple,
                     device_model=str(device_model),
                     system_version=str(system_version),
                     app_version=str(app_version)
                 )
-                await asyncio.wait_for(client.connect(), timeout=15.0)
+                try:
+                    await asyncio.wait_for(client.connect(), timeout=15.0)
+                    connected_ok = True
+                except Exception as b_err:
+                    logs.append(f"🛑 [绝对防封阻断]: 账号 [{session_basename}] 代理与备用节点均未通，严禁 VPS 机房 IP 直连裸改！跳过本号: {b_err}")
+                    return False
             else:
-                raise ce
+                logs.append(f"🛑 [未配置可用代理]: 绝对禁止 VPS 机房 IP 裸连，跳过本号: {ce}")
+                return False
+
+        if not connected_ok:
+            return False
 
         if not await client.is_user_authorized():
             logs.append(f"❌ [凭证未授权] 账号 {session_basename} 登录态失效")
