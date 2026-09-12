@@ -1,0 +1,20 @@
+{
+  "phone": "5586994927293",
+  "app_id": 2040,
+  "app_hash": "b18441a1ff607e10a989891a5462e627",
+  "device_model": "PC (Win10)",
+  "system_version": "Windows 10",
+  "app_version": "4.16.8 x64",
+  "lang_code": "en",
+  "system_lang_code": "en-US",
+  "twofa": "548508",
+  "warmupDay": 7,
+  "groupTag": "主力爆破A组",
+  "proxy": {
+    "addr": "200.152.153.188",
+    "port": 12323,
+    "username": "14a5a773a873a",
+    "password": "4d841434c6",
+    "proxy_type": "socks5"
+  }
+}

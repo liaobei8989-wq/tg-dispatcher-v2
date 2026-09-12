@@ -43,8 +43,8 @@ export default function App() {
           parsed.forEach((acc: AccountSession, idx: number) => {
             // Telegram only verification
             const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            // Auto purge dummy generated phone numbers (55869952011xx) and obsolete phones
-            if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
+            // Auto purge dummy generated phone numbers, non-Brazilian numbers (timestamps like 1788...), and obsolete phones
+            if (!cleanPhone || !cleanPhone.startsWith('55') || cleanPhone.length < 12 || cleanPhone.length > 13 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
@@ -119,7 +119,7 @@ export default function App() {
           const prevMap = new Map<string, AccountSession>();
           prev.forEach((a) => {
             const cp = a.phone ? a.phone.replace(/\D/g, '') : '';
-            if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
+            if (cp && cp.startsWith('55') && cp.length >= 12 && cp.length <= 13 && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
               prevMap.set(cp, a);
             }
           });
@@ -130,7 +130,7 @@ export default function App() {
           // Strictly base on server-side disk accounts
           data.accounts.forEach((acc: AccountSession, idx: number) => {
             const cp = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            if (cp && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
+            if (cp && cp.startsWith('55') && cp.length >= 12 && cp.length <= 13 && !obsoletePhones.has(cp) && !cp.startsWith('55869952011')) {
               const existing = prevMap.get(cp);
               const isTop5 = top5Phones.has(cp) || (!cp.startsWith('55869948') && !cp.startsWith('55869949') && !cp.startsWith('55869951') && idx < 5);
               
@@ -202,7 +202,7 @@ export default function App() {
           idbAccounts.forEach((acc: AccountSession, idx: number) => {
             // Telegram only verification
             const cleanPhone = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-            if (!cleanPhone || cleanPhone.length < 8 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
+            if (!cleanPhone || !cleanPhone.startsWith('55') || cleanPhone.length < 12 || cleanPhone.length > 13 || obsoletePhones.has(cleanPhone) || cleanPhone.startsWith('55869952011')) return;
 
             if (!uniqueMap.has(cleanPhone)) {
               const isTop5 = top5Phones.has(cleanPhone) || (!cleanPhone.startsWith('55869948') && !cleanPhone.startsWith('55869949') && !cleanPhone.startsWith('55869951') && idx < 5);
@@ -449,7 +449,7 @@ export default function App() {
     const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     accounts.filter((a) => a.platform === 'telegram').forEach((acc) => {
       const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-      if (clean && clean.length >= 8 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
+      if (clean && clean.startsWith('55') && clean.length >= 12 && clean.length <= 13 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
         if (!map.has(clean)) {
           map.set(clean, acc);
         }

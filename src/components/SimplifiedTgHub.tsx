@@ -1583,9 +1583,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     setAccounts(prev => {
       const map = new Map<string, AccountSession>();
       prev.forEach(acc => {
-        // Telegram account validation
+        // Telegram account validation: Must be valid Brazilian phone (+55...)
         const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-        if (clean && clean.length >= 8 && !obsoletePhones.has(clean)) {
+        if (clean && clean.startsWith('55') && clean.length >= 12 && clean.length <= 13 && !obsoletePhones.has(clean)) {
           if (!map.has(clean)) {
             map.set(clean, acc);
           }
@@ -1601,7 +1601,8 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
     accounts.filter(a => a.platform === 'telegram').forEach(acc => {
       const clean = acc.phone ? acc.phone.replace(/\D/g, '') : '';
-      if (clean && clean.length >= 8 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
+      // Only keep real Brazilian phone numbers (+55...) and skip any accidental filename timestamps like 1788...
+      if (clean && clean.startsWith('55') && clean.length >= 12 && clean.length <= 13 && !obsoletePhones.has(clean) && !clean.startsWith('55869952011')) {
         if (!map.has(clean)) {
           const isBGroup = clean.startsWith('55869948') || clean.startsWith('55869949') || clean.startsWith('55869951') || (acc.warmupDay && acc.warmupDay <= 3);
           const rawGroup = acc.groupTag;
@@ -1730,7 +1731,8 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     const extractedPhones = new Set<string>();
     for (let i = 0; i < targetFiles.length; i++) {
       const file = targetFiles[i];
-      const match = file.name.match(/\d{8,15}/);
+      // Match specifically Brazilian phone number (+55...) in filename, ignoring timestamps like 1788007788382
+      const match = file.name.match(/55\d{10,11}/);
       if (match) {
         extractedPhones.add(match[0]);
       }
@@ -1796,8 +1798,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
         let availableCursor = 0;
 
-        newPhones.forEach((phone, idx) => {
-          if (!existingPhones.has(phone)) {
+        newPhones.forEach((rawP, idx) => {
+          const phone = rawP.replace(/\D/g, '');
+          if (phone && phone.startsWith('55') && phone.length >= 12 && phone.length <= 13 && !existingPhones.has(phone)) {
+            existingPhones.add(phone);
             // 严格分配未被使用的空闲代理 IP
             let assignedProxy = '';
             if (availableCursor < availablePoolProxies.length) {
@@ -1963,8 +1967,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
         let availableCursor = 0;
 
-        newlyImportedPhones.forEach((phone, idx) => {
-          if (!existingPhones.has(phone)) {
+        newlyImportedPhones.forEach((rawP, idx) => {
+          const phone = rawP.replace(/\D/g, '');
+          if (phone && phone.startsWith('55') && phone.length >= 12 && phone.length <= 13 && !existingPhones.has(phone)) {
+            existingPhones.add(phone);
             let assignedProxy = '';
             if (availableCursor < availablePoolProxies.length) {
               assignedProxy = availablePoolProxies[availableCursor];

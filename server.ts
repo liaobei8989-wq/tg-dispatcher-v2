@@ -899,7 +899,8 @@ async function startServer() {
       const groupKeys = Object.keys(validGroups);
       if (groupKeys.length === 0 || (groupKeys.length === 1 && groupKeys[0] === "root")) {
         const rootGroup = validGroups["root"] || { hasTdata: false, files: [] };
-        const fileNameDigits = fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
+        // Prioritize matching Brazilian phone +55... in filename, avoiding timestamps like 1788007788382
+        const fileNameDigits = fileName.match(/55\d{10,11}/) || fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
         if (fileNameDigits && !rootGroup.phone) {
           rootGroup.phone = fileNameDigits[0];
         }
@@ -915,7 +916,7 @@ async function startServer() {
       }
 
       for (const [gKey, grp] of Object.entries(validGroups)) {
-        let phone = grp.phone || (gKey.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]) || (fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]);
+        let phone = grp.phone || (gKey.match(/55\d{10,11}/)?.[0]) || (fileName.match(/55\d{10,11}/)?.[0]) || (gKey.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]) || (fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]);
         if (!phone) {
           phone = `55${Math.floor(8000000000 + Math.random() * 1000000000)}`;
         }
