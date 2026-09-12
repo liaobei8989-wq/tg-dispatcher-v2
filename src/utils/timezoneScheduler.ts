@@ -8,13 +8,13 @@ export const DEFAULT_THREE_WAVES = [
     name: '第一波：午间摸鱼 (12:00~14:00)',
     brazilTime: '12:30',
     indonesiaTime: '22:30',
-    enabled: true,
-    targetCountSuggestion: '2,000 ~ 2,500 条 (执行约25分钟 ➔ 强制深度休眠 5 小时)',
+    enabled: false,
+    targetCountSuggestion: '2,000 ~ 2,500 条',
     fileName: '',
     dataText: '',
     targetList: [],
     sentOffset: 0,
-    status: 'waiting' as const,
+    status: 'paused' as const,
     targetGroupTag: 'ALL'
   },
   {
@@ -22,13 +22,13 @@ export const DEFAULT_THREE_WAVES = [
     name: '第二波：晚饭下班 (18:30~20:30)',
     brazilTime: '18:30',
     indonesiaTime: '04:30',
-    enabled: true,
-    targetCountSuggestion: '2,200 ~ 2,600 条 (执行约22分钟 ➔ 强制休眠 90 分钟供接待进粉)',
+    enabled: false,
+    targetCountSuggestion: '2,200 ~ 2,600 条',
     fileName: '',
     dataText: '',
     targetList: [],
     sentOffset: 0,
-    status: 'waiting' as const,
+    status: 'paused' as const,
     targetGroupTag: '主力爆破A组'
   },
   {
@@ -36,31 +36,31 @@ export const DEFAULT_THREE_WAVES = [
     name: '第三波：夜间高峰 (20:30~22:30)',
     brazilTime: '20:30',
     indonesiaTime: '06:30',
-    enabled: true,
-    targetCountSuggestion: '2,000 ~ 2,400 条 (执行约20分钟 ➔ 全天收工进入 15 小时夜间休眠)',
+    enabled: false,
+    targetCountSuggestion: '2,000 ~ 2,400 条',
     fileName: '',
     dataText: '',
     targetList: [],
     sentOffset: 0,
-    status: 'waiting' as const,
+    status: 'paused' as const,
     targetGroupTag: 'ALL'
   }
 ];
 
 export const DEFAULT_SCHEDULED_CONFIG: ScheduledCampaignConfig = {
   id: 'sched-brazil-evening-1900',
-  name: '🇧🇷 巴西 3 波错峰极品防封排期 (全天 6,000~8,000 动态浮动)',
-  enabled: true,
-  recurring: true,
+  name: '🇧🇷 巴西 3 波错峰排期 (默认手动触发)',
+  enabled: false,
+  recurring: false,
   targetTimeBrazil: '18:30',
   targetTimeIndonesia: '04:30',
   primaryTimezone: 'brazil',
   autoStopBrazilTime: '22:00',
-  enableAutoStop: true,
+  enableAutoStop: false,
   speedMode: 'conservative',
   strategyMode: 'two_stage',
   batchLimitCount: 0,
-  status: 'waiting',
+  status: 'paused',
   waves: DEFAULT_THREE_WAVES
 };
 

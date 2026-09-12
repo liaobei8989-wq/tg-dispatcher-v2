@@ -36,7 +36,8 @@ import {
   UserCheck,
   Mail,
   Smile,
-  HelpCircle
+  HelpCircle,
+  Archive
 } from 'lucide-react';
 import { formatBrazilPhone } from '../utils/spintax';
 
@@ -1334,6 +1335,15 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
           >
             <HelpCircle className="w-4 h-4 text-amber-400" />
             <span>❓ 为什么主号搜不到协议号？</span>
+          </button>
+
+          {/* Import Button: Telegram tdata ZIP */}
+          <button
+            onClick={() => handleOpenImport('telegram')}
+            className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+            title="一键拖入或选取包含 tdata 目录与 2fa.txt 的压缩包，继承电脑端高权重转换并挂载"
+          >
+            <Archive className="w-4 h-4" /> 📦 tdata 压缩包一键转 Session (继承电脑端权重)
           </button>
 
           {/* Import Button: Telegram */}

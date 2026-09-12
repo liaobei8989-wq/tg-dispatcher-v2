@@ -1,0 +1,59 @@
+{
+  "id": "sched-brazil-evening-1900",
+  "name": "🇧🇷 巴西 3 波错峰极品防封排期 (纯手动触发模式)",
+  "enabled": false,
+  "recurring": false,
+  "targetTimeBrazil": "18:30",
+  "targetTimeIndonesia": "04:30",
+  "primaryTimezone": "brazil",
+  "autoStopBrazilTime": "22:00",
+  "enableAutoStop": false,
+  "speedMode": "conservative",
+  "strategyMode": "two_stage",
+  "batchLimitCount": 0,
+  "status": "paused",
+  "waves": [
+    {
+      "id": "wave-1-lunch",
+      "name": "第一波：午间摸鱼 (12:00~14:00)",
+      "brazilTime": "12:30",
+      "indonesiaTime": "22:30",
+      "enabled": false,
+      "targetCountSuggestion": "2,000 ~ 2,500 条",
+      "fileName": "",
+      "dataText": "",
+      "targetList": [],
+      "sentOffset": 0,
+      "status": "paused",
+      "targetGroupTag": "ALL"
+    },
+    {
+      "id": "wave-2-dinner",
+      "name": "第二波：晚饭下班 (18:30~20:30)",
+      "brazilTime": "18:30",
+      "indonesiaTime": "04:30",
+      "enabled": false,
+      "targetCountSuggestion": "2,200 ~ 2,600 条",
+      "fileName": "",
+      "dataText": "",
+      "targetList": [],
+      "sentOffset": 0,
+      "status": "paused",
+      "targetGroupTag": "主力爆破A组"
+    },
+    {
+      "id": "wave-3-night",
+      "name": "第三波：夜间高峰 (20:30~22:30)",
+      "brazilTime": "20:30",
+      "indonesiaTime": "06:30",
+      "enabled": false,
+      "targetCountSuggestion": "2,000 ~ 2,400 条",
+      "fileName": "",
+      "dataText": "",
+      "targetList": [],
+      "sentOffset": 0,
+      "status": "paused",
+      "targetGroupTag": "ALL"
+    }
+  ]
+}

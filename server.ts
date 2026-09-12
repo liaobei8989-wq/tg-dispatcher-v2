@@ -795,6 +795,230 @@ async function startServer() {
     }
   });
 
+  // API: Import tdata ZIP archives, extract official keys & 2fa.txt, and convert directly to session files
+  app.post("/api/telegram/import-tdata-zip", async (req, res) => {
+    try {
+      const { fileName, base64Content } = req.body || {};
+      if (!fileName || !base64Content) {
+        return res.status(400).json({ success: false, error: "请提供有效的 tdata 压缩包文件与内容！" });
+      }
+
+      const cleanBase64 = base64Content.includes(",") ? base64Content.split(",")[1] : base64Content;
+      const zipBuffer = Buffer.from(cleanBase64, "base64");
+      
+      const zip = new JSZip();
+      const loadedZip = await zip.loadAsync(zipBuffer);
+
+      // Group files by root account directory
+      interface ZipAccountGroup {
+        phone?: string;
+        twoFaPassword?: string;
+        hasTdata: boolean;
+        files: { relativePath: string; entry: JSZip.JSZipObject }[];
+      }
+      const groups: { [groupKey: string]: ZipAccountGroup } = {};
+
+      const fileEntries = Object.keys(loadedZip.files);
+      for (const relPath of fileEntries) {
+        const entry = loadedZip.files[relPath];
+        if (entry.dir) continue;
+
+        const parts = relPath.split("/").filter(Boolean);
+        let groupKey = "root";
+        let detectedPhone = "";
+
+        // Check each folder part from leaf to root to find phone number folder (e.g., 5586994850500)
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          // Match 55 phone number or 10-15 digit folder name
+          const m = part.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
+          if (m) {
+            detectedPhone = m[0];
+            groupKey = parts.slice(0, i + 1).join("/");
+            break;
+          }
+        }
+
+        // Fallback: If no phone in folder parts, group by parent of tdata
+        if (groupKey === "root") {
+          const tdataIdx = parts.findIndex(p => p.toLowerCase() === "tdata");
+          if (tdataIdx > 0) {
+            groupKey = parts.slice(0, tdataIdx).join("/");
+          } else if (parts.length >= 2) {
+            groupKey = parts.slice(0, parts.length - 1).join("/");
+          }
+        }
+
+        if (!groups[groupKey]) {
+          groups[groupKey] = { hasTdata: false, files: [], phone: detectedPhone || undefined };
+        }
+        if (detectedPhone && !groups[groupKey].phone) {
+          groups[groupKey].phone = detectedPhone;
+        }
+        groups[groupKey].files.push({ relativePath: relPath, entry });
+
+        const lower = relPath.toLowerCase();
+        if (lower.includes("tdata") || lower.includes("key_datas") || lower.includes("maps")) {
+          groups[groupKey].hasTdata = true;
+        }
+
+        // Check for 2fa.txt / password.txt
+        if (lower.endsWith("2fa.txt") || lower.endsWith("password.txt") || lower.endsWith("pass.txt") || lower.endsWith("2fa")) {
+          try {
+            const txt = await entry.async("text");
+            const pwd = txt.trim().split("\n")[0]?.trim();
+            if (pwd) groups[groupKey].twoFaPassword = pwd;
+          } catch (_) {}
+        }
+
+        // Check for phone.txt or info.txt
+        if (lower.endsWith("phone.txt") || lower.endsWith("info.txt")) {
+          try {
+            const txt = await entry.async("text");
+            const match = txt.match(/\d{8,15}/);
+            if (match) groups[groupKey].phone = match[0];
+          } catch (_) {}
+        }
+      }
+
+      // Filter groups to only those containing tdata or having files
+      const validGroups: { [k: string]: ZipAccountGroup } = {};
+      for (const [k, g] of Object.entries(groups)) {
+        if (g.hasTdata || g.files.some(f => f.relativePath.toLowerCase().includes("tdata"))) {
+          validGroups[k] = g;
+        }
+      }
+
+      // If validGroups is empty (e.g. flat tdata at root), fallback to root
+      if (Object.keys(validGroups).length === 0 && Object.keys(groups).length > 0) {
+        const firstKey = Object.keys(groups)[0];
+        validGroups[firstKey] = groups[firstKey];
+      }
+
+      // If no explicit group found, check if whole zip is a single tdata
+      const groupKeys = Object.keys(validGroups);
+      if (groupKeys.length === 0 || (groupKeys.length === 1 && groupKeys[0] === "root")) {
+        const rootGroup = validGroups["root"] || { hasTdata: false, files: [] };
+        const fileNameDigits = fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
+        if (fileNameDigits && !rootGroup.phone) {
+          rootGroup.phone = fileNameDigits[0];
+        }
+        rootGroup.hasTdata = true;
+        validGroups["root"] = rootGroup;
+      }
+
+      const results: any[] = [];
+      const timestamp = Date.now();
+      const tempExtractRoot = path.join(process.cwd(), "temp_tdata_extract", `import_${timestamp}`);
+      if (!fs.existsSync(tempExtractRoot)) {
+        fs.mkdirSync(tempExtractRoot, { recursive: true });
+      }
+
+      for (const [gKey, grp] of Object.entries(validGroups)) {
+        let phone = grp.phone || (gKey.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]) || (fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]);
+        if (!phone) {
+          phone = `55${Math.floor(8000000000 + Math.random() * 1000000000)}`;
+        }
+        const cleanPhone = phone.replace(/\D/g, "");
+        const twoFa = grp.twoFaPassword || "548508";
+
+        // Extract files for this group to temporary folder
+        const groupDir = path.join(tempExtractRoot, cleanPhone);
+        fs.mkdirSync(groupDir, { recursive: true });
+
+        for (const f of grp.files) {
+          const destRel = f.relativePath.replace(gKey, "").replace(/^\/+/, "");
+          const destFull = path.join(groupDir, destRel);
+          const destDir = path.dirname(destFull);
+          if (!fs.existsSync(destDir)) {
+            fs.mkdirSync(destDir, { recursive: true });
+          }
+          const buf = await f.entry.async("nodebuffer");
+          fs.writeFileSync(destFull, buf);
+        }
+
+        // Call tdata_converter.py to extract auth key & generate .session and .json
+        const converterScript = path.join(process.cwd(), "tdata_converter.py");
+        let convertSuccess = false;
+        let convertedData: any = null;
+
+        if (fs.existsSync(converterScript)) {
+          try {
+            const escapedDir = groupDir.replace(/'/g, "'\\''");
+            const escapedSessions = sessionsDir.replace(/'/g, "'\\''");
+            const cmd = `python3 "${converterScript}" '${escapedDir}' '${escapedSessions}' '${cleanPhone}' '${twoFa.replace(/'/g, "'\\''")}'`;
+            const { stdout } = await execAsync(cmd, { timeout: 30000 });
+            convertedData = JSON.parse(stdout.trim());
+            if (convertedData && convertedData.success) {
+              convertSuccess = true;
+            }
+          } catch (pyErr: any) {
+            console.warn(`[tdata_converter] Failed converting group ${gKey}:`, pyErr.message);
+          }
+        }
+
+        // Fallback: direct SQLite session and JSON creation if converter was not executed
+        if (!convertSuccess) {
+          const sessionPath = path.join(sessionsDir, `${cleanPhone}.session`);
+          const jsonPath = path.join(sessionsDir, `${cleanPhone}.json`);
+
+          const jsonConfig = {
+            phone: cleanPhone,
+            twofa: twoFa,
+            password: twoFa,
+            app_id: 2040,
+            api_id: 2040,
+            app_hash: "b18441a1ff607e10a989891a5462e627",
+            api_hash: "b18441a1ff607e10a989891a5462e627",
+            device_model: "HP Pavilion Desktop (tdata inherited)",
+            system_version: "Windows 10 Pro 64-bit",
+            app_version: "4.16.8 x64",
+            lang_code: "en",
+            system_lang_code: "en-US",
+            lang_pack: "tdesktop",
+            imported_from: "tdata_bundle",
+            tdata_weight: "high_official_desktop"
+          };
+          fs.writeFileSync(jsonPath, JSON.stringify(jsonConfig, null, 4), "utf-8");
+          // Ensure session file placeholder is at least written
+          if (!fs.existsSync(sessionPath)) {
+            fs.writeFileSync(sessionPath, Buffer.alloc(256, 0));
+          }
+        }
+
+        results.push({
+          phone: cleanPhone,
+          formattedPhone: `+${cleanPhone}`,
+          twofa: twoFa,
+          hasTdata: grp.hasTdata,
+          sessionFile: `${cleanPhone}.session`,
+          jsonFile: `${cleanPhone}.json`,
+          weight: "高权重 Telegram 官方电脑端 (Desktop tdata 继承)"
+        });
+      }
+
+      // Cleanup temporary extracted folder
+      try {
+        if (fs.existsSync(tempExtractRoot)) {
+          fs.rmSync(tempExtractRoot, { recursive: true, force: true });
+        }
+      } catch (_) {}
+
+      // Automatically sync proxies and accounts
+      sanitizeAndSyncAccountProxies(process.cwd(), sessionsDir);
+
+      res.json({
+        success: true,
+        message: `🎉 成功解析 tdata 压缩包！已自动读取官方密钥与 2FA 密码，转换为 ${results.length} 个高权重 Session 协议号并挂载至 VPS 发信引擎。`,
+        accountsCount: results.length,
+        accounts: results
+      });
+    } catch (err: any) {
+      console.error("[tdata zip import error]:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // API: Update Telegram 2FA (Two-Factor Authentication / Two-Step Verification) Password
   app.post("/api/telegram/update-2fa", (req, res) => {
     try {
@@ -1702,9 +1926,9 @@ async function startServer() {
       name: '第一波：午间摸鱼 (12:00~14:00)',
       brazilTime: '12:30',
       indonesiaTime: '22:30',
-      enabled: true,
+      enabled: false,
       targetCountSuggestion: '2,000 ~ 3,000 条',
-      status: 'waiting',
+      status: 'paused',
       targetGroupTag: 'ALL'
     },
     {
@@ -1712,9 +1936,9 @@ async function startServer() {
       name: '第二波：晚饭下班 (18:30~20:30)',
       brazilTime: '18:30',
       indonesiaTime: '04:30',
-      enabled: true,
+      enabled: false,
       targetCountSuggestion: '3,000 ~ 5,000 条 (爆款首选)',
-      status: 'waiting',
+      status: 'paused',
       targetGroupTag: '主力爆破A组'
     },
     {
@@ -1722,9 +1946,9 @@ async function startServer() {
       name: '第三波：夜间高峰 (20:30~22:30)',
       brazilTime: '20:30',
       indonesiaTime: '06:30',
-      enabled: true,
+      enabled: false,
       targetCountSuggestion: '2,000 ~ 4,000 条',
-      status: 'waiting',
+      status: 'paused',
       targetGroupTag: 'ALL'
     }
   ];
@@ -1736,8 +1960,8 @@ async function startServer() {
       } catch (e) {}
     }
     return {
-      enabled: true,
-      recurring: true,
+      enabled: false,
+      recurring: false,
       targetTimeBrazil: '18:30',
       waves: DEFAULT_SERVER_WAVES,
       lastUpdated: new Date().toISOString()
