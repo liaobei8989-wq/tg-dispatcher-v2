@@ -2024,6 +2024,35 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     const results: { file: File; path: string }[] = [];
     const items = dataTransfer.items;
 
+    // Helper: test if file is useful for tdata / telegram account extraction
+    const isUsefulTelegramFile = (filePath: string, size: number): boolean => {
+      // Ignore files larger than 10MB (tdata key files are usually tiny, under 1MB)
+      if (size > 10 * 1024 * 1024) return false;
+      const lower = filePath.toLowerCase();
+      // Skip cache, dumps, media, logs, system files
+      if (
+        lower.includes('/cache/') ||
+        lower.includes('\\cache\\') ||
+        lower.includes('/dumps/') ||
+        lower.includes('/media_cache/') ||
+        lower.includes('/user_data/cache') ||
+        lower.includes('thumbs.db') ||
+        lower.includes('.ds_store') ||
+        lower.endsWith('.tmp') ||
+        lower.endsWith('.log') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg')
+      ) {
+        return false;
+      }
+      return true;
+    };
+
     if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
       const entries: any[] = [];
       for (let i = 0; i < items.length; i++) {
@@ -2039,13 +2068,21 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
           await new Promise<void>((resolve) => {
             entry.file(
               (f: File) => {
-                results.push({ file: f, path: currentPath + entry.name });
+                const fullPath = currentPath + entry.name;
+                if (isUsefulTelegramFile(fullPath, f.size)) {
+                  results.push({ file: f, path: fullPath });
+                }
                 resolve();
               },
               () => resolve()
             );
           });
         } else if (entry.isDirectory) {
+          const dirNameLower = entry.name.toLowerCase();
+          // Skip deep cache folders altogether
+          if (dirNameLower === 'dumps' || dirNameLower === 'cache' || dirNameLower === 'media_cache') {
+            return;
+          }
           const dirReader = entry.createReader();
           const readAllEntries = async (): Promise<any[]> => {
             let all: any[] = [];
@@ -2072,7 +2109,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     } else if (dataTransfer.files && dataTransfer.files.length > 0) {
       for (let i = 0; i < dataTransfer.files.length; i++) {
         const f = dataTransfer.files[i];
-        results.push({ file: f, path: f.webkitRelativePath || f.name });
+        const p = f.webkitRelativePath || f.name;
+        if (isUsefulTelegramFile(p, f.size)) {
+          results.push({ file: f, path: p });
+        }
       }
     }
 
@@ -2080,16 +2120,36 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   };
 
   const processTdataFolderEntries = async (entries: { file: File; path: string }[]) => {
-    if (!entries || entries.length === 0) return;
+    if (!entries || entries.length === 0) {
+      setSessionUploadStatus('⚠️ 未在拖拽文件夹中检测到有效的 tdata 核心密钥或密码文件');
+      return;
+    }
 
     setIsUploadingSession(true);
-    setSessionUploadStatus(`正在扫描并读取 ${entries.length} 个解压文件夹内的 tdata 与 2FA 文件...`);
+    setSessionUploadStatus(`正在扫描并过滤无用缓存，提取 ${entries.length} 个核心 tdata 凭证与 2FA 文件...`);
 
     try {
+      // Filter out files that are definitely not needed (keep keys, maps, settings, 2fa, session, json, txt)
+      const validEntries = entries.filter(item => {
+        const lower = item.path.toLowerCase();
+        return (
+          lower.includes('key_datas') ||
+          lower.includes('maps') ||
+          lower.includes('settings') ||
+          lower.includes('tdata') ||
+          lower.endsWith('.session') ||
+          lower.endsWith('.json') ||
+          lower.endsWith('.txt') ||
+          /[0-9a-f]{16}/i.test(item.path)
+        );
+      });
+
+      const targetsToUpload = validEntries.length > 0 ? validEntries : entries;
+
       const fileDataList: { path: string; base64Content: string }[] = [];
-      for (const item of entries) {
-        // Skip hidden system files or large temporary cache
-        if (item.path.includes('.DS_Store') || item.path.includes('thumbs.db')) continue;
+      for (const item of targetsToUpload) {
+        // Skip files > 5MB to strictly prevent string length overflow
+        if (item.file.size > 5 * 1024 * 1024) continue;
         try {
           const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -2104,7 +2164,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
         } catch (_) {}
       }
 
-      setSessionUploadStatus(`正在向服务器提交并解析 tdata 官方凭证与 2FA 密码...`);
+      setSessionUploadStatus(`正在向服务器提交并解析 tdata 官方凭证与 2FA 密码 (${fileDataList.length} 个关键文件)...`);
 
       const res = await fetch('/api/telegram/import-tdata-folder', {
         method: 'POST',
@@ -2212,10 +2272,18 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const handleUploadFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArr: File[] = Array.from(e.target.files);
-      const entries = filesArr.map((f: File) => ({
-        file: f,
-        path: (f as any).webkitRelativePath || f.name
-      }));
+      const isUseful = (p: string, size: number) => {
+        if (size > 10 * 1024 * 1024) return false;
+        const lower = p.toLowerCase();
+        if (lower.includes('/cache/') || lower.includes('\\cache\\') || lower.includes('/dumps/') || lower.includes('thumbs.db') || lower.includes('.ds_store')) return false;
+        return true;
+      };
+      const entries = filesArr
+        .filter(f => isUseful((f as any).webkitRelativePath || f.name, f.size))
+        .map((f: File) => ({
+          file: f,
+          path: (f as any).webkitRelativePath || f.name
+        }));
       processTdataFolderEntries(entries);
     }
   };

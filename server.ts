@@ -120,7 +120,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '200mb' }));
 
   // Ensure sessions directory exists
   const sessionsDir = path.join(process.cwd(), "sessions");
