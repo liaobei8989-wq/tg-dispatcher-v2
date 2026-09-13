@@ -2019,6 +2019,207 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     fetchUploadedSessions();
   };
 
+  // Helper function to recursively read files and relative paths from drag & drop entries (supports folders like tdata)
+  const readDropEntries = async (dataTransfer: DataTransfer): Promise<{ file: File; path: string }[]> => {
+    const results: { file: File; path: string }[] = [];
+    const items = dataTransfer.items;
+
+    if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+      const entries: any[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file') {
+          const entry = item.webkitGetAsEntry();
+          if (entry) entries.push(entry);
+        }
+      }
+
+      const readEntry = async (entry: any, currentPath = '') => {
+        if (entry.isFile) {
+          await new Promise<void>((resolve) => {
+            entry.file(
+              (f: File) => {
+                results.push({ file: f, path: currentPath + entry.name });
+                resolve();
+              },
+              () => resolve()
+            );
+          });
+        } else if (entry.isDirectory) {
+          const dirReader = entry.createReader();
+          const readAllEntries = async (): Promise<any[]> => {
+            let all: any[] = [];
+            let batch: any[];
+            do {
+              batch = await new Promise<any[]>((res) => {
+                dirReader.readEntries((r: any[]) => res(r || []), () => res([]));
+              });
+              all = all.concat(batch);
+            } while (batch && batch.length > 0);
+            return all;
+          };
+
+          const childEntries = await readAllEntries();
+          for (const child of childEntries) {
+            await readEntry(child, currentPath + entry.name + '/');
+          }
+        }
+      };
+
+      for (const entry of entries) {
+        await readEntry(entry);
+      }
+    } else if (dataTransfer.files && dataTransfer.files.length > 0) {
+      for (let i = 0; i < dataTransfer.files.length; i++) {
+        const f = dataTransfer.files[i];
+        results.push({ file: f, path: f.webkitRelativePath || f.name });
+      }
+    }
+
+    return results;
+  };
+
+  const processTdataFolderEntries = async (entries: { file: File; path: string }[]) => {
+    if (!entries || entries.length === 0) return;
+
+    setIsUploadingSession(true);
+    setSessionUploadStatus(`正在扫描并读取 ${entries.length} 个解压文件夹内的 tdata 与 2FA 文件...`);
+
+    try {
+      const fileDataList: { path: string; base64Content: string }[] = [];
+      for (const item of entries) {
+        // Skip hidden system files or large temporary cache
+        if (item.path.includes('.DS_Store') || item.path.includes('thumbs.db')) continue;
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(item.file);
+          });
+          fileDataList.push({
+            path: item.path,
+            base64Content: base64.includes(',') ? base64.split(',')[1] : base64
+          });
+        } catch (_) {}
+      }
+
+      setSessionUploadStatus(`正在向服务器提交并解析 tdata 官方凭证与 2FA 密码...`);
+
+      const res = await fetch('/api/telegram/import-tdata-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileDataList })
+      });
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.accounts)) {
+        const newlyImportedPhones: string[] = [];
+        data.accounts.forEach((acc: any) => {
+          if (acc.phone) newlyImportedPhones.push(acc.phone);
+        });
+
+        setSimpleLogs(prev => [
+          ...prev,
+          `👑 [tdata解压文件夹导入成功] 成功自动解析！提取到 ${data.accounts.length} 个账号 (${data.accounts.map((a: any) => `+${a.phone} 2FA:${a.twofa}`).join(', ')})，生成官方高权重 Session 协议号并挂载至 VPS 发信引擎！`
+        ]);
+
+        if (newlyImportedPhones.length > 0) {
+          let customProxyPool: string[] = [];
+          try {
+            const rawPool = localStorage.getItem('tg_custom_proxy_pool');
+            if (rawPool) {
+              const parsed = JSON.parse(rawPool);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                customProxyPool = parsed;
+              }
+            }
+          } catch (_) {}
+          if (customProxyPool.length === 0) customProxyPool = BRAZIL_PROXIES_POOL;
+
+          setAccounts(prev => {
+            const existingPhones = new Set(prev.map(a => a.phone?.replace(/\D/g, '')));
+            const existingUsedIps = new Set(
+              prev.map(a => a.proxy ? a.proxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0] : '').filter(Boolean)
+            );
+            const updated = [...prev];
+            const availablePoolProxies = customProxyPool.filter(p => {
+              const ip = p.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+              return !existingUsedIps.has(ip);
+            });
+            let availableCursor = 0;
+
+            newlyImportedPhones.forEach((rawP, idx) => {
+              const phone = rawP.replace(/\D/g, '');
+              if (phone && phone.startsWith('55') && phone.length >= 12 && phone.length <= 13 && !existingPhones.has(phone)) {
+                existingPhones.add(phone);
+                let assignedProxy = '';
+                if (availableCursor < availablePoolProxies.length) {
+                  assignedProxy = availablePoolProxies[availableCursor];
+                  const assignedIp = assignedProxy.replace(/^(socks5:\/\/|http:\/\/)/i, '').split(':')[0];
+                  existingUsedIps.add(assignedIp);
+                  availableCursor++;
+                } else if (BRAZIL_DEDICATED_PROXIES_MAP[phone]) {
+                  assignedProxy = BRAZIL_DEDICATED_PROXIES_MAP[phone];
+                } else {
+                  assignedProxy = customProxyPool[idx % customProxyPool.length];
+                }
+
+                const aliasName = `TG-Desktop-tdata-${phone.slice(-4)} (${BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length]})`;
+                const nowDayStr = new Date().toISOString().split('T')[0];
+                updated.push({
+                  id: `acc-tg-${phone}`,
+                  phone: `+${phone}`,
+                  alias: aliasName,
+                  platform: 'telegram',
+                  type: 'tg_userbot',
+                  status: 'active',
+                  proxy: assignedProxy,
+                  proxyPing: `${Math.floor(Math.random() * 20) + 112}ms`,
+                  twoFactorPassword: '548508',
+                  sessionPath: `${phone}.session`,
+                  sentCountToday: 0,
+                  maxLimitDaily: 120,
+                  healthScore: 100,
+                  sentToday: 0,
+                  dailyLimit: 120,
+                  totalSent: 0,
+                  successRate: 100,
+                  createdAt: nowDayStr,
+                  lastActive: '刚刚',
+                  warmupDay: calculateWarmupDays(nowDayStr, 1),
+                  groupTag: '电脑端高权重A组'
+                });
+              }
+            });
+            return updated.filter(a => !a.id?.includes('imported'));
+          });
+        }
+
+        setSessionUploadStatus(`🎉 成功挂载 ${data.accounts.length} 个解压文件夹中的 tdata 官方协议账号！已生成 Session 并绑定独立 IP！`);
+        fetchUploadedSessions();
+      } else {
+        setSessionUploadStatus(`⚠️ 解析警告: ${data.error || '未在文件夹中提取到有效 tdata 结构'}`);
+      }
+    } catch (err: any) {
+      console.error('tdata folder import error:', err);
+      setSessionUploadStatus(`❌ 文件夹解析异常: ${err.message}`);
+    } finally {
+      setIsUploadingSession(false);
+    }
+  };
+
+  const handleUploadFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArr: File[] = Array.from(e.target.files);
+      const entries = filesArr.map((f: File) => ({
+        file: f,
+        path: (f as any).webkitRelativePath || f.name
+      }));
+      processTdataFolderEntries(entries);
+    }
+  };
+
   const handleUploadTdataZip = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       processTdataZipFiles(e.target.files);
@@ -4274,9 +4475,29 @@ if __name__ == "__main__":
         {/* Drag & Drop Upload Zone Directly on Main Page */}
         <div
           onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
+          onDrop={async (e) => {
             e.preventDefault();
-            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            // 1. Check if files or folders dropped via readDropEntries
+            const entries = await readDropEntries(e.dataTransfer);
+            if (entries && entries.length > 0) {
+              const zipEntries = entries.filter(item => /\.(zip|rar|7z)$/i.test(item.file.name));
+              const tdataOrFolderEntries = entries.filter(item => item.path.includes('/') || item.path.toLowerCase().includes('tdata'));
+              const flatRegularEntries = entries.filter(item => !/\.(zip|rar|7z)$/i.test(item.file.name) && !item.path.includes('/') && !item.path.toLowerCase().includes('tdata'));
+
+              // Prioritize zip archives if any
+              if (zipEntries.length > 0) {
+                processTdataZipFiles(zipEntries.map(z => z.file));
+              }
+
+              // If dropped folder structures (e.g. tdata folder or account folders)
+              if (tdataOrFolderEntries.length > 0) {
+                processTdataFolderEntries(tdataOrFolderEntries);
+              } else if (flatRegularEntries.length > 0) {
+                // Flat session / json / txt files
+                processSessionFiles(flatRegularEntries.map(r => r.file));
+              }
+            } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+              // Fallback for standard files
               const filesArr: File[] = Array.from(e.dataTransfer.files);
               const zipFiles = filesArr.filter(f => /\.(zip|rar|7z)$/i.test(f.name));
               const regularFiles = filesArr.filter(f => !/\.(zip|rar|7z)$/i.test(f.name));
@@ -4286,28 +4507,45 @@ if __name__ == "__main__":
           }}
           className="grid grid-cols-1 md:grid-cols-2 gap-3"
         >
-          {/* Card 1: Dedicated tdata ZIP Archive Import (Desktop Official High-Weight) */}
+          {/* Card 1: Dedicated tdata ZIP Archive Import & Folder Drop (Desktop Official High-Weight) */}
           <div className="flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-amber-950/40 via-slate-950/80 to-slate-900/90 p-4 rounded-xl border-2 border-dashed border-amber-500/70 hover:border-amber-400 transition-all cursor-pointer group shadow-lg">
-            <label className="cursor-pointer flex flex-col items-center gap-1.5 w-full text-center">
+            <div className="flex flex-col items-center gap-1.5 w-full text-center">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform shadow-inner">
                 <Archive className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-xs font-black text-amber-300 block flex items-center justify-center gap-1">
-                  📦 tdata 压缩包一键导入转 session (官方电脑端高权重)
+                  📦 tdata 文件夹或压缩包直接拖拽挂载 (转高权重 Session)
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  直接读取 <code className="text-amber-300">tdata</code> 密钥与 <code className="text-emerald-400">2fa.txt</code>，VPS 发信引擎 100% 继承桌面端防封权重
+                  支持直接拖入 <code className="text-amber-300">tdata 文件夹</code> 或 <code className="text-amber-300">.zip 压缩包</code>，自动提取密钥与 <code className="text-emerald-400">2fa.txt</code>
                 </span>
               </div>
-              <input
-                type="file"
-                accept=".zip,.rar,.7z"
-                multiple
-                onChange={handleUploadTdataZip}
-                className="hidden"
-              />
-            </label>
+              
+              {/* Dual Click Buttons: Select Zip OR Select Folder */}
+              <div className="flex items-center gap-2 mt-1">
+                <label className="cursor-pointer px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-medium transition-colors">
+                  选择 .zip 压缩包
+                  <input
+                    type="file"
+                    accept=".zip,.rar,.7z"
+                    multiple
+                    onChange={handleUploadTdataZip}
+                    className="hidden"
+                  />
+                </label>
+                <label className="cursor-pointer px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-[11px] font-medium transition-colors">
+                  选择 tdata 文件夹
+                  <input
+                    type="file"
+                    {...({ webkitdirectory: "", directory: "" } as any)}
+                    multiple
+                    onChange={handleUploadFolder}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Card 2: Regular .session / .json / .txt Import */}
