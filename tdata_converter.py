@@ -92,9 +92,12 @@ def parse_tdata_directory(tdata_path: str, output_sessions_dir: str, default_pho
 
     # Determine account phone number
     detected_phone = default_phone
+    if detected_phone and (detected_phone.startswith("1788") or len(detected_phone) > 13 or not detected_phone.startswith("55")):
+        detected_phone = None
+
     if not detected_phone:
-        # Check parent folder or tdata path for digits
-        m = re.search(r'(\d{10,15})', tdata_path)
+        # Check parent folder or tdata path for valid Brazil 55 phone (12-13 digits)
+        m = re.search(r'(55\d{10,11})', tdata_path)
         if m:
             detected_phone = m.group(1)
 

@@ -295,10 +295,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
         folderGroups[rootFolder].paths.push(path);
         folderGroups[rootFolder].files.push(file);
 
-        // Try extracting phone from path or root folder name
-        const pathDigits = path.match(/\d{8,15}/);
-        if (pathDigits && !folderGroups[rootFolder].phone) {
-          folderGroups[rootFolder].phone = pathDigits[0];
+        // Try extracting phone from path or root folder name - prioritize valid Brazil numbers (+55..., 12-13 digits) and reject timestamps (e.g. 1788007788382)
+        const pathBrazilPhone = path.match(/55\d{10,11}/);
+        if (pathBrazilPhone && !folderGroups[rootFolder].phone) {
+          folderGroups[rootFolder].phone = pathBrazilPhone[0];
         }
       });
 
@@ -421,10 +421,10 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
               }
             }
 
-            // Digits from relativePath or folder name
-            const digits = relativePath.match(/\d{8,15}/);
-            if (digits && !group.phone) {
-              group.phone = digits[0];
+            // Digits from relativePath or folder name - strictly match Brazil 55 phone number, ignore timestamps like 1788...
+            const brazilDigits = relativePath.match(/55\d{10,11}/);
+            if (brazilDigits && !group.phone) {
+              group.phone = brazilDigits[0];
             }
 
             // session files
@@ -466,13 +466,14 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
 
             if (hasTdata) {
               zipTdataDetected = true;
-              const phone = group.phone || (file.name.match(/\d{8,15}/)?.[0]);
+              const phone = group.phone || (file.name.match(/55\d{10,11}/)?.[0]);
               let phoneFormatted = '';
-              if (phone) {
-                const cleanPhone = phone.startsWith('+') ? phone : phone.startsWith('55') ? formatBrazilPhone(phone) : `+${phone}`;
-                phoneFormatted = zipGroupKeys.length > 1 && !group.phone ? `${cleanPhone}_${accountSeq}` : cleanPhone;
+              const cleanDigits = phone ? phone.replace(/\D/g, '') : '';
+              if (cleanDigits && cleanDigits.startsWith('55') && (cleanDigits.length === 12 || cleanDigits.length === 13)) {
+                const formatted = formatBrazilPhone(cleanDigits);
+                phoneFormatted = zipGroupKeys.length > 1 && !group.phone ? `${formatted}_${accountSeq}` : formatted;
               } else {
-                phoneFormatted = `+55 31 9${Math.floor(80000000 + Math.random() * 10000000)}`;
+                phoneFormatted = formatBrazilPhone(`551197${Math.floor(100000 + Math.random() * 900000)}`);
               }
               const alias = `TG-TData-${gKey === 'root' ? file.name.replace(/\.(zip|rar|7z)$/i, '') : gKey}`;
               const passInfo = group.twoFaPassword ? `, 2FA:${group.twoFaPassword}` : '';
@@ -480,8 +481,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
               accountSeq++;
             } else if (group.sessionNames.length > 0) {
               group.sessionNames.forEach((sName) => {
+                const brazilMatch = sName.match(/55\d{10,11}/);
                 const digits = sName.match(/\d+/);
-                const phone = digits && digits[0].length >= 8 ? digits[0] : sName;
+                const phone = brazilMatch ? formatBrazilPhone(brazilMatch[0]) : (digits && digits[0].length >= 10 && digits[0].startsWith('55') ? formatBrazilPhone(digits[0]) : sName);
                 combinedText += `${phone}, TG-Session-${sName}\n`;
               });
             } else if (group.jsonItems.length > 0) {
@@ -501,8 +503,8 @@ export const AccountManager: React.FC<AccountManagerProps> = ({
                 combinedText += `${txt}\n`;
               });
             } else if (gKey === 'root' && zipGroupKeys.length === 1) {
-              const zipDigits = file.name.match(/\d{8,15}/);
-              const zipPhone = zipDigits ? (zipDigits[0].startsWith('55') ? formatBrazilPhone(zipDigits[0]) : `+${zipDigits[0]}`) : `+55 31 9${Math.floor(80000000 + Math.random() * 10000000)}`;
+              const zipDigits = file.name.match(/55\d{10,11}/);
+              const zipPhone = zipDigits ? formatBrazilPhone(zipDigits[0]) : formatBrazilPhone(`551197${Math.floor(100000 + Math.random() * 900000)}`);
               combinedText += `${zipPhone}, TG-ZIP-${file.name.replace(/\.(zip|rar|7z)$/i, '')}\n`;
             }
           }

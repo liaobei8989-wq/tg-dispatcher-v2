@@ -605,7 +605,7 @@ async function startServer() {
           const raw = fs.readFileSync(filePath, 'utf-8');
           const data = JSON.parse(raw);
           const rawPhone = String(data.phone || jf.replace('.json', '')).replace(/[^0-9]/g, '');
-          if (!rawPhone || rawPhone.length < 8 || obsoletePhones.has(rawPhone) || processedPhones.has(rawPhone)) return;
+          if (!rawPhone || !rawPhone.startsWith('55') || rawPhone.length < 12 || rawPhone.length > 13 || rawPhone.startsWith('1788') || obsoletePhones.has(rawPhone) || processedPhones.has(rawPhone)) return;
           
           processedPhones.add(rawPhone);
           const formattedPhone = formatPhoneDisplay(rawPhone);
@@ -667,7 +667,7 @@ async function startServer() {
       // 2. Process standalone .session files (if JSON was missing)
       sessionFiles.forEach((sf, idx) => {
         const rawPhone = sf.replace('.session', '').replace(/[^0-9]/g, '');
-        if (!rawPhone || rawPhone.length < 8 || obsoletePhones.has(rawPhone) || processedPhones.has(rawPhone)) return;
+        if (!rawPhone || !rawPhone.startsWith('55') || rawPhone.length < 12 || rawPhone.length > 13 || rawPhone.startsWith('1788') || obsoletePhones.has(rawPhone) || processedPhones.has(rawPhone)) return;
 
         processedPhones.add(rawPhone);
         const formattedPhone = formatPhoneDisplay(rawPhone);
@@ -830,8 +830,8 @@ async function startServer() {
         // Check each folder part from leaf to root to find phone number folder (e.g., 5586994850500)
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
-          // Match 55 phone number or 10-15 digit folder name
-          const m = part.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
+          // Strictly match Brazil 55 phone number (12-13 digits). Do NOT match timestamp order prefixes like 1788007788382
+          const m = part.match(/55\d{10,11}/);
           if (m) {
             detectedPhone = m[0];
             groupKey = parts.slice(0, i + 1).join("/");
@@ -899,8 +899,8 @@ async function startServer() {
       const groupKeys = Object.keys(validGroups);
       if (groupKeys.length === 0 || (groupKeys.length === 1 && groupKeys[0] === "root")) {
         const rootGroup = validGroups["root"] || { hasTdata: false, files: [] };
-        // Prioritize matching Brazilian phone +55... in filename, avoiding timestamps like 1788007788382
-        const fileNameDigits = fileName.match(/55\d{10,11}/) || fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/);
+        // Prioritize matching Brazilian phone +55... in filename, strictly rejecting timestamps like 1788007788382
+        const fileNameDigits = fileName.match(/55\d{10,11}/);
         if (fileNameDigits && !rootGroup.phone) {
           rootGroup.phone = fileNameDigits[0];
         }
@@ -916,8 +916,8 @@ async function startServer() {
       }
 
       for (const [gKey, grp] of Object.entries(validGroups)) {
-        let phone = grp.phone || (gKey.match(/55\d{10,11}/)?.[0]) || (fileName.match(/55\d{10,11}/)?.[0]) || (gKey.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]) || (fileName.match(/(?:55\d{8,12}|\b\d{10,15}\b)/)?.[0]);
-        if (!phone) {
+        let phone = grp.phone || (gKey.match(/55\d{10,11}/)?.[0]) || (fileName.match(/55\d{10,11}/)?.[0]);
+        if (!phone || phone.startsWith("1788") || phone.length > 13) {
           phone = `55${Math.floor(8000000000 + Math.random() * 1000000000)}`;
         }
         const cleanPhone = phone.replace(/\D/g, "");

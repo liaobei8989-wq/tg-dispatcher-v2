@@ -272,7 +272,7 @@ export const LeadScraperHub: React.FC<LeadScraperHubProps> = ({
             >
               {accounts.map(acc => (
                 <option key={acc.phone} value={acc.phone}>
-                  {acc.name} ({acc.phone}) - {acc.status === 'active' ? '🟢 在线' : '⚪ 离线'}
+                  {(acc as any).name || acc.alias || 'TG协议号'} ({acc.phone}) - {acc.status === 'active' ? '🟢 在线' : '⚪ 离线'}
                 </option>
               ))}
             </select>
