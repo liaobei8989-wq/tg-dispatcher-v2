@@ -3801,7 +3801,28 @@ if __name__ == "__main__":
 
             if (isAbortedRef.current) break;
 
-            const resData = await resp.json();
+            let resData: any = {};
+            const rawResponseText = await resp.text();
+            try {
+              resData = JSON.parse(rawResponseText);
+            } catch (jsonErr) {
+              const trimmed = rawResponseText.trim();
+              if (trimmed.startsWith('<') || trimmed.includes('<!DOCTYPE') || trimmed.includes('<html')) {
+                let diag = `服务器返回了网页而非数据 (HTTP ${resp.status}): `;
+                if (resp.status === 524 || trimmed.includes('Cloudflare') || trimmed.includes('524: A timeout occurred')) {
+                  diag += 'Cloudflare 代理超时 (524) 或 WAF 拦截，请检查 Cloudflare 规则或关闭小云朵代理';
+                } else if (resp.status === 502 || trimmed.includes('502 Bad Gateway')) {
+                  diag += 'Nginx 502 Bad Gateway，Node.js 后端服务未运行或崩溃 (请在 VPS 运行 node dist/server.cjs 或 pm2 status)';
+                } else if (resp.status === 404) {
+                  diag += '接口 404 未找到，Nginx 缺少 /api/ 反代规则，请求误入前端单页 index.html';
+                } else {
+                  diag += `反向代理/网关拦截 (HTTP ${resp.status})，请检查 VPS 后端进程与 Nginx proxy_pass 配置`;
+                }
+                throw new Error(diag);
+              } else {
+                throw new Error(`无法解析服务器响应: ${rawResponseText.slice(0, 100)}`);
+              }
+            }
             const sessionLabel = acc.sessionFile ? `凭证: ${acc.sessionFile}` : '集群协议号';
 
             if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {

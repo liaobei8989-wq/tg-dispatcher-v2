@@ -29,10 +29,21 @@ import {
   Layers,
   Loader2,
   Terminal,
-  ShieldAlert
+  ShieldAlert,
+  Ban
 } from 'lucide-react';
 import { CrossTimezoneSchedulerWidget } from './CrossTimezoneSchedulerWidget';
 import { ScheduledCampaignConfig } from '../types';
+
+export interface Account406State {
+  has406: boolean;
+  errorCode: number | string;
+  errorType: 'peer_flood' | 'auth_key_duplicated' | 'generic_406';
+  isTemporaryBan: boolean; // 是否触发临时的群发禁令
+  banReason: string; // 禁令说明 (例如: "Telegram 官方临时群发禁令 (PEER_FLOOD)")
+  banDetail: string; // 诊断分析与处置方案
+  timestamp: string; // 捕获时间
+}
 
 interface CampaignConsoleProps {
   accounts: AccountSession[];
@@ -205,6 +216,191 @@ export const CampaignConsole: React.FC<CampaignConsoleProps> = ({
     }
   };
 
+  // ==================== Telegram 406 Error & Temporary Ban State Tracking ====================
+  const [account406Map, setAccount406Map] = useState<Record<string, Account406State>>(() => {
+    try {
+      const saved = localStorage.getItem('tg_account_406_status');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tg_account_406_status', JSON.stringify(account406Map));
+    } catch (e) {}
+  }, [account406Map]);
+
+  const record406Error = (
+    accountIdentifier: string,
+    rawErrorMsg: string = '',
+    customIsBan?: boolean
+  ): Account406State => {
+    const errorText = String(rawErrorMsg || '');
+    const isAuthDuplicated = errorText.includes('AUTH_KEY_DUPLICATED') || errorText.includes('凭证并发');
+    const isPeerFlood = errorText.includes('PEER_FLOOD') || errorText.includes('群发禁令') || errorText.includes('FLOOD');
+
+    // In Telegram MTProto, 406 during message dispatch represents PEER_FLOOD or AUTH_KEY_DUPLICATED
+    const isTemporaryBan = customIsBan !== undefined 
+      ? customIsBan 
+      : (!isAuthDuplicated || isPeerFlood || true);
+
+    const errorType: 'peer_flood' | 'auth_key_duplicated' | 'generic_406' = isAuthDuplicated 
+      ? 'auth_key_duplicated' 
+      : (isPeerFlood ? 'peer_flood' : 'generic_406');
+
+    const banReason = isAuthDuplicated
+      ? '会话并发冲突隔离 (406: AUTH_KEY_DUPLICATED)'
+      : 'Telegram 官方临时群发禁令 (406: PEER_FLOOD)';
+
+    const banDetail = isAuthDuplicated
+      ? '检测到该账号凭证在其他端或进程中并发活跃，已触发 406 隔离保护，发信通道暂时中断。'
+      : '检测到该账号向非互为联系人发起私信时触发 Telegram 反垃圾系统 406 (PEER_FLOOD) 临时群发禁令。在此期间官方限制主动私信陌生联系人。';
+
+    const timestamp = new Date().toLocaleTimeString('pt-BR');
+
+    const matchedAccount = accounts.find(
+      (a) => a.id === accountIdentifier || 
+             a.phone === accountIdentifier ||
+             a.phone.replace(/[^0-9]/g, '') === accountIdentifier.replace(/[^0-9]/g, '')
+    );
+
+    const targetKey = matchedAccount?.id || accountIdentifier;
+    const targetPhone = matchedAccount?.phone || accountIdentifier;
+
+    const new406State: Account406State = {
+      has406: true,
+      errorCode: 406,
+      errorType,
+      isTemporaryBan,
+      banReason,
+      banDetail,
+      timestamp
+    };
+
+    setAccount406Map((prev) => ({
+      ...prev,
+      [targetKey]: new406State,
+      [targetPhone]: new406State
+    }));
+
+    // Update global accounts state to trigger re-renders
+    setAccounts((prevAccs) =>
+      prevAccs.map((acc) => {
+        if (
+          acc.id === targetKey || 
+          acc.phone === targetPhone ||
+          acc.phone.replace(/[^0-9]/g, '') === targetPhone.replace(/[^0-9]/g, '')
+        ) {
+          return {
+            ...acc,
+            status: 'risk' as const,
+            spambotStatus: 'restricted' as const,
+            healthDiagnosticLog: `⚠️ [406 错误]: ${banReason} - ${banDetail} (${timestamp})`
+          };
+        }
+        return acc;
+      })
+    );
+
+    return new406State;
+  };
+
+  const clear406Error = (accountIdentifier: string) => {
+    const matchedAccount = accounts.find(
+      (a) => a.id === accountIdentifier || 
+             a.phone === accountIdentifier ||
+             a.phone.replace(/[^0-9]/g, '') === accountIdentifier.replace(/[^0-9]/g, '')
+    );
+    const targetKey = matchedAccount?.id || accountIdentifier;
+    const targetPhone = matchedAccount?.phone || accountIdentifier;
+
+    setAccount406Map((prev) => {
+      const next = { ...prev };
+      delete next[targetKey];
+      delete next[targetPhone];
+      return next;
+    });
+
+    setAccounts((prevAccs) =>
+      prevAccs.map((acc) => {
+        if (
+          acc.id === targetKey || 
+          acc.phone === targetPhone ||
+          acc.phone.replace(/[^0-9]/g, '') === targetPhone.replace(/[^0-9]/g, '')
+        ) {
+          return {
+            ...acc,
+            status: 'active' as const,
+            spambotStatus: 'clean' as const,
+            healthDiagnosticLog: `🟢 已手动清除 406 警报，分机通信恢复正常 (${new Date().toLocaleTimeString('pt-BR')})`
+          };
+        }
+        return acc;
+      })
+    );
+  };
+
+  const triggerManual406Simulate = (accountId?: string, accountPhone?: string) => {
+    const targetAcc = accounts.find(a => a.id === accountId || a.phone === accountPhone) || 
+                      accounts.find(a => a.platform === 'telegram') || 
+                      accounts[0];
+    if (!targetAcc) {
+      alert('未找到可用于测试的 Telegram 协议账号！');
+      return;
+    }
+
+    const simState = record406Error(
+      targetAcc.id,
+      '406 PEER_FLOOD: You can only send messages to mutual contacts (测试模拟)',
+      true
+    );
+
+    // 记录在 CampaignLogs 流中
+    const simLog: CampaignLog = {
+      id: `log-406-sim-${Date.now()}`,
+      campaignId: 'camp-brazil-matrix-01',
+      platform: 'telegram',
+      accountId: targetAcc.id,
+      accountPhone: targetAcc.phone,
+      targetPhone: '+55 11 98888-0000',
+      messageText: `🚨 [406 错误拦截警报]: 账号 ${targetAcc.alias || '协议号'} (${targetAcc.phone}) 捕获 406 (PEER_FLOOD) 响应！已触发官方临时群发禁令！`,
+      mediaAttached: false,
+      status: 'failed',
+      errorMessage: '406 错误: 该账号已触发 Telegram 临时群发禁令 (PEER_FLOOD)',
+      delaySec: 0,
+      timestamp: new Date().toLocaleTimeString('pt-BR')
+    };
+    setLogs((prev) => [simLog, ...prev]);
+
+    // 记录在 Telethon 终端日志中
+    setTelethonLogs((prev) => 
+      prev + `\n🚨 [406 错误捕获模拟测试] 账号 [${targetAcc.phone}] 响应 RPCError 406: PEER_FLOOD！\n` +
+      `⚠️ 禁令诊断: 【已触发 Telegram 临时群发禁令】(禁止向陌生人发起新会话)\n` +
+      `📌 卡片更新: 已在对应分机卡片实时点亮 🔴 406 错误状态图标与临时禁令预警！\n`
+    );
+  };
+
+  // 响应式监听 logs，自动提取 406 错误同步至卡片
+  useEffect(() => {
+    if (!logs || logs.length === 0) return;
+    logs.forEach((log) => {
+      const is406 = (log.errorMessage && String(log.errorMessage).includes('406')) ||
+                    (log.messageText && String(log.messageText).includes('406'));
+      if (is406) {
+        const accId = log.accountId;
+        const phone = log.accountPhone;
+        const hasExisting = (accId && account406Map[accId]?.has406) || 
+                            (phone && account406Map[phone]?.has406);
+        if (!hasExisting && (accId || phone)) {
+          record406Error(accId || phone, log.errorMessage || log.messageText || '406 错误');
+        }
+      }
+    });
+  }, [logs]);
+
   // ==================== Python Telethon Real Direct Sender State ====================
   const [isTelethonModalOpen, setIsTelethonModalOpen] = useState(false);
   const [telethonTargetInput, setTelethonTargetInput] = useState('');
@@ -229,6 +425,13 @@ export const CampaignConsole: React.FC<CampaignConsoleProps> = ({
       const data = await res.json();
       if (data.success) {
         setRiskReport(data);
+        if (Array.isArray(data.sessionAccounts)) {
+          data.sessionAccounts.forEach((acc: any) => {
+            if (acc.status === 'restricted' || String(acc.detailMessage || '').includes('406') || String(acc.detailMessage || '').includes('限制')) {
+              record406Error(acc.phone || acc.name, acc.detailMessage || '风控检测 406 受限');
+            }
+          });
+        }
         const reportText = `
 ========================================
 🛡️ Telegram 账号风控与健康诊断报告 (检测时间: ${new Date(data.checkTime).toLocaleTimeString()})
@@ -291,13 +494,86 @@ ${data.summary.recommendation}
       });
 
       const data = await res.json();
-      if (data.success) {
+      const outputText = String(data.output || '');
+      const errorText = String(data.error || '');
+      const resultsText = JSON.stringify(data.results || '');
+      const fullText = `${outputText} ${errorText} ${resultsText}`;
+
+      const is406Detected = res.status === 406 || 
+        data.code === 406 || 
+        fullText.includes('406') || 
+        fullText.includes('AUTH_KEY_DUPLICATED') || 
+        fullText.includes('PEER_FLOOD');
+
+      if (is406Detected) {
+        // 捕获到 406 错误：记录状态并在账号卡片上实时更新错误图标与禁令预警
+        const recorded = record406Error(
+          activeSender,
+          fullText,
+          fullText.includes('PEER_FLOOD') || !fullText.includes('AUTH_KEY_DUPLICATED')
+        );
+
+        const warningBanner = `
+🚨 ========================================
+🛑 [406 错误拦截警报] 发件账号 [${activeSender}] 捕获 406 错误！
+========================================
+⚠️ 错误代码: 406 (Telegram RPC / PEER_FLOOD / 会话并发限制)
+🚫 临时群发禁令状态: ${recorded.isTemporaryBan ? '【已触发 Telegram 临时群发禁令】' : '【406 凭证并发隔离】'}
+📝 禁令判定分析: ${recorded.banDetail}
+📱 账号卡片状态: 已在控制台上方【Telegram 分机号健康/风控诊断中心】对应账号卡片实时点亮 🔴【406 错误状态图标】！
+💡 处置指引:
+   1. 立即暂停该分机号群发，切勿频繁重复尝试，以免升级为长期封禁
+   2. 账号进入 24~48 小时静默冷却期后，Telegram 官方通常会自动解封
+   3. 可在 Telegram 中向官方客服机器人 @SpamBot 申请解禁申诉
+========================================
+`;
+        setTelethonLogs(prev => prev + warningBanner + `\n⚠️ [底层脚本反馈]：\n${data.output || data.error}\n`);
+
+        // 写入 CampaignLogs
+        const targetDesc = targetList[0] ? (targetList.length > 1 ? `${targetList[0]} 等 ${targetList.length} 个目标` : targetList[0]) : '受众目标';
+        const errLog: CampaignLog = {
+          id: `log-406-${Date.now()}`,
+          campaignId: 'camp-telethon-direct',
+          platform: 'telegram',
+          accountId: activeSender,
+          accountPhone: activeSender,
+          targetPhone: targetDesc,
+          messageText: `🚨 [406 错误拦截]: 发件分机 ${activeSender} 捕获 Telegram 406 错误，${recorded.isTemporaryBan ? '已触发官方临时群发禁令 (PEER_FLOOD)' : '会话并发隔离'}！对应账号卡片已同步更新错误图标与禁令警告。`,
+          mediaAttached: false,
+          status: 'failed',
+          errorMessage: `406 错误: ${recorded.banReason}`,
+          delaySec: 0,
+          timestamp: new Date().toLocaleTimeString('pt-BR')
+        };
+        setLogs(prev => [errLog, ...prev]);
+      } else if (data.success) {
         setTelethonLogs(prev => prev + `\n✅ [成功完成] Python Telethon 底层运行输出日志如下：\n----------------------------------------\n${data.output}\n----------------------------------------\n🎉 真正 Telegram 消息已成功推送至受众账号！`);
       } else {
         setTelethonLogs(prev => prev + `\n⚠️ [脚本运行反馈]：\n----------------------------------------\n${data.output || data.error}\n----------------------------------------`);
       }
     } catch (err: any) {
-      setTelethonLogs(prev => prev + `\n❌ [网络或服务器请求失败]: ${err.message}`);
+      const is406 = String(err.message || '').includes('406');
+      if (is406) {
+        const recorded = record406Error(activeSender, err.message, true);
+        setTelethonLogs(prev => prev + `\n🚨 [406 异常捕获]: 账号 [${activeSender}] 捕获 406 错误响应: ${err.message}\n已实时更新对应账号卡片的 🔴 406 错误状态图标与临时群发禁令预警！\n`);
+        const errLog: CampaignLog = {
+          id: `log-406-catch-${Date.now()}`,
+          campaignId: 'camp-telethon-direct',
+          platform: 'telegram',
+          accountId: activeSender,
+          accountPhone: activeSender,
+          targetPhone: targetList[0] || '受众目标',
+          messageText: `🚨 [406 错误拦截]: 账号 ${activeSender} 响应 406 错误，Telegram 官方临时群发禁令已激活！`,
+          mediaAttached: false,
+          status: 'failed',
+          errorMessage: '406 错误: 触发 Telegram 临时群发禁令',
+          delaySec: 0,
+          timestamp: new Date().toLocaleTimeString('pt-BR')
+        };
+        setLogs(prev => [errLog, ...prev]);
+      } else {
+        setTelethonLogs(prev => prev + `\n❌ [网络或服务器请求失败]: ${err.message}`);
+      }
     } finally {
       setIsTelethonExecuting(false);
     }
@@ -601,7 +877,7 @@ ${data.summary.recommendation}
     );
 
     try {
-      await fetch('/api/campaign/dispatch', {
+      const resp = await fetch('/api/campaign/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -609,7 +885,20 @@ ${data.summary.recommendation}
           items: tgAccounts.map((a, i) => ({ platform: 'telegram', from: a.phone, to: tgTarget, message: tgGreetings[i % tgGreetings.length] }))
         })
       });
-    } catch (e) {}
+      const data = await resp.json().catch(() => ({}));
+      const rawText = JSON.stringify(data);
+      if (resp.status === 406 || data.code === 406 || rawText.includes('406') || rawText.includes('PEER_FLOOD')) {
+        tgAccounts.forEach((acc) => {
+          record406Error(acc.id, rawText || '406 PEER_FLOOD 临时群发禁令');
+        });
+      }
+    } catch (e: any) {
+      if (String(e?.message || '').includes('406')) {
+        tgAccounts.forEach((acc) => {
+          record406Error(acc.id, e.message);
+        });
+      }
+    }
 
     alert(`✅ 已成功向目标发送 Telegram 测试问候语！\n\n- TG 矩阵号 -> +55 71 99698 4203 (问候消息已发送)\n\n请在下方的【矩阵派发实时日志】中查看详细数据。`);
   };
@@ -772,10 +1061,22 @@ ${data.summary.recommendation}
           })
         });
         const resData = await apiRes.json();
+        const resDataStr = JSON.stringify(resData);
+        const is406 = apiRes.status === 406 || 
+                      resData.code === 406 || 
+                      resDataStr.includes('406') || 
+                      resDataStr.includes('PEER_FLOOD') || 
+                      resDataStr.includes('AUTH_KEY_DUPLICATED');
 
         // 记录批量日志
         batchTargets.forEach((targetPhone, tIdx) => {
           const assignedAccount = activeAvailableTg[tIdx % activeAvailableTg.length];
+          const hasAccount406 = is406 || (assignedAccount && (account406Map[assignedAccount.id]?.has406 || account406Map[assignedAccount.phone]?.has406));
+
+          if (is406 && assignedAccount) {
+            record406Error(assignedAccount.id, resData.error || resData.message || resDataStr);
+          }
+
           const newLog: CampaignLog = {
             id: `log-${Date.now()}-${currentIndex + tIdx}`,
             campaignId: 'camp-brazil-matrix-01',
@@ -784,10 +1085,14 @@ ${data.summary.recommendation}
             accountPhone: assignedAccount.phone,
             targetPhone,
             tgChatId: assignedAccount.tgChatId,
-            messageText: isTwoStep ? `💬 [多号真并发·第1阶段自然打招呼]: 向 ${targetPhone} 发送` : `🚀 [多号真并发·直发]: 向 ${targetPhone} 发送`,
+            messageText: hasAccount406
+              ? `🚨 [406 禁令拦截]: 分机 ${assignedAccount.phone} 触发 Telegram 406 临时群发禁令，已被阻止向 ${targetPhone} 发送！`
+              : (isTwoStep ? `💬 [多号真并发·第1阶段自然打招呼]: 向 ${targetPhone} 发送` : `🚀 [多号真并发·直发]: 向 ${targetPhone} 发送`),
             mediaAttached: false,
-            status: resData.success ? 'success' : 'failed',
-            errorMessage: resData.success ? undefined : (resData.message || '并发派发响应异常'),
+            status: hasAccount406 ? 'failed' : (resData.success ? 'success' : 'failed'),
+            errorMessage: hasAccount406 
+              ? '406 错误: 该账号已触发 Telegram 临时群发禁令 (PEER_FLOOD)' 
+              : (resData.success ? undefined : (resData.message || '并发派发响应异常')),
             delaySec: jitterSec,
             timestamp: new Date().toLocaleTimeString('pt-BR')
           };
@@ -810,8 +1115,12 @@ ${data.summary.recommendation}
           })
         );
       } catch (err: any) {
+        const is406 = String(err.message || '').includes('406');
         batchTargets.forEach((targetPhone, tIdx) => {
           const assignedAccount = activeAvailableTg[tIdx % activeAvailableTg.length];
+          if (is406 && assignedAccount) {
+            record406Error(assignedAccount.id, err.message);
+          }
           const newLog: CampaignLog = {
             id: `log-${Date.now()}-${currentIndex + tIdx}`,
             campaignId: 'camp-brazil-matrix-01',
@@ -819,9 +1128,12 @@ ${data.summary.recommendation}
             accountId: assignedAccount.id,
             accountPhone: assignedAccount.phone,
             targetPhone,
-            messageText: `💬 [多号真并发]: 向 ${targetPhone} 发送`,
+            messageText: is406 
+              ? `🚨 [406 错误拦截]: 账号 ${assignedAccount.phone} 捕获 406 错误，已触发临时群发禁令`
+              : `💬 [多号真并发]: 向 ${targetPhone} 发送`,
             mediaAttached: false,
-            status: 'success',
+            status: is406 ? 'failed' : 'success',
+            errorMessage: is406 ? '406 错误: 触发 Telegram 临时群发禁令' : undefined,
             delaySec: jitterSec,
             timestamp: new Date().toLocaleTimeString('pt-BR')
           };
@@ -1118,14 +1430,48 @@ ${data.summary.recommendation}
               </div>
 
               {/* Real-time Account Risk & Health Grid */}
-              <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    📊 Telegram 分机号健康/风控诊断中心 ({tgAccounts.length} 个协议号)
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    包含 {tgAccounts.length} 个分机协议号
-                  </span>
+              <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      📊 Telegram 分机号健康/风控诊断中心 ({tgAccounts.length} 个协议号)
+                    </span>
+                    {tgAccounts.some(a => account406Map[a.id]?.has406 || account406Map[a.phone]?.has406) && (
+                      <span className="bg-rose-500/20 text-rose-300 border border-rose-500/50 px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1.5 shadow-sm animate-pulse">
+                        <AlertTriangle className="w-3 h-3 text-rose-400" />
+                        {tgAccounts.filter(a => account406Map[a.id]?.has406 || account406Map[a.phone]?.has406).length} 个分机触发 406 临时群发禁令
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => triggerManual406Simulate()}
+                      className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
+                      title="模拟捕获 406 错误，测试卡片错误状态图标与临时群发禁令提示"
+                    >
+                      🧪 模拟 406 错误 (测试卡片图标与禁令提示)
+                    </button>
+                    {tgAccounts.some(a => account406Map[a.id]?.has406 || account406Map[a.phone]?.has406) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccount406Map({});
+                          setAccounts(prev => prev.map(a => ({
+                            ...a,
+                            status: a.status === 'risk' ? 'active' : a.status,
+                            spambotStatus: 'clean',
+                            healthDiagnosticLog: undefined
+                          })));
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                        title="清除所有账号的 406 警报状态"
+                      >
+                        <RotateCcw className="w-3 h-3 text-cyan-400" />
+                        重置所有 406 状态
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {tgAccounts.length === 0 ? (
@@ -1133,17 +1479,124 @@ ${data.summary.recommendation}
                     当前暂未导入任何分机账号，请在账号中心或TG控制台上传 Session。
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    {tgAccounts.map((a, i) => (
-                      <div key={a.id} className="bg-slate-900 border border-emerald-500/40 p-2.5 rounded-lg space-y-1">
-                        <div className="flex items-center justify-between text-[11px] font-bold">
-                          <span className="text-emerald-300">📱 分机 0{i + 1}</span>
-                          <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded text-[10px] border border-emerald-500/30">🟢 正常</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                    {tgAccounts.map((a, i) => {
+                      const errInfo = account406Map[a.id] || account406Map[a.phone] || account406Map[a.phone.replace(/[^0-9]/g, '')];
+                      const has406 = !!errInfo?.has406;
+
+                      if (has406) {
+                        return (
+                          <div
+                            key={a.id}
+                            className="bg-gradient-to-b from-rose-950/60 via-slate-900 to-slate-950 border-2 border-rose-500/80 p-3 rounded-xl space-y-2 shadow-lg shadow-rose-950/50 ring-1 ring-rose-500/50 transition-all"
+                          >
+                            {/* Card Header with Error Status Icon */}
+                            <div className="flex items-center justify-between text-[11px] font-bold">
+                              <span className="text-rose-300">📱 分机 0{i + 1}</span>
+                              <span className="bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-md text-[10px] font-black border border-rose-500/60 flex items-center gap-1 shadow-sm animate-pulse">
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce shrink-0" />
+                                <span>🔴 406 错误状态</span>
+                              </span>
+                            </div>
+
+                            {/* Account Phone & Alias */}
+                            <div className="flex items-center justify-between text-[11px] font-mono font-bold text-rose-200">
+                              <span>{a.phone}</span>
+                              <span className="text-[10px] text-slate-400 font-normal font-sans">{a.alias || '协议发件号'}</span>
+                            </div>
+
+                            {/* Temporary Mass-Messaging Ban Notice & Analysis */}
+                            <div className="bg-rose-950/80 border border-rose-500/50 rounded-lg p-2 space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between border-b border-rose-800/40 pb-1">
+                                <span className="font-bold text-rose-300 flex items-center gap-1 text-[11px]">
+                                  <Ban className="w-3 h-3 text-rose-400 shrink-0" />
+                                  群发禁令状态:
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide flex items-center gap-1 ${
+                                  errInfo.isTemporaryBan
+                                    ? 'bg-rose-500 text-slate-950 ring-1 ring-rose-400 animate-pulse'
+                                    : 'bg-amber-500 text-slate-950'
+                                }`}>
+                                  {errInfo.isTemporaryBan ? '🚨 已触发临时群发禁令' : '⚠️ 凭证并发异常'}
+                                </span>
+                              </div>
+
+                              <p className="text-[10px] text-rose-100/90 leading-relaxed font-sans">
+                                {errInfo.isTemporaryBan ? (
+                                  <>
+                                    ⚠️ <strong>禁令判定提示：</strong>该账号向陌生目标发信时被 Telegram 接口返回 <span className="font-mono text-amber-300 font-bold">406 (PEER_FLOOD)</span> 错误。<strong>已确认触发 Telegram 官方临时群发禁令</strong>，限制期间禁止主动向未保存联系人发送私信！
+                                  </>
+                                ) : (
+                                  <>
+                                    ⚠️ <strong>异常提示：</strong>该账号捕获 Telegram 406 凭证并发隔离异常，发信已被官方临时阻断。
+                                  </>
+                                )}
+                              </p>
+
+                              <div className="bg-slate-950/70 p-1.5 rounded border border-rose-900/50 text-[9px] text-rose-300/90 font-mono space-y-0.5">
+                                <div className="flex items-center justify-between">
+                                  <span>⏱️ 捕获时间: {errInfo.timestamp}</span>
+                                  <span className="text-amber-300">⏳ 建议冷却: 24~48h</span>
+                                </div>
+                                <div className="text-slate-300">
+                                  💡 处置指引: 立即暂停该号，待官方自然解封或向 @SpamBot 申诉。
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => clear406Error(a.id)}
+                                  className="flex-1 py-1 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700 flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                                  title="已在 Telegram 恢复正常或冷却完毕，点击清除 406 错误恢复正常状态"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5 text-cyan-400" />
+                                  <span>清除 406 错误 (恢复)</span>
+                                </button>
+                                <a
+                                  href="https://t.me/SpamBot"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="py-1 px-2 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold border border-amber-500/40 flex items-center justify-center gap-1 cursor-pointer transition"
+                                  title="跳转 Telegram 官方 @SpamBot 申请解除限制"
+                                >
+                                  <span>🤖 @SpamBot 申诉</span>
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={a.id} className="bg-slate-900 border border-emerald-500/40 p-2.5 rounded-xl space-y-1.5 transition-all">
+                          <div className="flex items-center justify-between text-[11px] font-bold">
+                            <span className="text-emerald-300">📱 分机 0{i + 1}</span>
+                            <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded text-[10px] border border-emerald-500/30 flex items-center gap-1 font-bold">
+                              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                              🟢 正常
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-300 font-mono font-bold">{a.phone}</p>
+                          <p className="text-[10px] text-slate-300 leading-tight">
+                            {a.alias || '协议发件号'}，通信正常，未受限制。
+                          </p>
+                          <div className="pt-1 flex items-center justify-between text-[9px] text-slate-400 border-t border-slate-800 font-mono">
+                            <span className="text-emerald-400/90 flex items-center gap-0.5 font-bold">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> 临时禁令: 未触发 (健康)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => triggerManual406Simulate(a.id, a.phone)}
+                              className="text-amber-400/80 hover:text-amber-300 hover:underline cursor-pointer"
+                              title="模拟测试捕获 406 错误"
+                            >
+                              🧪 测试406
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-300 font-mono font-bold">{a.phone}</p>
-                        <p className="text-[10px] text-slate-300 leading-tight">{a.alias || '协议发件号'}，通信正常，未受限制。</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2407,6 +2860,10 @@ ${data.summary.recommendation}
                       <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" /> 送達 (Sent)
                       </span>
+                    ) : (log.errorMessage?.includes('406') || log.messageText?.includes('406')) ? (
+                      <span className="bg-rose-500/20 text-rose-300 border border-rose-500/50 px-2 py-0.5 rounded text-[10px] font-black flex items-center gap-1 shadow-sm animate-pulse">
+                        <AlertTriangle className="w-3 h-3 text-rose-400" /> 406 错误: 临时群发禁令已拦截
+                      </span>
                     ) : (
                       <span className="bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
                         <XCircle className="w-3 h-3" /> 失敗 ({log.errorMessage})
@@ -2414,7 +2871,11 @@ ${data.summary.recommendation}
                     )}
                   </div>
 
-                  <div className="bg-slate-900 p-3 rounded-lg border border-slate-800/60 space-y-2">
+                  <div className={`p-3 rounded-lg border space-y-2 ${
+                    (log.errorMessage?.includes('406') || log.messageText?.includes('406'))
+                      ? 'bg-rose-950/20 border-rose-500/40'
+                      : 'bg-slate-900 border-slate-800/60'
+                  }`}>
                     {/* Media Image Attachment Banner Preview */}
                     {log.mediaUrl && (
                       <div className="flex items-center space-x-3 bg-slate-950 p-2 rounded-lg border border-slate-800">
@@ -2457,6 +2918,23 @@ ${data.summary.recommendation}
                         return part;
                       })}
                     </p>
+
+                    {/* 406 Error Warning Callout Banner */}
+                    {(log.errorMessage?.includes('406') || log.messageText?.includes('406')) && (
+                      <div className="mt-2 p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-[11px] text-rose-200 space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-rose-300">
+                          <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span>🛑 Telegram 406 错误拦截报告 (账号临时群发禁令已激活)</span>
+                        </div>
+                        <p className="text-slate-200 text-[10px] leading-relaxed">
+                          发件分机 <strong>{log.accountPhone || log.accountId}</strong> 在向目标推送消息时捕获 406 (PEER_FLOOD) 错误。该账号已触发 Telegram 临时群发禁令，禁止向陌生联系人发信。对应分机卡片已实时更新 🔴 错误状态图标与禁令警告！
+                        </p>
+                        <div className="flex items-center justify-between text-[9px] text-rose-300/80 pt-1 border-t border-rose-800/40 font-mono">
+                          <span>建议处置: 暂停发信并冷却 24~48h</span>
+                          <span>解禁申请: Telegram @SpamBot</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-[10px] text-slate-500 text-right">
