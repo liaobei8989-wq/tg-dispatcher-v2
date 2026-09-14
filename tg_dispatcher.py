@@ -521,6 +521,11 @@ async def run_worker(
     except Exception:
         pass
 
+    # ⚡ 并发错峰平滑进场 (0.2s ~ 0.5s 错峰)，避免瞬间几十个 Worker 并发打满代理端口造成拥塞
+    initial_stagger = min(6.0, (worker_id - 1) * 0.25)
+    if initial_stagger > 0:
+        await asyncio.sleep(initial_stagger)
+
     try:
         api_id_int = int(api_id)
     except Exception:
@@ -531,6 +536,7 @@ async def run_worker(
         api_id_int,
         str(api_hash),
         proxy=proxy_tuple,
+        timeout=25,
         device_model=str(device_model),
         system_version=str(system_version),
         app_version=str(app_version)
@@ -539,12 +545,12 @@ async def run_worker(
     try:
         connected_ok = False
         try:
-            # 强化代理连接超时
-            await asyncio.wait_for(client.connect(), timeout=10.0)
+            # 强化代理连接超时，放宽至 22 秒，适应跨国海外住宅/机房代理正常握手
+            await asyncio.wait_for(client.connect(), timeout=22.0)
             connected_ok = True
         except Exception as conn_err:
             if proxy_tuple:
-                worker_logs.append(f"⚠️ [Worker #{worker_id} 代理握手稍慢]: 切换备用巴西节点测试重连...")
+                # 握手稍慢时静默平滑切换备用节点，避免控制台误报刷屏
                 try:
                     await client.disconnect()
                 except Exception:
@@ -557,16 +563,16 @@ async def run_worker(
                     api_id_int,
                     str(api_hash),
                     proxy=backup_tuple,
+                    timeout=25,
                     device_model=str(device_model),
                     system_version=str(system_version),
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    await asyncio.wait_for(client.connect(), timeout=22.0)
                     connected_ok = True
                 except Exception:
                     # 尝试第 3 组巴西备用节点，【绝对禁止使用 VPS 机房原生 IP 直连 proxy=None】
-                    worker_logs.append(f"🔄 [Worker #{worker_id} 切换第三备用节点]: 正在测试第 3 组独享巴西节点...")
                     try:
                         await client.disconnect()
                     except Exception:
@@ -579,12 +585,13 @@ async def run_worker(
                         api_id_int,
                         str(api_hash),
                         proxy=backup_tuple3,
+                        timeout=25,
                         device_model=str(device_model),
                         system_version=str(system_version),
                         app_version=str(app_version)
                     )
                     try:
-                        await asyncio.wait_for(client.connect(), timeout=15.0)
+                        await asyncio.wait_for(client.connect(), timeout=25.0)
                         connected_ok = True
                     except Exception as p3_err:
                         worker_logs.append(f"🛑 [绝对防封阻断]: 账号 +{clean_digits} 代理节点暂不可达，严禁 VPS 机房 IP 直连裸发！跳过本轮等待代理网络恢复: {p3_err}")

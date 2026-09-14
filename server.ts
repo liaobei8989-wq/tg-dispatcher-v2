@@ -207,16 +207,12 @@ async function startServer() {
       const distTar = path.join(process.cwd(), "dist", "dist_update.tar.gz");
       const targetPath = fs.existsSync(publicTar) ? publicTar : distTar;
       
-      if (fs.existsSync(targetPath)) {
-        res.setHeader('Content-Type', 'application/gzip');
-        res.setHeader('Content-Disposition', 'attachment; filename="dist_update.tar.gz"');
-        const stream = fs.createReadStream(targetPath);
-        stream.pipe(res);
-      } else {
-        // Automatically package if missing
-        execSync('tar -czf public/dist_update.tar.gz dist/ account_proxies.json', { timeout: 10000 });
-        res.download(publicTar, 'dist_update.tar.gz');
-      }
+      // Automatically generate/refresh update package including front-end bundle and python dispatchers
+      execSync('tar -czf public/dist_update.tar.gz dist/ account_proxies.json tg_dispatcher.py tg_health_detector.py', { timeout: 15000 });
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Disposition', 'attachment; filename="dist_update.tar.gz"');
+      const stream = fs.createReadStream(publicTar);
+      stream.pipe(res);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

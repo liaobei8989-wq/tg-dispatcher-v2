@@ -1630,23 +1630,21 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
     distinctTgAccounts.forEach(a => {
       const cleanPhone = (a.phone || a.id).replace(/\D/g, '');
       const hi = accountHealthMap[cleanPhone];
-      if (!hi || hi.status === 'untested') {
-        untestedCount++;
-      } else {
-        const isTimeout = hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || '');
-        const isBanned = !isTimeout && (hi.status === 'banned' || a.status === 'banned');
-        const isRestricted = !isTimeout && !isBanned && (hi.status === 'restricted' || a.status === 'risk');
-        const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi.status === 'healthy' || /自由|无限制|健康/i.test(hi.label || ''));
+      const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+      
+      const isTimeout = hi && (hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || ''));
+      const isBanned = !isTimeout && (hi?.status === 'banned' || a.status === 'banned');
+      const isRestricted = !isTimeout && !isBanned && (isQuarantined || hi?.status === 'restricted' || a.status === 'risk' || a.status === 'restricted');
+      const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi?.status === 'healthy' || /自由|无限制|健康/i.test(hi?.label || ''));
 
-        if (isBanned) {
-          bannedCount++;
-        } else if (isRestricted) {
-          restrictedCount++;
-        } else if (isHealthy) {
-          canSendCount++;
-        } else {
-          untestedCount++;
-        }
+      if (isBanned) {
+        bannedCount++;
+      } else if (isRestricted) {
+        restrictedCount++;
+      } else if (isHealthy) {
+        canSendCount++;
+      } else {
+        untestedCount++;
       }
     });
 
@@ -1663,13 +1661,12 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
       result = result.filter(a => {
         const cleanPhone = (a.phone || a.id).replace(/\D/g, '');
         const hi = accountHealthMap[cleanPhone];
-        if (!hi || hi.status === 'untested') {
-          return selectedHealthFilter === 'UNTESTED';
-        }
-        const isTimeout = hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || '');
-        const isBanned = !isTimeout && (hi.status === 'banned' || a.status === 'banned');
-        const isRestricted = !isTimeout && !isBanned && (hi.status === 'restricted' || a.status === 'risk');
-        const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi.status === 'healthy' || /自由|无限制|健康/i.test(hi.label || ''));
+        const isQuarantined = normalizeGroupTag(a.groupTag) === '⚠️ 风控隔离组';
+        
+        const isTimeout = hi && (hi.status === 'timeout' || /超时|timeout/i.test(hi.label || '') || /超时|timeout/i.test(hi.details || ''));
+        const isBanned = !isTimeout && (hi?.status === 'banned' || a.status === 'banned');
+        const isRestricted = !isTimeout && !isBanned && (isQuarantined || hi?.status === 'restricted' || a.status === 'risk' || a.status === 'restricted');
+        const isHealthy = !isTimeout && !isBanned && !isRestricted && (hi?.status === 'healthy' || /自由|无限制|健康/i.test(hi?.label || ''));
 
         if (selectedHealthFilter === 'CAN_SEND') return isHealthy;
         if (selectedHealthFilter === 'CANNOT_SEND') return isRestricted;
