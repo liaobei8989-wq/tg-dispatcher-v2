@@ -501,17 +501,25 @@ async def run_worker(
 
     proxy_map = load_account_proxies_map()
     clean_digits = re.sub(r'[^0-9]', '', orig_basename)
-    proxy_entry = custom_proxy or proxy_map.get(clean_digits) or proxy_map.get(orig_basename)
-    if not proxy_entry:
-        if isinstance(json_cfg.get("proxy"), dict) and json_cfg.get("proxy").get("addr"):
-            p_dict = json_cfg["proxy"]
-            proxy_entry = f"{p_dict.get('addr')}:{p_dict.get('port', 12323)}:{p_dict.get('username') or ''}:{p_dict.get('password') or ''}"
-    if not proxy_entry:
-        idx = (int(clean_digits[-4:]) + worker_id) % len(BRAZIL_PROXY_POOL) if (clean_digits and clean_digits[-4:].isdigit()) else worker_id % len(BRAZIL_PROXY_POOL)
-        proxy_entry = BRAZIL_PROXY_POOL[idx]
+    
+    # Check if direct mode is explicitly requested
+    is_direct_mode = False
+    if custom_proxy and str(custom_proxy).lower() in ['direct', 'none', 'off', 'false']:
+        is_direct_mode = True
+        proxy_entry = None
+    else:
+        proxy_entry = custom_proxy or proxy_map.get(clean_digits) or proxy_map.get(orig_basename)
+        if not proxy_entry:
+            if isinstance(json_cfg.get("proxy"), dict) and json_cfg.get("proxy").get("addr"):
+                p_dict = json_cfg["proxy"]
+                proxy_entry = f"{p_dict.get('addr')}:{p_dict.get('port', 12323)}:{p_dict.get('username') or ''}:{p_dict.get('password') or ''}"
+        # If proxy is not provided and not forced, allow pool, but if direct requested, keep None
+        if not proxy_entry and not is_direct_mode:
+            idx = (int(clean_digits[-4:]) + worker_id) % len(BRAZIL_PROXY_POOL) if (clean_digits and clean_digits[-4:].isdigit()) else worker_id % len(BRAZIL_PROXY_POOL)
+            proxy_entry = BRAZIL_PROXY_POOL[idx]
 
-    proxy_tuple = parse_proxy_dict_or_str(proxy_entry)
-    worker_logs.append(f"🚀 [Worker #{worker_id} 并发启动] 协议号: +{clean_digits} | 分配目标数: {len(target_subset)}")
+    proxy_tuple = None if is_direct_mode else parse_proxy_dict_or_str(proxy_entry)
+    worker_logs.append(f"🚀 [Worker #{worker_id} 并发启动] 协议号: +{clean_digits} | 分配目标数: {len(target_subset)}" + (" | 模式: 欧洲VPS直连极速" if is_direct_mode else f" | 代理: {proxy_entry[:20] if proxy_entry else '无'}"))
 
     # 【读写分离与锁保护】建立单进程独占锁文件，通知 24h 监听进程主动让出句柄避让
     lock_file = os.path.join(os.getcwd(), "sessions", f".lock_{clean_digits}")

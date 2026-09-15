@@ -3837,16 +3837,19 @@ if __name__ == "__main__":
               runFailCount++;
               setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));
               const rawLines = resData.output?.split('\n') || [];
-              const errorLines = rawLines.filter((l: string) => l.includes('❌'));
+              const errorLines = rawLines.filter((l: string) => l.includes('❌') || l.includes('🛑') || l.includes('错误'));
               const warnLines = rawLines.filter((l: string) => l.includes('⚠️'));
-              const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || '发件号凭证鉴权失败');
+              const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || (resData.output ? resData.output.trim().split('\n').pop() : '发件过程网络异常'));
               const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
+              const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));
               const errDetail = isUnregistered 
                 ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
                 : (isDbCorrupt
                     ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
-                    : selectedLog);
+                    : (isProxyErr
+                        ? '🛑 巴西住宅代理连接超时或不可达 (请在终端安装 pysocks 或切换直连极速模式)'
+                        : selectedLog));
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
