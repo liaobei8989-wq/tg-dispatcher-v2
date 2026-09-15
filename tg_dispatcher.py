@@ -30,7 +30,7 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -328,26 +328,58 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             raise Exception(f"无法找到 Telegram 用户名 {clean_target}: {str(e)}")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
-        phone_num = f"+{digits}"
-        try:
-            contact = InputPhoneContact(
+        phone_variants = [digits]
+        # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
+        # 很多巴西人早期注册 TG 时未加 9，或号商筛选时带/不带 9，双向探测可大幅提升识别命中率
+        if digits.startswith('55'):
+            if len(digits) == 13 and digits[4] == '9':
+                alt_12 = digits[:4] + digits[5:]
+                if alt_12 not in phone_variants:
+                    phone_variants.append(alt_12)
+            elif len(digits) == 12:
+                alt_13 = digits[:4] + '9' + digits[4:]
+                if alt_13 not in phone_variants:
+                    phone_variants.append(alt_13)
+
+        contacts_to_import = [
+            InputPhoneContact(
                 client_id=random.randint(100000, 999999),
-                phone=phone_num,
+                phone=f"+{v}",
                 first_name="Cliente",
                 last_name=""
             )
-            result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=8.0)
+            for v in phone_variants
+        ]
+        imported_ids_to_del = []
+        user_found = None
+        try:
+            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=10.0)
             if result and getattr(result, 'users', None) and len(result.users) > 0:
-                peer = result.users[0]
+                user_found = result.users[0]
+                for u in result.users:
+                    imported_ids_to_del.append(u.id)
             else:
-                try:
-                    peer = await asyncio.wait_for(client.get_entity(phone_num), timeout=5.0)
-                except Exception:
-                    raise Exception(f"目标手机号 {phone_num} 在 Telegram 未注册或未公开号码隐私权限")
+                # 检查是否此前已被该账号导入过或者已经在通讯录/会话中
+                for pv in phone_variants:
+                    try:
+                        user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=4.0)
+                        if user_found:
+                            break
+                    except Exception:
+                        pass
+                
+                if not user_found:
+                    retry_contacts = getattr(result, 'retry_contacts', [])
+                    if retry_contacts and len(retry_contacts) > 0:
+                        raise Exception(f"当前协议号单日通讯录导入频控上限 (Telegram RetryContacts)，已自动跳过保护账号")
+                    else:
+                        raise Exception(f"目标手机号 +{digits} 在 Telegram 未注册或未公开号码隐私权限")
         except Exception as ce:
-            if "未注册" in str(ce):
+            if "未注册" in str(ce) or "频控上限" in str(ce):
                 raise ce
-            raise Exception(f"通讯录导入/查询目标 {phone_num} 失败: {str(ce)}")
+            raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
+
+        peer = user_found
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
@@ -362,6 +394,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
     sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
+
+    # 及时清理通讯录，防止单账号通讯录堆积满 5000 触发官方静默拒绝限制
+    if imported_ids_to_del:
+        try:
+            await client(DeleteContactsRequest(id=imported_ids_to_del))
+        except Exception:
+            pass
+
     if logs is not None:
         logs.append(f"✨ [第1阶段问候已送达]: 目标 {target} (ID: {sent_id}) ➔ \"{message[:25]}...\"")
 
