@@ -359,7 +359,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 for u in result.users:
                     imported_ids_to_del.append(u.id)
             else:
-                # 检查是否此前已被该账号导入过或者已经在通讯录/会话中
+                # 检查是否此前已被该账号导入过或者已经在通讯录/会话缓存中
                 for pv in phone_variants:
                     try:
                         user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=4.0)
@@ -368,14 +368,24 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     except Exception:
                         pass
                 
+                # 再次尝试纯数字查询 (不带 + 号)
+                if not user_found:
+                    for pv in phone_variants:
+                        try:
+                            user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=4.0)
+                            if user_found:
+                                break
+                        except Exception:
+                            pass
+                
                 if not user_found:
                     retry_contacts = getattr(result, 'retry_contacts', [])
                     if retry_contacts and len(retry_contacts) > 0:
                         raise Exception(f"当前协议号单日通讯录导入频控上限 (Telegram RetryContacts)，已自动跳过保护账号")
                     else:
-                        raise Exception(f"目标手机号 +{digits} 在 Telegram 未注册或未公开号码隐私权限")
+                        raise Exception(f"目标手机号 +{digits} 未匹配到用户 (可能未公开号码隐私权限或号段未带国际区号)")
         except Exception as ce:
-            if "未注册" in str(ce) or "频控上限" in str(ce):
+            if "未匹配" in str(ce) or "未注册" in str(ce) or "频控上限" in str(ce):
                 raise ce
             raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
 
@@ -395,12 +405,15 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
 
-    # 及时清理通讯录，防止单账号通讯录堆积满 5000 触发官方静默拒绝限制
+    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致会话 peer 句柄失效
     if imported_ids_to_del:
-        try:
-            await client(DeleteContactsRequest(id=imported_ids_to_del))
-        except Exception:
-            pass
+        async def delayed_delete():
+            try:
+                await asyncio.sleep(3.0)
+                await client(DeleteContactsRequest(id=imported_ids_to_del))
+            except Exception:
+                pass
+        asyncio.create_task(delayed_delete())
 
     if logs is not None:
         logs.append(f"✨ [第1阶段问候已送达]: 目标 {target} (ID: {sent_id}) ➔ \"{message[:25]}...\"")
