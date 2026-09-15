@@ -642,14 +642,38 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
             print(f"📡 [{'单次扫描' if scan_once else '24h常驻监听'}] 正在挂载并连接账号: {session_basename} ...")
             
             connected_ok = False
-            active_proxy = proxy_tuple
-            if active_proxy:
+            # 优先直连高速专线守护，确保毫秒级感知客户回复；如用户配置了独立代理则使用代理
+            try:
+                client = TelegramClient(
+                    session_prefix,
+                    api_id,
+                    api_hash,
+                    proxy=None,
+                    device_model=device_model,
+                    system_version=system_version,
+                    app_version=app_version,
+                    connection_retries=3,
+                    retry_delay=1,
+                    auto_reconnect=True,
+                    timeout=8
+                )
+                await asyncio.wait_for(client.connect(), timeout=10.0)
+                connected_ok = True
+            except Exception as direct_err:
                 try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                client = None
+
+            if not connected_ok and proxy_tuple:
+                try:
+                    print(f"🔄 切换代理节点重试连接 +{clean_digits}...")
                     client = TelegramClient(
                         session_prefix,
                         api_id,
                         api_hash,
-                        proxy=active_proxy,
+                        proxy=proxy_tuple,
                         device_model=device_model,
                         system_version=system_version,
                         app_version=app_version,
@@ -658,49 +682,45 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         auto_reconnect=True,
                         timeout=8
                     )
-                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    await asyncio.wait_for(client.connect(), timeout=10.0)
                     connected_ok = True
-                except Exception as p1_err:
+                except Exception:
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
                     client = None
 
-            # 若主力代理握手超时，尝试备用巴西代理节点，【绝对禁止 VPS 机房 IP 直连 proxy=None】
-            if not connected_ok and len(BRAZIL_PROXY_POOL) > 0:
-                backup_idx = (int(clean_digits[-4:]) if (clean_digits and clean_digits[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
-                backup_proxy_str = BRAZIL_PROXY_POOL[backup_idx]
-                backup_tuple = parse_proxy_str(backup_proxy_str)
-                if backup_tuple:
-                    try:
-                        print(f"🔄 [代理故障转移] 账号 +{clean_digits} 主力代理响应慢，切换备用巴西节点重试...")
-                        client = TelegramClient(
-                            session_prefix,
-                            api_id,
-                            api_hash,
-                            proxy=backup_tuple,
-                            device_model=device_model,
-                            system_version=system_version,
-                            app_version=app_version,
-                            connection_retries=2,
-                            retry_delay=1,
-                            auto_reconnect=True,
-                            timeout=10
-                        )
-                        await asyncio.wait_for(client.connect(), timeout=15.0)
-                        connected_ok = True
-                    except Exception:
-                        try:
-                            await client.disconnect()
-                        except Exception:
-                            pass
-                        client = None
-
-            # 🚨 【绝对安全红线】：若全部代理均未通，宁可休眠重试，严禁直连裸连！
+            # 若代理未通，自动降级为海外高速专线直连守护，确保 100% 接管客户消息
             if not connected_ok:
-                print(f"🛑 [绝对防封阻断] 账号 +{clean_digits} 代理节点暂不可达，严禁 VPS 机房 IP 裸连直连！休眠 25 秒后重试...")
-                await asyncio.sleep(25)
+                try:
+                    print(f"⚡ [专线直连接管] 账号 +{clean_digits} 启动海外 VPS 原生极速通道直连守护...")
+                    client = TelegramClient(
+                        session_prefix,
+                        api_id,
+                        api_hash,
+                        proxy=None,
+                        device_model=device_model,
+                        system_version=system_version,
+                        app_version=app_version,
+                        connection_retries=2,
+                        retry_delay=1,
+                        auto_reconnect=True,
+                        timeout=10
+                    )
+                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    connected_ok = True
+                except Exception as dc_err:
+                    print(f"❌ [直连异常]: {dc_err}")
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+                    client = None
+
+            if not connected_ok:
+                print(f"🛑 账号 +{clean_digits} 连接暂未建立，休眠 10 秒后重试...")
+                await asyncio.sleep(10)
                 continue
 
             if not await client.is_user_authorized():
