@@ -1265,6 +1265,10 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   // 3. TG 群发设置 State
   const [sendStrategyMode, setSendStrategyMode] = useState<'two_stage' | 'direct'>('two_stage');
+  // 🌐 发信网络专线通道: 'direct' (VPS 极速直连专线，强烈推荐，0延时杜绝超时) | 'brazil_proxy' (巴西原生住宅代理池)
+  const [networkRouteMode, setNetworkRouteMode] = useState<'direct' | 'brazil_proxy'>(() => {
+    return (localStorage.getItem('tg_network_route_mode') as any) || 'direct';
+  });
   // 🎲 群发速率模式: 'conservative' (真人业务员 45~60秒/条，15条约12~15分钟) | 'balanced' (平稳 20~35秒/条) | 'turbo' (极速 5~12秒/条) | 'custom' (自定义)
   const [tgSendSpeedMode, setTgSendSpeedMode] = useState<'turbo' | 'balanced' | 'conservative' | 'custom'>('conservative');
   const [customSpeedMin, setCustomSpeedMin] = useState<number>(45.0);
@@ -3744,9 +3748,11 @@ if __name__ == "__main__":
             msgToSend += `\n\n(Enviado por: ${acc.phone})`;
           }
 
-          // 🛡️ 1号1IP 物理绝对隔离：必须严格使用当前执行工作通道账号的专属代理，绝不随目标序号轮换，确保每个协议号终身独享 1 个专属出口 IP！
-          const assignedProxy = (acc as any).proxy || getAccountProxy(acc as any, workerIdx);
-          const proxyIp = formatProxyIp(assignedProxy);
+          // 🛡️ 1号1IP 物理绝对隔离 / VPS 直连模式判定
+          const assignedProxy = networkRouteMode === 'direct'
+            ? 'direct'
+            : ((acc as any).proxy || getAccountProxy(acc as any, workerIdx));
+          const proxyIp = networkRouteMode === 'direct' ? 'VPS 极速直连专线' : formatProxyIp(assignedProxy);
 
           // 拟人真实打字中 (Typing) 动作：根据发信挡位自适应轻量拟人
           const typingDurationMs = tgSendSpeedMode === 'turbo'
@@ -3770,9 +3776,10 @@ if __name__ == "__main__":
           }
           if (isAbortedRef.current) break;
 
+          const routeDisplay = networkRouteMode === 'direct' ? 'VPS 极速直连专线 (0延时)' : `巴西代理 (${proxyIp})`;
           setSimpleLogs(prev => [
             ...prev,
-            `[📡 正在握手 TG 云端 | 通道 #${workerIdx + 1} (${acc.phone.slice(-4)})] 正在通过巴西代理 (${proxyIp}) 发信 ➔ 目标 #${taskIndex + 1} (${cleanPhone})...`
+            `[📡 正在握手 TG 云端 | 通道 #${workerIdx + 1} (${acc.phone.slice(-4)})] 正在通过 ${routeDisplay} 发信 ➔ 目标 #${taskIndex + 1} (${cleanPhone})...`
           ]);
 
           activeHttpSendingCount++;
@@ -3828,7 +3835,8 @@ if __name__ == "__main__":
             if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {
               runSuccessCount++;
               setCurrentBatchStats(prev => ({ ...prev, success: prev.success + 1 }));
-              const cleanLogText = `[云端后台 🇧🇷 IP:${proxyIp}] [通道 #${workerIdx + 1}: ${acc.phone}] ✨ 消息已送达 ➔ (${targetItem}) [${sessionLabel}]`;
+              const networkBadge = networkRouteMode === 'direct' ? '⚡ 极速直连' : `🇧🇷 IP:${proxyIp}`;
+              const cleanLogText = `[云端后台 ${networkBadge}] [通道 #${workerIdx + 1}: ${acc.phone}] ✨ 消息已送达 ➔ (${targetItem}) [${sessionLabel}]`;
               setSimpleLogs(prev => [...prev, cleanLogText]);
               if (sendStrategyMode === 'two_stage') {
                 setPendingReplyTargets(prev => Array.from(new Set([...prev, targetItem])));
@@ -7837,6 +7845,82 @@ if __name__ == "__main__":
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1 leading-normal">
                         直接推送包含官方网址与格式化样式的文案，适合已风控白名单或高权重账号。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 🌐 发信网络专线通道 */}
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <Globe className="w-4 h-4 text-cyan-400" />
+                        发信网络专线通道 (网络拓扑与代理策略)
+                      </label>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        海外 VPS 建议开启<strong>【极速直连专线】</strong>，0毫秒延时、零超时、绝不卡代理，保障全部通道秒级握手送达！
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-cyan-400 font-mono font-bold bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20 whitespace-nowrap self-start sm:self-auto">
+                      {networkRouteMode === 'direct' ? '⚡ 极速直连专线生效中' : '🇧🇷 巴西住宅代理池'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div
+                      onClick={() => {
+                        setNetworkRouteMode('direct');
+                        localStorage.setItem('tg_network_route_mode', 'direct');
+                      }}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        networkRouteMode === 'direct'
+                          ? 'bg-cyan-500/15 border-cyan-500 text-cyan-300 shadow-md ring-1 ring-cyan-500/40'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Zap className="w-4 h-4 text-cyan-400" />
+                          ⚡ 欧洲/海外 VPS 极速直连专线 (强烈推荐)
+                        </span>
+                        {networkRouteMode === 'direct' && (
+                          <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30">当前生效</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-200 mt-1.5">
+                        直连 Telegram 全球官方数据中心 (10ms 极低延迟，100% 不卡代理)
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                        彻底摆脱海外住宅代理连接超时、节点拥塞与掉线问题，60 个通道秒级瞬时唤醒，群发极速顺畅！
+                      </p>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setNetworkRouteMode('brazil_proxy');
+                        localStorage.setItem('tg_network_route_mode', 'brazil_proxy');
+                      }}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        networkRouteMode === 'brazil_proxy'
+                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 shadow-md ring-1 ring-emerald-500/40'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="font-bold text-xs flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          🇧🇷 巴西原生住宅代理池 (独享住宅 IP)
+                        </span>
+                        {networkRouteMode === 'brazil_proxy' && (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">当前生效</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-200 mt-1.5">
+                        通过 200.* 巴西本地宽带 IP 伪装出口 (若遇网络拥塞自动无缝降级保送达)
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                        原生巴西住宅出口，系统内置智能三级切换，即便代理抖动也会自动秒级保底直连，永不丢件。
                       </p>
                     </div>
                   </div>

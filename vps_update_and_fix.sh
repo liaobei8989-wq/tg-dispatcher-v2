@@ -9,10 +9,28 @@ echo "=================================================="
 echo "🚀 开始同步 GitHub 最新代码并彻底修复巴西原生 IP"
 echo "=================================================="
 
-# 1. 放弃 VPS 本地冲突并强制对齐 GitHub main 分支
+# 1. 安全备份真实的 .session 凭证文件，防止被 git reset 覆盖
+echo "🛡️ 正在保护与暂存真实的 .session 协议号凭证..."
+mkdir -p /tmp/tg_sessions_safe_backup
+for f in sessions/*.session; do
+    if [ -f "$f" ]; then
+        sz=$(wc -c < "$f" 2>/dev/null || echo 0)
+        if [ "$sz" -gt 200 ]; then
+            cp -f "$f" /tmp/tg_sessions_safe_backup/
+        fi
+    fi
+done
+
+# 2. 从 GitHub (main) 拉取最新源码 (仅更新代码文件，严禁覆盖真实 session)
 echo "📥 正在从 GitHub (main) 拉取最新源码..."
 git fetch origin main
-git reset --hard origin/main
+git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py src/ package.json dist/ index.html vite.config.ts vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
+
+# 3. 恢复真实 .session 凭证
+if [ -d /tmp/tg_sessions_safe_backup ] && [ "$(ls -A /tmp/tg_sessions_safe_backup 2>/dev/null)" ]; then
+    echo "🔄 正在还原健康 .session 凭证..."
+    cp -f /tmp/tg_sessions_safe_backup/*.session sessions/ 2>/dev/null || true
+fi
 
 # 2. 彻底清洗本地所有 json 凭证文件与代理映射 (绝对杜绝 144.*)
 echo "🧹 正在执行 1:1 独立原生 IP 权威校验与清洗..."

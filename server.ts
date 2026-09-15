@@ -299,7 +299,7 @@ async function startServer() {
             sizeBytes: stats.size,
             sizeFormatted: `${(stats.size / 1024).toFixed(1)} KB`,
             modifiedAt: stats.mtime.toISOString(),
-            isValid: stats.size > 20
+            isValid: f.endsWith('.json') ? stats.size > 20 : stats.size > 200
           });
         } catch (e) {}
       });
@@ -319,7 +319,7 @@ async function startServer() {
                 sizeBytes: stats.size,
                 sizeFormatted: `${(stats.size / 1024).toFixed(1)} KB`,
                 modifiedAt: stats.mtime.toISOString(),
-                isValid: stats.size > 20
+                isValid: f.endsWith('.json') ? stats.size > 20 : stats.size > 200
               });
             } catch (e) {}
           }

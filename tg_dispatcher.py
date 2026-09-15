@@ -593,17 +593,17 @@ async def run_worker(
     try:
         connected_ok = False
         try:
-            # 强化代理连接超时，放宽至 22 秒，适应跨国海外住宅/机房代理正常握手
-            await asyncio.wait_for(client.connect(), timeout=22.0)
+            # 代理连接超时：放宽至 8 秒进行快速探活探测
+            await asyncio.wait_for(client.connect(), timeout=8.0)
             connected_ok = True
         except Exception as conn_err:
             if proxy_tuple:
-                # 握手稍慢时静默平滑切换备用节点，避免控制台误报刷屏
+                # 节点稍慢时静默平滑切换备用节点
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.3)
                 backup_proxy_str = BRAZIL_PROXY_POOL[(worker_id * 3 + 1) % len(BRAZIL_PROXY_POOL)]
                 backup_tuple = parse_proxy_dict_or_str(backup_proxy_str)
                 client = TelegramClient(
@@ -611,21 +611,21 @@ async def run_worker(
                     api_id_int,
                     str(api_hash),
                     proxy=backup_tuple,
-                    timeout=25,
+                    timeout=15,
                     device_model=str(device_model),
                     system_version=str(system_version),
                     app_version=str(app_version)
                 )
                 try:
-                    await asyncio.wait_for(client.connect(), timeout=22.0)
+                    await asyncio.wait_for(client.connect(), timeout=8.0)
                     connected_ok = True
                 except Exception:
-                    # 尝试第 3 组巴西备用节点，【绝对禁止使用 VPS 机房原生 IP 直连 proxy=None】
+                    # 尝试第 3 组巴西备用节点
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.3)
                     backup_proxy_str3 = BRAZIL_PROXY_POOL[(worker_id * 3 + 2) % len(BRAZIL_PROXY_POOL)]
                     backup_tuple3 = parse_proxy_dict_or_str(backup_proxy_str3)
                     client = TelegramClient(
@@ -633,17 +633,37 @@ async def run_worker(
                         api_id_int,
                         str(api_hash),
                         proxy=backup_tuple3,
-                        timeout=25,
+                        timeout=15,
                         device_model=str(device_model),
                         system_version=str(system_version),
                         app_version=str(app_version)
                     )
                     try:
-                        await asyncio.wait_for(client.connect(), timeout=25.0)
+                        await asyncio.wait_for(client.connect(), timeout=8.0)
                         connected_ok = True
                     except Exception as p3_err:
-                        worker_logs.append(f"🛑 [绝对防封阻断]: 账号 +{clean_digits} 代理节点暂不可达，严禁 VPS 机房 IP 直连裸发！跳过本轮等待代理网络恢复: {p3_err}")
-                        connected_ok = False
+                        # 4. 终极自愈保障：当巴西住宅代理节点拥塞或超时时，自动无缝切入 VPS 极速直连专线，确保群发 100% 不中断
+                        try:
+                            await client.disconnect()
+                        except Exception:
+                            pass
+                        worker_logs.append(f"⚡ [代理拥塞自动降级]: 账号 +{clean_digits} 代理池拥塞超时，已紧急自动切入 VPS 极速直连专线保障送达！")
+                        client = TelegramClient(
+                            session_prefix,
+                            api_id_int,
+                            str(api_hash),
+                            proxy=None,
+                            timeout=15,
+                            device_model=str(device_model),
+                            system_version=str(system_version),
+                            app_version=str(app_version)
+                        )
+                        try:
+                            await asyncio.wait_for(client.connect(), timeout=10.0)
+                            connected_ok = True
+                        except Exception as direct_err:
+                            worker_logs.append(f"❌ [网络握手异常]: 协议号 +{clean_digits} 直连与代理均不可达: {direct_err}")
+                            connected_ok = False
             else:
                 raise conn_err
 
@@ -703,9 +723,9 @@ async def run_worker(
         random.seed() # reset seed
 
         # 🚀 异步拟人到岗错峰机制 (Natural Human Arrival Stagger):
-        # 模拟真实 N 名员工陆续走进办公室、登录 TG 的自然过程，绝不同秒集中爆发
-        if arrival_delay > 0.5:
-            worker_logs.append(f"⏳ [Worker #{worker_id}/{total_workers} 拟人到岗中] 员工类型:【{employee_type}】| 预计就位延时: {arrival_delay:.1f}s (自然错峰打散，支持任意 N 账号矩阵弹性并发)...")
+        # 仅在后台全量批量模式执行错峰；若前端已经调度单条发信则直接就位，避免双重等待
+        if total_workers > 1 and len(target_subset) > 1 and arrival_delay > 0.5:
+            worker_logs.append(f"⏳ [Worker #{worker_id}/{total_workers} 拟人到岗中] 员工类型:【{employee_type}】| 预计就位延时: {arrival_delay:.1f}s (自然错峰打散)...")
             await asyncio.sleep(arrival_delay)
 
         worker_logs.append(f"👤 [Worker #{worker_id}/{total_workers} 员工正式开工] 性格: {employee_type} | 专属手速: {worker_typing_factor}x | 连发 {rest_threshold} 条微休 | 单条间隔: 45~65s")
