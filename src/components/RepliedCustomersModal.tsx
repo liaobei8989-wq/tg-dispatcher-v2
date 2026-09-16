@@ -17,7 +17,9 @@ import {
   Phone,
   Clock,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Info,
+  Link2
 } from 'lucide-react';
 import { RepliedCustomerRecord } from '../types';
 
@@ -88,17 +90,19 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   };
 
   // Copy all based on chosen type
-  const handleCopyAll = (type: 'usernames' | 'ids' | 'phones' | 'full') => {
+  const handleCopyAll = (type: 'usernames' | 'ids' | 'links' | 'phones' | 'full') => {
     let textToCopy = '';
     if (type === 'usernames') {
-      textToCopy = customers.filter(c => c.username).map(c => c.username).join('\n');
+      textToCopy = customers.map(c => c.username ? c.username : `(无用户名_TG_ID_${c.id})`).join('\n');
     } else if (type === 'ids') {
       textToCopy = customers.map(c => c.id).join('\n');
+    } else if (type === 'links') {
+      textToCopy = customers.map(c => c.directChatUrl || (c.username ? `https://t.me/${c.username.replace('@','')}` : `tg://user?id=${c.id}`)).join('\n');
     } else if (type === 'phones') {
-      textToCopy = customers.filter(c => c.phone).map(c => c.phone).join('\n');
+      textToCopy = customers.map(c => c.phone ? c.phone : `[TG隐私隐藏未公开手机号] ID: ${c.id}`).join('\n');
     } else {
       textToCopy = customers.map(c => 
-        `ID: ${c.id} | ${c.username || '无用户名'} | ${c.fullName} | ${c.phone || '无电话'} | 回复: "${c.lastReplyText}"`
+        `Telegram ID: ${c.id} | ${c.username || '无用户名'} | 昵称: ${c.fullName} | 直达私聊: ${c.directChatUrl || `tg://user?id=${c.id}`} | 回复: "${c.lastReplyText}"`
       ).join('\n');
     }
 
@@ -200,41 +204,50 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
             <button
               onClick={() => handleDownload('csv')}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-900/30 transition active:scale-95 cursor-pointer"
-              title="导出完整 Excel 表格（包含客户ID、用户名、回复话术、时间）"
+              title="导出完整 Excel 表格（包含客户 Telegram ID、@用户名、回复话术、主号直达链接）"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>导出 CSV (Excel表格)</span>
             </button>
 
-            {/* Download TXT Dropdown/Direct */}
+            {/* Download TXT Links & IDs */}
             <div className="flex items-center rounded-xl bg-slate-800 border border-slate-700 p-0.5">
+              <button
+                onClick={() => handleDownload('txt', 'links')}
+                className="px-3 py-1.5 rounded-lg hover:bg-slate-700 text-teal-300 hover:text-teal-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                title="导出每行一条 tg:// 直达私聊协议链接（发到 Telegram 收藏夹直接点击即可私信跟进）"
+              >
+                <Link2 className="w-3.5 h-3.5 text-teal-400" />
+                <span>导出直达私聊 (tg://)</span>
+              </button>
+              <div className="w-px h-4 bg-slate-700 mx-0.5"></div>
               <button
                 onClick={() => handleDownload('txt', 'usernames')}
                 className="px-3 py-1.5 rounded-lg hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
-                title="导出纯 @Username 文本文件（每行一个，用于主号搜索私信）"
+                title="导出 @Username 文本文件（若未设用户名则标注 ID）"
               >
                 <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                <span>导出 TXT (@用户名)</span>
+                <span>导出 @用户名</span>
               </button>
               <div className="w-px h-4 bg-slate-700 mx-0.5"></div>
               <button
                 onClick={() => handleDownload('txt', 'ids')}
-                className="px-3 py-1.5 rounded-lg hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
-                title="导出纯 Telegram 数字 ID 文本文件"
+                className="px-3 py-1.5 rounded-lg hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                title="导出纯 Telegram 数字 ID 列表 (Telegram User ID，非手机号)"
               >
-                <span>导出 ID TXT</span>
+                <span>导出纯 ID (UID)</span>
               </button>
             </div>
 
             {/* Copy Dropdown */}
             <div className="flex items-center rounded-xl bg-slate-800 border border-slate-700 p-0.5">
               <button
-                onClick={() => handleCopyAll('usernames')}
-                className="px-2.5 py-1.5 rounded-lg hover:bg-slate-700 text-xs font-medium text-amber-300 flex items-center gap-1 transition cursor-pointer"
-                title="复制所有 @用户名 到剪贴板"
+                onClick={() => handleCopyAll('links')}
+                className="px-2.5 py-1.5 rounded-lg hover:bg-slate-700 text-xs font-medium text-teal-300 flex items-center gap-1 transition cursor-pointer"
+                title="复制所有直达私聊链接 (tg://user?id=...) 到剪贴板"
               >
-                {copyFeedback === 'usernames' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copyFeedback === 'usernames' ? '已复制用户名' : '复制全部 @用户名'}</span>
+                {copyFeedback === 'links' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copyFeedback === 'links' ? '已复制直达链接' : '复制直达私聊链接'}</span>
               </button>
               <div className="w-px h-4 bg-slate-700 mx-0.5"></div>
               <button
@@ -257,6 +270,21 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
               <Trash2 className="w-3.5 h-3.5 text-rose-400" />
               <span>{isClearing ? '正在清空...' : '清空已导名单 (归零)'}</span>
             </button>
+          </div>
+        </div>
+
+        {/* Telegram ID vs Phone Number Clarification Banner */}
+        <div className="mx-4 my-2.5 p-3 rounded-xl bg-blue-950/40 border border-cyan-500/30 text-xs text-cyan-200 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <div className="font-bold text-cyan-300 flex items-center gap-2">
+              <span>💡 关于导出号码说明：导出的数字是 Telegram 官方用户 ID (UID)，不是电话号码</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              • <strong>Telegram 官方隐私保护</strong>：Telegram 默认对陌生人<strong>隐藏真实手机号</strong>（接口返回为空，任何第三方系统均无法强行突破官方隐私抓取手机号）。<br />
+              • <strong>无公开用户名</strong>：由于多数巴西老哥注册 TG 时【<span className="text-amber-300">未设公开发信用名</span>】，系统导出了其唯一的身份凭证 <strong>Telegram 数字 ID（如 8988912159）</strong>。<br />
+              • <strong>如何快捷私信截流</strong>：建议点击上方【<span className="text-teal-300 font-bold">导出直达私聊 (tg://)</span>】或【<span className="text-emerald-300 font-bold">导出 CSV (Excel表格)</span>】，或者直接点击每位客户卡片右侧的【<span className="text-teal-400 font-bold">主号直达私聊 ↗</span>】，可在 Telegram 中一键唤起与该客户的私信对话！
+            </p>
           </div>
         </div>
 
@@ -303,8 +331,8 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 font-mono">
-                        <div className="flex items-center gap-1">
-                          <span className="text-slate-500">ID:</span>
+                        <div className="flex items-center gap-1" title="Telegram 官方用户全局唯一数字 ID (UID，非电话号码)">
+                          <span className="text-slate-500">TG ID:</span>
                           <span className="text-slate-300 font-semibold">{item.id}</span>
                           <button
                             onClick={() => handleCopyText(item.id, `id_${item.id}`)}

@@ -32,48 +32,105 @@ const USER_60_REAL_PHONES = [
   '5598985656993', '5598985703552', '5598985709101', '5598985759825', '5598985864741',
   '5598985926947', '5598985966188', '5598986270576', '5598987077789', '5598987743687',
   '5599984026594', '5599984139898', '5599984168673', '5599984179798', '5599984185644',
-  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026',
-  '5599984388206'
+  '5599984232476', '5599984276272', '5599984277793', '5599984348008', '5599984387026'
 ];
+
+// 60 Dedicated Brazilian Native Residential Proxies (100% genuine 200.*)
+const BRAZIL_PROXIES_POOL: string[] = [
+  // 10 Original accounts' native proxies
+  '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+  '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+  '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+  '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+  '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+  '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+  '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+  '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+  '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+  '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+  // 50 Newly provided dedicated residential proxies
+  '200.160.38.179:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.215:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.90:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.220:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.36.36:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.21:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.149:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.42:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.244:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.8:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.171:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.75:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.12:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.25:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.36.8:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.37.147:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.17:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.151:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.152:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.57:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.179:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.37.235:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.193:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.44:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.80:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.175:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.77:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.85:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.103:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.213:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.103:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.214:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.219:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.250:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
+];
+
+const NEW_50_PROXIES_ONLY: string[] = BRAZIL_PROXIES_POOL.slice(10);
+
+const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
+  // 10 Original accounts retain their native proxies
+  '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+  '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+  '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+  '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+  '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+  '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+  '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+  '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+  '5586994943285': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+  '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
+};
+
+// 1:1 map for 50 newly uploaded accounts
+USER_60_REAL_PHONES.slice(10, 60).forEach((ph, idx) => {
+  BRAZIL_DEDICATED_PROXIES_MAP[ph] = NEW_50_PROXIES_ONLY[idx % NEW_50_PROXIES_ONLY.length];
+});
 
 function sanitizeAndSyncAccountProxies(rootDir: string, sessionsDir: string) {
   try {
-    const DEFAULT_60_PROXIES = [
-      '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-      '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-      '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-      '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-      '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-      '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-      '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-      '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-      '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-      '200.152.155.148:12323:14a5a773a873a:4d841434c6',
-      '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
-      '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
-    ];
-
-    let proxiesPool = DEFAULT_60_PROXIES;
+    let proxiesPool = BRAZIL_PROXIES_POOL;
     const proxiesTxtPath = path.join(rootDir, "proxies.txt");
     if (fs.existsSync(proxiesTxtPath)) {
       try {
         const raw = fs.readFileSync(proxiesTxtPath, 'utf8');
         const parsed = raw.split('\n').map(l => l.trim()).filter(Boolean);
-        if (parsed.length > 0) proxiesPool = parsed;
+        if (parsed.length >= 50) proxiesPool = parsed;
       } catch (_) {}
     }
 
@@ -100,9 +157,16 @@ function sanitizeAndSyncAccountProxies(rootDir: string, sessionsDir: string) {
     });
 
     const sortedRealPhones = Array.from(realPhonesSet).sort();
+    let existingMap: Record<string, string> = {};
+    const rootProxyJson = path.join(rootDir, "account_proxies.json");
+    if (fs.existsSync(rootProxyJson)) {
+      try {
+        existingMap = JSON.parse(fs.readFileSync(rootProxyJson, 'utf-8'));
+      } catch (_) {}
+    }
     const cleanMap: Record<string, string> = {};
     sortedRealPhones.forEach((phone, idx) => {
-      cleanMap[phone] = proxiesPool[idx % proxiesPool.length];
+      cleanMap[phone] = BRAZIL_DEDICATED_PROXIES_MAP[phone] || existingMap[phone] || proxiesPool[idx % proxiesPool.length];
     });
 
     const payload = JSON.stringify(cleanMap, null, 2);
@@ -414,48 +478,21 @@ async function startServer() {
 
       const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
 
-      // Fallback 60-proxy pool
-      const DEFAULT_60_PROXIES = [
-        '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-        '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-        '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-        '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-        '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-        '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-        '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-        '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-        '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-        '200.152.155.148:12323:14a5a773a873a:4d841434c6',
-        '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
-        '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
-      ];
-
-      // Load 60-proxy pool from proxies.txt or fallback
-      let proxiesPool: string[] = [];
+      // 60-proxy pool loaded from proxies.txt or canonical pool
+      let proxiesPool: string[] = BRAZIL_PROXIES_POOL;
       const proxiesTxtPath = path.join(rootDir, "proxies.txt");
       if (fs.existsSync(proxiesTxtPath)) {
         try {
           const rawTxt = fs.readFileSync(proxiesTxtPath, "utf8");
-          proxiesPool = rawTxt.split("\n").map(l => l.trim()).filter(Boolean);
+          const parsed = rawTxt.split("\n").map(l => l.trim()).filter(Boolean);
+          if (parsed.length >= 50) {
+            proxiesPool = parsed;
+          }
         } catch (e) {}
       }
       proxiesPool = proxiesPool.filter(p => !p.includes('144.') && p.startsWith('200.'));
       if (proxiesPool.length === 0) {
-        proxiesPool = DEFAULT_60_PROXIES;
+        proxiesPool = BRAZIL_PROXIES_POOL;
       }
 
       // Load 1:1 dedicated proxies dynamically from account_proxies.json or initial map
@@ -527,6 +564,19 @@ async function startServer() {
         if (phoneToProxy.has(cleanPh)) {
           return phoneToProxy.get(cleanPh)!;
         }
+        // First check dedicated 1:1 mapping
+        if (BRAZIL_DEDICATED_PROXIES_MAP[cleanPh]) {
+          const dedicated = BRAZIL_DEDICATED_PROXIES_MAP[cleanPh];
+          const dIp = dedicated.split(':')[0];
+          if (!usedProxyIps.has(dIp)) {
+            usedProxyIps.add(dIp);
+            phoneToProxy.set(cleanPh, dedicated);
+            accountProxiesMap[cleanPh] = dedicated;
+            proxyMapUpdated = true;
+            return dedicated;
+          }
+        }
+        // Allocate next unused proxy
         for (const candidate of proxiesPool) {
           const cIp = candidate.split(':')[0];
           if (!cIp.startsWith('144.') && cIp.startsWith('200.') && !usedProxyIps.has(cIp)) {
@@ -2043,14 +2093,16 @@ async function startServer() {
       if (format === 'txt') {
         let lines: string[] = [];
         if (type === 'usernames') {
-          lines = customers.filter(c => c.username).map(c => c.username);
+          lines = customers.map(c => c.username ? c.username : `(未设置公开用户名_TG_ID_${c.id})`);
         } else if (type === 'ids') {
           lines = customers.map(c => c.id);
         } else if (type === 'phones') {
-          lines = customers.filter(c => c.phone).map(c => c.phone.replace(/[^0-9+]/g, ''));
+          lines = customers.map(c => c.phone ? c.phone.replace(/[^0-9+]/g, '') : `(官方隐私保护未公开手机号_TG_ID_${c.id})`);
+        } else if (type === 'links' || type === 'direct') {
+          lines = customers.map(c => c.directChatUrl || (c.username ? `https://t.me/${c.username.replace('@', '')}` : `tg://user?id=${c.id}`));
         } else {
-          // 智能混合：优先 @username，若无则给 ID
-          lines = customers.map(c => c.username ? c.username : c.id);
+          // 智能混合：优先 @username，若无则给直达私信链接 tg://user?id=...
+          lines = customers.map(c => c.username ? c.username : (c.directChatUrl || `tg://user?id=${c.id}`));
         }
 
         const txtContent = lines.join('\n');
@@ -3377,57 +3429,41 @@ Return ONLY a JSON array with this schema:
     try {
       const rootDir = process.cwd();
       const accountProxiesPath = path.join(rootDir, "account_proxies.json");
+      let currentMap: Record<string, string> = {};
       if (fs.existsSync(accountProxiesPath)) {
-        const raw = fs.readFileSync(accountProxiesPath, "utf8");
-        const parsed = JSON.parse(raw);
-        let modified = false;
-        const cleanMappings: Record<string, string> = {};
-        const validProxies = [
-          '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-          '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-          '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-          '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-          '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-          '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-          '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-          '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-          '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-          '200.152.155.148:12323:14a5a773a873a:4d841434c6',
-          '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.153.126:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.154.149:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.153.70:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.154.77:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.82:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.154.254:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.175:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.155:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.243:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.155.124:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.152.195:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.155.35:12323:14abdb1a0db2e:cb8f30f1a9',
-          '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
-        ];
-        let idx = 0;
-        for (const [k, v] of Object.entries(parsed)) {
-          if (typeof v === 'string' && (v.includes('144.') || !v.startsWith('200.'))) {
-            cleanMappings[k] = validProxies[idx % validProxies.length];
-            modified = true;
-          } else if (typeof v === 'string') {
-            cleanMappings[k] = v;
-          }
-          idx++;
-        }
-        if (modified) {
-          try {
-            fs.writeFileSync(accountProxiesPath, JSON.stringify(cleanMappings, null, 2), "utf8");
-          } catch (_) {}
-        }
-        return res.json({ success: true, mappings: cleanMappings });
+        try {
+          currentMap = JSON.parse(fs.readFileSync(accountProxiesPath, "utf8"));
+        } catch (_) {}
       }
-      res.json({ success: true, mappings: {} });
+
+      const cleanMappings: Record<string, string> = {};
+      const usedIps = new Set<string>();
+
+      // Primary: Assign dedicated 1:1 proxy map
+      for (const [ph, proxy] of Object.entries(BRAZIL_DEDICATED_PROXIES_MAP)) {
+        const ip = proxy.split(':')[0];
+        cleanMappings[ph] = proxy;
+        usedIps.add(ip);
+      }
+
+      // Secondary: Check any additional accounts from file
+      for (const [k, v] of Object.entries(currentMap)) {
+        const cleanK = k.replace(/\D/g, '');
+        if (!cleanMappings[cleanK] && typeof v === 'string' && v.startsWith('200.')) {
+          const ip = v.split(':')[0];
+          if (!usedIps.has(ip)) {
+            cleanMappings[cleanK] = v;
+            usedIps.add(ip);
+          }
+        }
+      }
+
+      // Persist cleanMappings if needed
+      try {
+        fs.writeFileSync(accountProxiesPath, JSON.stringify(cleanMappings, null, 2), "utf8");
+      } catch (_) {}
+
+      return res.json({ success: true, mappings: cleanMappings });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

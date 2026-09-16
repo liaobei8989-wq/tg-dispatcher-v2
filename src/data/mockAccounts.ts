@@ -47,8 +47,20 @@ export const USER_60_REAL_PHONES: string[] = [
 
 export const USER_50_REAL_PHONES = USER_60_REAL_PHONES;
 
-// 50 Dedicated Brazilian Native Residential Proxies (100% genuine 200.*)
+// 60 Dedicated Brazilian Native Residential Proxies (100% genuine 200.*)
 export const BRAZIL_PROXIES_POOL: string[] = [
+  // 10 Original accounts' native proxies
+  '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+  '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+  '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+  '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+  '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+  '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+  '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+  '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+  '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+  '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+  // 50 Newly provided dedicated residential proxies
   '200.160.38.179:12323:14abdb1a0db2e:cb8f30f1a9',
   '200.160.35.215:12323:14abdb1a0db2e:cb8f30f1a9',
   '200.160.32.90:12323:14abdb1a0db2e:cb8f30f1a9',
@@ -101,6 +113,8 @@ export const BRAZIL_PROXIES_POOL: string[] = [
   '200.152.153.232:12323:14abdb1a0db2e:cb8f30f1a9'
 ];
 
+export const NEW_50_PROXIES_ONLY: string[] = BRAZIL_PROXIES_POOL.slice(10);
+
 // Dedicated Brazilian Native Proxies (1:1 strictly mapped for each genuine phone)
 export const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
   // 10 Original accounts retain their native proxies
@@ -116,10 +130,10 @@ export const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
   '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
 };
 
-// Map the 50 newly uploaded accounts 1:1 to the 50 new dedicated proxies
+// Map the 50 newly uploaded accounts 1:1 strictly to the 50 new dedicated proxies
 const NEW_50_PHONES = USER_60_REAL_PHONES.slice(10);
 NEW_50_PHONES.forEach((ph, idx) => {
-  BRAZIL_DEDICATED_PROXIES_MAP[ph] = BRAZIL_PROXIES_POOL[idx % BRAZIL_PROXIES_POOL.length];
+  BRAZIL_DEDICATED_PROXIES_MAP[ph] = NEW_50_PROXIES_ONLY[idx % NEW_50_PROXIES_ONLY.length];
 });
 
 export function getDedicatedProxyForPhone(rawPhone?: string, index: number = 0): string {
@@ -162,7 +176,7 @@ function formatBrPhone(raw: string): string {
 
 export const INITIAL_MOCK_ACCOUNTS: AccountSession[] = USER_60_REAL_PHONES.map((rawPhone, idx) => {
   const isTop5 = idx < 5;
-  const proxy = BRAZIL_PROXIES_POOL[idx] || BRAZIL_PROXIES_POOL[idx % BRAZIL_PROXIES_POOL.length];
+  const proxy = getDedicatedProxyForPhone(rawPhone, idx);
   const name = BRAZILIAN_FEMALE_NAMES[idx % BRAZILIAN_FEMALE_NAMES.length] || `Atendente ${idx + 1}`;
   const warmupDay = isTop5 ? 7 : (idx < 25 ? 5 : 4);
   const groupTag = idx < 30 ? '主力爆破A组' : '新买养号B组';
