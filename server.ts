@@ -2042,7 +2042,6 @@ async function startServer() {
     'Gabriel Silva', 'César Vargas', 'Wesley Braga', 'Douglas Tavares', 'Leandro Siqueira',
     'Matheus Oliveira', 'Lucas Santos', 'Thiago Lima'
   ]);
-  const OBSOLETE_DEMO_ACCOUNT = '5586994428117';
 
   function isLegacyMockRecord(item: any): boolean {
     if (!item) return true;
@@ -2050,8 +2049,6 @@ async function startServer() {
     if (DEMO_MOCK_NAMES.has(name)) return true;
     const timeStr = String(item.lastMessageTime || item.repliedAt || item.timestamp || '');
     if (timeStr.includes('2026-09-06') || timeStr.includes('2026-09-05') || timeStr.includes('2026-09-04') || timeStr.includes('2026-08')) return true;
-    const acc = String(item.assignedAccountPhone || item.receivedByAccount || '');
-    if (acc.includes(OBSOLETE_DEMO_ACCOUNT)) return true;
     return false;
   }
 
@@ -2115,16 +2112,19 @@ async function startServer() {
       const headers = ['序号', 'Telegram ID', '@用户名', '客户姓名', '客户手机号', '客户回复内容', '接待小号', '最后回复时间', '主号直达私聊链接'];
       const rows = customers.map((c, idx) => {
         const escapeCsv = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+        const directUrl = c.username 
+          ? `https://t.me/${c.username.replace('@', '')}` 
+          : (c.directChatUrl || `tg://user?id=${c.id}`);
         return [
           idx + 1,
           `'${c.id || ''}`,
           escapeCsv(c.username || ''),
-          escapeCsv(c.fullName || c.firstName || ''),
-          escapeCsv(c.phone || ''),
+          escapeCsv(c.fullName || c.firstName || `Cliente ${c.id}`),
+          escapeCsv(c.phone ? `'${c.phone}` : ''),
           escapeCsv(c.lastReplyText || ''),
-          escapeCsv(c.receivedByAccount || ''),
-          escapeCsv(c.repliedAt || ''),
-          escapeCsv(c.directChatUrl || '')
+          escapeCsv(c.receivedByAccount ? `'${c.receivedByAccount}` : ''),
+          escapeCsv(c.repliedAt ? `'${c.repliedAt}` : ''),
+          escapeCsv(directUrl)
         ].join(',');
       });
 

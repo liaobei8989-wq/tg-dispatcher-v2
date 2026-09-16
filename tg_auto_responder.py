@@ -316,12 +316,111 @@ def parse_proxy_str(proxy_str):
         pass
     return None
 
-def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: str, incoming_msg: str, second_msg: str, url: str):
+def save_or_update_replied_customer(session_basename: str, sender_id: str, sender_name: str, incoming_msg: str, username: str = "", phone: str = "", first_name: str = "", last_name: str = "", msg_date_str: str = None):
+    """确保将真实已回复客户的完整资料（ID、@username、手机号、全名、接待小号）持久化写入 sessions/replied_customers.json"""
+    try:
+        possible_dirs = [
+            os.path.join(os.getcwd(), "sessions"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "sessions"),
+            "/var/www/tg-dispatcher-v2/sessions",
+            "/root/tg-dispatcher/sessions",
+            "/root/tg-dispatcher-v2/sessions"
+        ]
+        sessions_folder = None
+        for p in possible_dirs:
+            if os.path.exists(p):
+                sessions_folder = p
+                break
+        if not sessions_folder:
+            sessions_folder = os.path.join(os.getcwd(), "sessions")
+            os.makedirs(sessions_folder, exist_ok=True)
+
+        replied_cust_file = os.path.join(sessions_folder, "replied_customers.json")
+        cust_list = []
+        if os.path.exists(replied_cust_file):
+            try:
+                with open(replied_cust_file, "r", encoding="utf-8") as rf:
+                    cust_list = json.load(rf)
+                if not isinstance(cust_list, list):
+                    cust_list = []
+            except Exception:
+                cust_list = []
+
+        # 剔除旧 demo 数据 (2026-09-06)
+        cust_list = [c for c in cust_list if not str(c.get("repliedAt", "")).startswith("2026-09-06")]
+
+        clean_username = (username or "").strip()
+        if clean_username and not clean_username.startswith("@"):
+            clean_username = f"@{clean_username}"
+
+        clean_phone = (phone or "").strip()
+        if clean_phone and not clean_phone.startswith("+"):
+            clean_phone = f"+{clean_phone}"
+
+        fn = (first_name or "").strip()
+        ln = (last_name or "").strip()
+        full_name = " ".join([p for p in [fn, ln] if p]).strip() or (sender_name or "").strip() or f"Cliente {sender_id}"
+        
+        now_dt = datetime.now()
+        date_display = msg_date_str or now_dt.strftime("%Y-%m-%d %H:%M")
+
+        # 私聊直达链接优先为 t.me/用户名，否则 tg://user?id=...
+        direct_link = f"https://t.me/{clean_username.replace('@', '')}" if clean_username else f"tg://user?id={sender_id}"
+
+        existing_idx = -1
+        for idx, item in enumerate(cust_list):
+            if str(item.get("id")) == str(sender_id):
+                existing_idx = idx
+                break
+
+        if existing_idx >= 0:
+            curr = cust_list[existing_idx]
+            if clean_username:
+                curr["username"] = clean_username
+            if clean_phone:
+                curr["phone"] = clean_phone
+            if full_name and full_name != f"Cliente {sender_id}":
+                curr["fullName"] = full_name
+                curr["firstName"] = fn or full_name
+            if ln:
+                curr["lastName"] = ln
+            if incoming_msg:
+                curr["lastReplyText"] = incoming_msg
+            curr["receivedByAccount"] = session_basename
+            curr["receivedByAccountName"] = f"TG协议号-{session_basename[-4:]}"
+            curr["directChatUrl"] = direct_link
+            cust_list[existing_idx] = curr
+        else:
+            new_cust_entry = {
+                "id": str(sender_id),
+                "username": clean_username,
+                "firstName": fn or full_name,
+                "lastName": ln,
+                "fullName": full_name,
+                "phone": clean_phone,
+                "receivedByAccount": session_basename,
+                "receivedByAccountName": f"TG协议号-{session_basename[-4:]}",
+                "lastReplyText": incoming_msg or "Oi",
+                "repliedAt": date_display,
+                "repliedAtIso": now_dt.isoformat(),
+                "directChatUrl": direct_link
+            }
+            cust_list.insert(0, new_cust_entry)
+
+        with open(replied_cust_file, "w", encoding="utf-8") as wf:
+            json.dump(cust_list, wf, ensure_ascii=False, indent=2)
+            
+        print(f"📥 [客资已持久化] ID: {sender_id} | 姓名: {full_name} | @用户名: {clean_username or '(无)'} | 手机: {clean_phone or '(未公开)'}")
+    except Exception as e:
+        print(f"⚠️ [保存客资信息失败]: {e}")
+
+def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: str, incoming_msg: str, second_msg: str, url: str, username: str = "", phone: str = "", first_name: str = "", last_name: str = ""):
     """持久化记录 24 小时自动回复与追发彩金统计数据，并实时同步写入真实客资库与聚合收件箱"""
     try:
         possible_dirs = [
             os.path.join(os.getcwd(), "sessions"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "sessions"),
+            "/var/www/tg-dispatcher-v2/sessions",
             "/root/tg-dispatcher/sessions",
             "/root/tg-dispatcher-v2/sessions"
         ]
@@ -378,37 +477,16 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
             json.dump(data, f, ensure_ascii=False, indent=2)
 
         # 📥 同步持久化写入真实已回复客资库 (replied_customers.json)
-        replied_cust_file = os.path.join(sessions_folder, "replied_customers.json")
-        cust_list = []
-        if os.path.exists(replied_cust_file):
-            try:
-                with open(replied_cust_file, "r", encoding="utf-8") as rf:
-                    cust_list = json.load(rf)
-                if not isinstance(cust_list, list):
-                    cust_list = []
-            except Exception:
-                cust_list = []
-
-        # 剔除旧 demo 数据 (2026-09-06) 和相同客户ID
-        cust_list = [c for c in cust_list if str(c.get("id")) != str(sender_id) and not str(c.get("repliedAt", "")).startswith("2026-09-06")]
-
-        new_cust_entry = {
-            "id": str(sender_id),
-            "username": "",
-            "firstName": sender_name or f"Cliente {sender_id}",
-            "lastName": "",
-            "fullName": sender_name or f"Cliente {sender_id}",
-            "phone": "",
-            "receivedByAccount": session_basename,
-            "receivedByAccountName": f"TG协议号-{session_basename[-4:]}",
-            "lastReplyText": incoming_msg or "Oi",
-            "repliedAt": now_str[:16],
-            "repliedAtIso": now_dt.isoformat(),
-            "directChatUrl": f"tg://user?id={sender_id}"
-        }
-        cust_list.insert(0, new_cust_entry)
-        with open(replied_cust_file, "w", encoding="utf-8") as wf:
-            json.dump(cust_list, wf, ensure_ascii=False, indent=2)
+        save_or_update_replied_customer(
+            session_basename=session_basename,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            incoming_msg=incoming_msg,
+            username=username,
+            phone=phone,
+            first_name=first_name,
+            last_name=last_name
+        )
 
         # 💬 同步持久化写入聚合收件箱 (inbox_conversations.json)
         inbox_file = os.path.join(sessions_folder, "inbox_conversations.json")
@@ -425,6 +503,16 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
         # 剔除 demo 数据
         inbox_list = [c for c in inbox_list if not str(c.get("lastMessageTime", "")).startswith("2026-09-06")]
 
+        clean_username = (username or "").strip()
+        if clean_username and not clean_username.startswith("@"):
+            clean_username = f"@{clean_username}"
+        clean_phone = (phone or "").strip()
+        if clean_phone and not clean_phone.startswith("+"):
+            clean_phone = f"+{clean_phone}"
+        fn = (first_name or "").strip()
+        ln = (last_name or "").strip()
+        full_name = " ".join([p for p in [fn, ln] if p]).strip() or (sender_name or "").strip() or f"Cliente {sender_id}"
+
         conv_id = f"conv-{sender_id}"
         existing_conv = next((c for c in inbox_list if c.get("id") == conv_id), None)
         cur_ts = now_str[11:16]
@@ -432,7 +520,7 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
             "id": f"m-in-{int(time.time()*1000)}",
             "conversationId": conv_id,
             "senderType": "customer",
-            "senderName": sender_name or "Cliente",
+            "senderName": full_name,
             "text": incoming_msg or "Oi",
             "timestamp": cur_ts,
             "status": "delivered"
@@ -452,6 +540,11 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
             existing_conv["unreadCount"] = existing_conv.get("unreadCount", 0) + 1
             existing_conv["lastMessageText"] = incoming_msg or second_msg
             existing_conv["lastMessageTime"] = now_str[:16]
+            existing_conv["customerName"] = full_name
+            if clean_username:
+                existing_conv["customerUsername"] = clean_username
+            if clean_phone:
+                existing_conv["customerPhone"] = clean_phone
             if "messages" not in existing_conv or not isinstance(existing_conv["messages"], list):
                 existing_conv["messages"] = []
             existing_conv["messages"].extend([m_in, m_out])
@@ -459,9 +552,9 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
         else:
             new_conv = {
                 "id": conv_id,
-                "customerName": sender_name or f"Cliente {sender_id}",
-                "customerPhone": "",
-                "customerUsername": "",
+                "customerName": full_name,
+                "customerPhone": clean_phone,
+                "customerUsername": clean_username,
                 "assignedAccountPhone": session_basename,
                 "assignedAccountName": f"TG协议号-{session_basename[-4:]}",
                 "tag": "hot_lead",
@@ -474,14 +567,45 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
 
         with open(inbox_file, "w", encoding="utf-8") as iwf:
             json.dump(inbox_list, iwf, ensure_ascii=False, indent=2)
-        print(f"✅ [收件箱同步成功] 客户 {sender_id} ({sender_name}) 已实时进入聚合收件箱第一位！")
+        print(f"✅ [收件箱同步成功] 客户 {sender_id} ({full_name}) 已实时进入聚合收件箱第一位！")
     except Exception as e:
         print(f"⚠️ [写入客资库与收件箱失败]: {e}")
 
-async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name):
+async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name, username="", phone="", first_name="", last_name=""):
     try:
         sender_id = str(chat_id)
         track_key = f"{session_basename}_{sender_id}"
+
+        # 尝试深度抓取客户真实的 TG 详细资料（@username、手机号、全名）
+        if not username or not phone or not first_name:
+            try:
+                user_entity = await client.get_entity(chat_id)
+                if user_entity:
+                    if not username and getattr(user_entity, 'username', None):
+                        username = f"@{user_entity.username}"
+                    if not phone and getattr(user_entity, 'phone', None):
+                        phone = f"+{user_entity.phone}"
+                    if not first_name and getattr(user_entity, 'first_name', None):
+                        first_name = user_entity.first_name or ""
+                    if not last_name and getattr(user_entity, 'last_name', None):
+                        last_name = user_entity.last_name or ""
+                    extracted_full = " ".join([p for p in [first_name, last_name] if p]).strip()
+                    if extracted_full:
+                        sender_name = extracted_full
+            except Exception:
+                pass
+
+        # 只要客户发言过，立即确保持久化写入客资库（即便是已回复客户也能实时丰富资料）
+        save_or_update_replied_customer(
+            session_basename=session_basename,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            incoming_msg=msg_text,
+            username=username,
+            phone=phone,
+            first_name=first_name,
+            last_name=last_name
+        )
 
         replied_chats_file = os.path.join(os.getcwd(), "sessions", "replied_chats.json")
         replied_history = {}
@@ -530,7 +654,7 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
 
         msg_text = str(msg_text or "").strip()
         lower_msg = msg_text.lower()
-        print(f"\n📩 [感知客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'}) | 内容: \"{msg_text}\"")
+        print(f"\n📩 [感知客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'} | {username or '无@'} | {phone or '无手机'}) | 内容: \"{msg_text}\"")
 
         # 智能客户意图匹配
         if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
@@ -557,7 +681,18 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             except Exception:
                 await client.send_message(chat_id, second_msg)
             print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
-            record_auto_reply_stat(session_basename, sender_id, sender_name, msg_text, second_msg, rand_url)
+            record_auto_reply_stat(
+                session_basename=session_basename,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                incoming_msg=msg_text,
+                second_msg=second_msg,
+                url=rand_url,
+                username=username,
+                phone=phone,
+                first_name=first_name,
+                last_name=last_name
+            )
         except Exception as e2:
             print(f"❌ [第2条发送失败]: {e2}")
             return False
@@ -744,31 +879,61 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
             print(f"🟢 [{'扫描' if scan_once else '24h守护就绪'}] 账号 +{phone_num} ({first_name}) 自动追发服务在线！")
             retry_count = 0
 
-            # 初始离线历史扫尾：检查最近私聊，若有客户最新发言未被回复，立即触发补发！
+            # 初始离线历史扫尾与客资同步：检查私聊，同步所有已互动客户资料；若有未回复客户立即补发！
             try:
-                dialogs = await client.get_dialogs(limit=25)
+                dialogs = await client.get_dialogs(limit=30)
                 for d in dialogs:
                     if d.is_user and not (getattr(d.entity, 'bot', False)):
-                        c_msgs = await client.get_messages(d.entity, limit=3)
-                        if c_msgs and not c_msgs[0].out:
-                            # 最新一条是客户发言！说明我们还没回！
-                            latest_incoming = c_msgs[0]
-                            c_sender_id = str(d.entity.id)
-                            c_sender_name = getattr(d.entity, 'first_name', '') or getattr(d.entity, 'username', '') or 'Cliente'
-                            c_text = str(latest_incoming.message or latest_incoming.text or '')
-                            await process_and_reply_customer(
-                                client=client,
-                                session_basename=session_basename,
-                                chat_id=d.entity.id,
-                                incoming_msg_id=latest_incoming.id,
-                                msg_text=c_text,
-                                sender_name=c_sender_name
-                            )
+                        c_sender_id = str(d.entity.id)
+                        c_fn = getattr(d.entity, 'first_name', '') or ''
+                        c_ln = getattr(d.entity, 'last_name', '') or ''
+                        c_full = " ".join([p for p in [c_fn, c_ln] if p]).strip() or getattr(d.entity, 'username', '') or f"Cliente {c_sender_id}"
+                        c_uname = getattr(d.entity, 'username', '') or ''
+                        if c_uname and not c_uname.startswith('@'):
+                            c_uname = f"@{c_uname}"
+                        c_phone = getattr(d.entity, 'phone', '') or ''
+                        if c_phone and not c_phone.startswith('+'):
+                            c_phone = f"+{c_phone}"
+
+                        c_msgs = await client.get_messages(d.entity, limit=8)
+                        if c_msgs:
+                            incoming_msgs = [m for m in c_msgs if m and not m.out]
+                            if incoming_msgs:
+                                latest_incoming = incoming_msgs[0]
+                                c_text = str(latest_incoming.message or latest_incoming.text or '').strip()
+                                
+                                # 1. 总是持久化/刷新记录到 replied_customers.json (补齐真实的姓名、@username、手机号)
+                                save_or_update_replied_customer(
+                                    session_basename=session_basename,
+                                    sender_id=c_sender_id,
+                                    sender_name=c_full,
+                                    incoming_msg=c_text,
+                                    username=c_uname,
+                                    phone=c_phone,
+                                    first_name=c_fn,
+                                    last_name=c_ln,
+                                    msg_date_str=latest_incoming.date.strftime("%Y-%m-%d %H:%M") if hasattr(latest_incoming, 'date') and latest_incoming.date else None
+                                )
+
+                                # 2. 若最新一条仍是客户发言且我们未回，立即补发
+                                if not c_msgs[0].out:
+                                    await process_and_reply_customer(
+                                        client=client,
+                                        session_basename=session_basename,
+                                        chat_id=d.entity.id,
+                                        incoming_msg_id=latest_incoming.id,
+                                        msg_text=c_text,
+                                        sender_name=c_full,
+                                        username=c_uname,
+                                        phone=c_phone,
+                                        first_name=c_fn,
+                                        last_name=c_ln
+                                    )
             except Exception as sweep_err:
                 print(f"ℹ️ [初始离线扫尾提示]: {sweep_err}")
 
             if scan_once:
-                print(f"✅ 账号 +{phone_num} 扫描补发完毕。")
+                print(f"✅ 账号 +{phone_num} 扫描客资与补发完毕。")
                 return
 
             # 引擎 1：实时长连接 NewMessage 监听事件
@@ -777,13 +942,17 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                 try:
                     if not event.is_private:
                         return
-                    sender_name = ""
-                    try:
-                        sender = await event.get_sender()
-                        if sender:
-                            sender_name = getattr(sender, 'first_name', '') or getattr(sender, 'username', '') or ''
-                    except Exception:
-                        pass
+                    sender = await event.get_sender()
+                    fn = getattr(sender, 'first_name', '') or ''
+                    ln = getattr(sender, 'last_name', '') or ''
+                    full_name = " ".join([p for p in [fn, ln] if p]).strip() or getattr(sender, 'username', '') or f"Cliente {event.chat_id}"
+                    uname = getattr(sender, 'username', '') or ''
+                    if uname and not uname.startswith('@'):
+                        uname = f"@{uname}"
+                    uphone = getattr(sender, 'phone', '') or ''
+                    if uphone and not uphone.startswith('+'):
+                        uphone = f"+{uphone}"
+
                     msg_text = str(event.text or event.raw_text or "").strip()
                     await process_and_reply_customer(
                         client=client,
@@ -791,7 +960,11 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         chat_id=event.chat_id,
                         incoming_msg_id=getattr(event.message, 'id', 0),
                         msg_text=msg_text,
-                        sender_name=sender_name
+                        sender_name=full_name,
+                        username=uname,
+                        phone=uphone,
+                        first_name=fn,
+                        last_name=ln
                     )
                 except Exception as e:
                     print(f"⚠️ [事件分发异常]: {e}")
@@ -803,22 +976,53 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         await asyncio.sleep(random.uniform(20.0, 30.0))
                         if not client.is_connected():
                             continue
-                        recent_dialogs = await client.get_dialogs(limit=25)
+                        recent_dialogs = await client.get_dialogs(limit=30)
                         for d in recent_dialogs:
                             if d.is_user and not (getattr(d.entity, 'bot', False)):
-                                c_msgs = await client.get_messages(d.entity, limit=2)
-                                if c_msgs and not c_msgs[0].out:
-                                    latest_incoming = c_msgs[0]
-                                    c_text = str(latest_incoming.message or latest_incoming.text or '')
-                                    c_sender_name = getattr(d.entity, 'first_name', '') or getattr(d.entity, 'username', '') or 'Cliente'
-                                    await process_and_reply_customer(
-                                        client=client,
-                                        session_basename=session_basename,
-                                        chat_id=d.entity.id,
-                                        incoming_msg_id=latest_incoming.id,
-                                        msg_text=c_text,
-                                        sender_name=c_sender_name
-                                    )
+                                c_sender_id = str(d.entity.id)
+                                c_fn = getattr(d.entity, 'first_name', '') or ''
+                                c_ln = getattr(d.entity, 'last_name', '') or ''
+                                c_full = " ".join([p for p in [c_fn, c_ln] if p]).strip() or getattr(d.entity, 'username', '') or f"Cliente {c_sender_id}"
+                                c_uname = getattr(d.entity, 'username', '') or ''
+                                if c_uname and not c_uname.startswith('@'):
+                                    c_uname = f"@{c_uname}"
+                                c_phone = getattr(d.entity, 'phone', '') or ''
+                                if c_phone and not c_phone.startswith('+'):
+                                    c_phone = f"+{c_phone}"
+
+                                c_msgs = await client.get_messages(d.entity, limit=4)
+                                if c_msgs:
+                                    incoming_msgs = [m for m in c_msgs if m and not m.out]
+                                    if incoming_msgs:
+                                        latest_incoming = incoming_msgs[0]
+                                        c_text = str(latest_incoming.message or latest_incoming.text or '').strip()
+                                        
+                                        # 刷新/同步客资库
+                                        save_or_update_replied_customer(
+                                            session_basename=session_basename,
+                                            sender_id=c_sender_id,
+                                            sender_name=c_full,
+                                            incoming_msg=c_text,
+                                            username=c_uname,
+                                            phone=c_phone,
+                                            first_name=c_fn,
+                                            last_name=c_ln,
+                                            msg_date_str=latest_incoming.date.strftime("%Y-%m-%d %H:%M") if hasattr(latest_incoming, 'date') and latest_incoming.date else None
+                                        )
+
+                                        if not c_msgs[0].out:
+                                            await process_and_reply_customer(
+                                                client=client,
+                                                session_basename=session_basename,
+                                                chat_id=d.entity.id,
+                                                incoming_msg_id=latest_incoming.id,
+                                                msg_text=c_text,
+                                                sender_name=c_full,
+                                                username=c_uname,
+                                                phone=c_phone,
+                                                first_name=c_fn,
+                                                last_name=c_ln
+                                            )
                     except asyncio.CancelledError:
                         break
                     except Exception as loop_sweep_err:

@@ -597,6 +597,49 @@ export async function executeTelegramReplyScanner(
           const cleanPhone = curPhone.replace(/[^0-9]/g, '');
           const trackKey = `${cleanPhone}_${targetEntityId}`;
           const lastRecordedId = Number(repliedHistory[trackKey] || 0);
+          const targetName = (d.entity as any)?.firstName || (d.entity as any)?.phone || 'Cliente';
+          const replySnippet = String(latestIncomingMsg.message || latestIncomingMsg.text || '客户回复').slice(0, 50);
+
+          // 无论是否已回复，首先确保持久化同步到客资库 (replied_customers.json)
+          try {
+            const custFile = path.join(process.cwd(), 'sessions', 'replied_customers.json');
+            let custList: any[] = [];
+            if (fs.existsSync(custFile)) {
+              try { custList = JSON.parse(fs.readFileSync(custFile, 'utf8')); } catch (e) {}
+            }
+            if (!Array.isArray(custList)) custList = [];
+            const custId = String((d.entity as any)?.id || targetEntityId);
+            const rawUname = (d.entity as any)?.username || '';
+            const custUname = rawUname ? `@${rawUname.replace('@', '')}` : '';
+            const custFn = (d.entity as any)?.firstName || '';
+            const custLn = (d.entity as any)?.lastName || '';
+            const rawCustPhone = (d.entity as any)?.phone || '';
+            const custPhone = rawCustPhone ? `+${rawCustPhone.replace('+', '')}` : '';
+            const custFullName = [custFn, custLn].filter(Boolean).join(' ') || targetName || `Cliente ${custId}`;
+            
+            const existingIdx = custList.findIndex(c => String(c.id) === String(custId));
+            const directUrl = custUname ? `https://t.me/${custUname.replace('@', '')}` : `tg://user?id=${custId}`;
+            const record = {
+              id: custId,
+              username: custUname,
+              firstName: custFn || custFullName,
+              lastName: custLn,
+              fullName: custFullName,
+              phone: custPhone,
+              receivedByAccount: curPhone,
+              receivedByAccountName: accName,
+              lastReplyText: replySnippet,
+              repliedAt: new Date().toLocaleString('pt-BR'),
+              repliedAtIso: new Date().toISOString(),
+              directChatUrl: directUrl
+            };
+            if (existingIdx >= 0) {
+              custList[existingIdx] = { ...custList[existingIdx], ...record };
+            } else {
+              custList.unshift(record);
+            }
+            fs.writeFileSync(custFile, JSON.stringify(custList, null, 2), 'utf8');
+          } catch (e) {}
 
           // 2. 检查在客户最新回复之后，我们是否已经发出过消息 (m.out === true)
           const hasRepliedAfterIncoming = messages.some((m: any) => 
@@ -624,9 +667,6 @@ export async function executeTelegramReplyScanner(
           await withTimeout(client.sendMessage(d.inputEntity, { message: promoText, parseMode: 'html' }), 6000, '发送补发消息超时');
           newlySent++;
           totalCompleted++;
-
-          const targetName = (d.entity as any)?.firstName || (d.entity as any)?.phone || 'Cliente';
-          const replySnippet = String(latestIncomingMsg.message || latestIncomingMsg.text || '客户回复').slice(0, 30);
           
           // 官方推荐 3~6 秒拟人风控延时 + 模拟正在输入状态 (typing)
           const blessingDelay = Math.round((Math.random() * 2.5 + 3.5) * 10) / 10;
@@ -657,43 +697,6 @@ export async function executeTelegramReplyScanner(
           if (!statsData.logs) statsData.logs = [];
           statsData.logs.unshift(logEntry);
           if (statsData.logs.length > 50) statsData.logs = statsData.logs.slice(0, 50);
-
-          // 持久化记录到 replied_customers.json (供运营一键下载和主号跟进)
-          try {
-            const custFile = path.join(process.cwd(), 'sessions', 'replied_customers.json');
-            let custList: any[] = [];
-            if (fs.existsSync(custFile)) {
-              try { custList = JSON.parse(fs.readFileSync(custFile, 'utf8')); } catch (e) {}
-            }
-            if (!Array.isArray(custList)) custList = [];
-            const custId = String((d.entity as any)?.id || targetEntityId);
-            const custUname = (d.entity as any)?.username ? `@${(d.entity as any).username}` : '';
-            const custFn = (d.entity as any)?.firstName || '';
-            const custLn = (d.entity as any)?.lastName || '';
-            const custPhone = (d.entity as any)?.phone ? `+${(d.entity as any).phone}` : '';
-            
-            const existingIdx = custList.findIndex(c => c.id === custId);
-            const record = {
-              id: custId,
-              username: custUname,
-              firstName: custFn,
-              lastName: custLn,
-              fullName: [custFn, custLn].filter(Boolean).join(' ') || targetName,
-              phone: custPhone,
-              receivedByAccount: curPhone,
-              receivedByAccountName: accName,
-              lastReplyText: replySnippet,
-              repliedAt: new Date().toLocaleString('pt-BR'),
-              repliedAtIso: new Date().toISOString(),
-              directChatUrl: custUname ? `https://t.me/${custUname.replace('@', '')}` : `tg://user?id=${custId}`
-            };
-            if (existingIdx >= 0) {
-              custList[existingIdx] = record;
-            } else {
-              custList.unshift(record);
-            }
-            fs.writeFileSync(custFile, JSON.stringify(custList, null, 2), 'utf8');
-          } catch (e) {}
         } catch (dErr) {}
       }
     } catch (err: any) {

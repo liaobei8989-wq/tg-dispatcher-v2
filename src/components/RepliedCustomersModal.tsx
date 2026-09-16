@@ -41,6 +41,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<'csv' | 'txt_usernames' | 'txt_ids' | 'txt_phones'>('csv');
   const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [isDeepSyncing, setIsDeepSyncing] = useState<boolean>(false);
 
   // Load replied customers list from server
   const fetchRepliedCustomers = async () => {
@@ -57,6 +58,26 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
       console.error('Failed to fetch replied customers:', e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Trigger full scan of all accounts to extract full profile (name, @username, phone, link)
+  const handleDeepSync = async () => {
+    setIsDeepSyncing(true);
+    try {
+      await fetch('/api/telegram/scan-and-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'scan-once' })
+      });
+      // Wait for scanner to scan all dialogs
+      await new Promise(r => setTimeout(r, 3000));
+      await fetchRepliedCustomers();
+      onRefreshStats?.();
+    } catch (e) {
+      console.error('Failed to trigger deep sync:', e);
+    } finally {
+      setIsDeepSyncing(false);
     }
   };
 
@@ -168,8 +189,17 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleDeepSync}
+              disabled={isDeepSyncing || isLoading}
+              className="px-3 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-50"
+              title="立即连接全部活跃协议号，深度抓取并补全历史所有互动客户的真实全名、@username、手机号及链接"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isDeepSyncing ? 'animate-spin text-teal-300' : 'text-teal-400'}`} />
+              <span>{isDeepSyncing ? '正在全网深度同步中...' : '⚡ 全网深度同步客资'}</span>
+            </button>
+            <button
               onClick={fetchRepliedCustomers}
-              disabled={isLoading}
+              disabled={isLoading || isDeepSyncing}
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
               title="刷新最新客户名单"
             >
