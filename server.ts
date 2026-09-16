@@ -332,9 +332,18 @@ async function startServer() {
       const sessionFilesMap = new Map();
       const obsoleteSet = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
 
-      // Clean up any accidentally renamed 2fa.txt.session files, system json, malformed bak, or obsolete dead accounts in sessions/
+      // Clean up any dummy placeholder sessions (<= 200 bytes), accidentally renamed 2fa files, system json, or obsolete dead accounts in sessions/
       filesInSessions.forEach(f => {
         const cleanDigits = f.replace(/[^0-9]/g, '');
+        const fullP = path.join(sessionsDir, f);
+        try {
+          const st = fs.statSync(fullP);
+          if (f.endsWith('.session') && st.size <= 200) {
+            fs.unlinkSync(fullP);
+            return;
+          }
+        } catch (e) {}
+
         if (
           (f.toLowerCase().includes('2fa') && f.endsWith('.session')) ||
           f === 'package-lock.json' ||
@@ -344,7 +353,7 @@ async function startServer() {
           obsoleteSet.has(cleanDigits)
         ) {
           try {
-            fs.unlinkSync(path.join(sessionsDir, f));
+            fs.unlinkSync(fullP);
           } catch (e) {}
         }
       });

@@ -3503,7 +3503,8 @@ if __name__ == "__main__":
     const realSessionFiles = uploadedSessions.filter(s => {
       if (!s.fileName || !s.fileName.endsWith('.session')) return false;
       const cleanDigits = s.fileName.replace(/[^0-9]/g, '');
-      return cleanDigits.length >= 7 && !s.fileName.toLowerCase().includes('2fa') && !obsoleteDeadPhones.has(cleanDigits);
+      const isSizeValid = s.isValid !== false && (typeof s.sizeBytes === 'number' ? s.sizeBytes > 200 : true);
+      return cleanDigits.length >= 7 && isSizeValid && !s.fileName.toLowerCase().includes('2fa') && !obsoleteDeadPhones.has(cleanDigits);
     });
     const hasRealSessions = realSessionFiles.length > 0;
 
@@ -3571,8 +3572,23 @@ if __name__ == "__main__":
       return;
     }
 
+    // 🛡️ 如果磁盘已挂载真实有效 session，仅筛选出拥有真实有效 session 的账号参与发信，彻底避免 128B 空模板占位号报错
+    let validTargetAccounts = targetAccounts;
+    if (hasRealSessions) {
+      const withSession = targetAccounts.filter(acc => {
+        const cleanAccP = acc.phone.replace(/\D/g, '');
+        return realSessionFiles.some(s => {
+          const rawPhoneNum = s.fileName.replace('.session', '').replace(/\D/g, '');
+          return cleanAccP.includes(rawPhoneNum) || rawPhoneNum.includes(cleanAccP);
+        });
+      });
+      if (withSession.length > 0) {
+        validTargetAccounts = withSession;
+      }
+    }
+
     // 为当前分组的每一个账号分配有效发件通道与凭证
-    let initialAccountPool = targetAccounts.map((acc, idx) => {
+    let initialAccountPool = validTargetAccounts.map((acc, idx) => {
       const cleanAccP = acc.phone.replace(/\D/g, '');
       // 优先匹配 1:1 同名 session 凭证
       const exactSession = realSessionFiles.find(s => {

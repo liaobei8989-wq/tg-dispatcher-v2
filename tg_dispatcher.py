@@ -344,50 +344,66 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         contacts_to_import = [
             InputPhoneContact(
                 client_id=random.randint(100000, 999999),
-                phone=f"+{v}",
+                phone=f"+{digits}",
                 first_name="Cliente",
                 last_name=""
             )
-            for v in phone_variants
         ]
         imported_ids_to_del = []
         user_found = None
-        try:
-            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=10.0)
-            if result and getattr(result, 'users', None) and len(result.users) > 0:
-                user_found = result.users[0]
-                for u in result.users:
-                    imported_ids_to_del.append(u.id)
-            else:
-                # 检查是否此前已被该账号导入过或者已经在通讯录/会话缓存中
-                for pv in phone_variants:
+        
+        # 1. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
+        for pv in phone_variants:
+            try:
+                user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=2.5)
+                if user_found:
+                    break
+            except Exception:
+                pass
+
+        # 2. 本地无会话缓存，发起通讯录单号精准导入 (每次仅导入 1 个真实目标，杜绝双倍消耗配额)
+        if not user_found:
+            try:
+                result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=8.0)
+                if result and getattr(result, 'users', None) and len(result.users) > 0:
+                    user_found = result.users[0]
+                    for u in result.users:
+                        imported_ids_to_del.append(u.id)
+                else:
+                    # 如果首个号码未匹配，且存在变体，才尝试第2个变体
+                    if len(phone_variants) > 1:
+                        alt_num = phone_variants[1]
+                        alt_contact = [
+                            InputPhoneContact(
+                                client_id=random.randint(100000, 999999),
+                                phone=f"+{alt_num}",
+                                first_name="Cliente",
+                                last_name=""
+                            )
+                        ]
+                        alt_res = await asyncio.wait_for(client(ImportContactsRequest(alt_contact)), timeout=8.0)
+                        if alt_res and getattr(alt_res, 'users', None) and len(alt_res.users) > 0:
+                            user_found = alt_res.users[0]
+                            for u in alt_res.users:
+                                imported_ids_to_del.append(u.id)
+
+                # 3. 如果仍未找到，尝试直接获取输入实体句柄
+                if not user_found:
                     try:
-                        user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=4.0)
-                        if user_found:
-                            break
+                        user_found = await asyncio.wait_for(client.get_input_entity(f"+{digits}"), timeout=3.0)
                     except Exception:
                         pass
-                
-                # 再次尝试纯数字查询 (不带 + 号)
+
                 if not user_found:
-                    for pv in phone_variants:
-                        try:
-                            user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=4.0)
-                            if user_found:
-                                break
-                        except Exception:
-                            pass
-                
-                if not user_found:
-                    retry_contacts = getattr(result, 'retry_contacts', [])
+                    retry_contacts = getattr(result, 'retry_contacts', []) if 'result' in locals() and result else []
                     if retry_contacts and len(retry_contacts) > 0:
-                        raise Exception(f"当前协议号单日通讯录导入频控上限 (Telegram RetryContacts)，已自动跳过保护账号")
+                        raise Exception(f"目标 +{digits} 为全新陌生号，该协议号今日导入陌生通讯录达到 TG 频控保护上限 (RetryContacts)，账号本身健康正常（可与已有客户聊天），建议切换其他协议号开辟新名单")
                     else:
-                        raise Exception(f"目标手机号 +{digits} 未匹配到用户 (可能未公开号码隐私权限或号段未带国际区号)")
-        except Exception as ce:
-            if "未匹配" in str(ce) or "未注册" in str(ce) or "频控上限" in str(ce):
-                raise ce
-            raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
+                        raise Exception(f"目标手机号 +{digits} 未匹配到 Telegram 用户 (可能未注册或对方开启了严格隐私防骚扰)")
+            except Exception as ce:
+                if "未匹配" in str(ce) or "未注册" in str(ce) or "频控保护" in str(ce) or "RetryContacts" in str(ce):
+                    raise ce
+                raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
 
         peer = user_found
 

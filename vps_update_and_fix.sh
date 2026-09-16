@@ -24,13 +24,21 @@ done
 # 2. 从 GitHub (main) 拉取最新源码 (仅更新代码文件，严禁覆盖真实 session)
 echo "📥 正在从 GitHub (main) 拉取最新源码..."
 git fetch origin main
-git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
+git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py tdata_converter.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
 
-# 3. 恢复真实 .session 凭证
+# 安装/更新 tdata 官方转换引擎核心依赖 (opentele / telethon / aiofiles)
+echo "📦 正在校验并安装 tdata 转换引擎官方依赖 (opentele)..."
+pip3 install --break-system-packages opentele telethon tgcrypto aiofiles 2>/dev/null || pip install opentele telethon tgcrypto aiofiles 2>/dev/null || true
+
+# 3. 恢复真实 .session 凭证，并自动清除小于 200 字节的空占位文件
 if [ -d /tmp/tg_sessions_safe_backup ] && [ "$(ls -A /tmp/tg_sessions_safe_backup 2>/dev/null)" ]; then
     echo "🔄 正在还原健康 .session 凭证..."
     cp -f /tmp/tg_sessions_safe_backup/*.session sessions/ 2>/dev/null || true
 fi
+
+# 彻底清理任何小于 200 字节的假 session / 占位凭证，防止报错
+find sessions/ -type f -name "*.session" -size -200c -delete 2>/dev/null || true
+rm -rf /tmp/tg_sessions_safe_backup 2>/dev/null || true
 
 # 2. 彻底清洗本地所有 json 凭证文件与代理映射 (绝对杜绝 144.*)
 echo "🧹 正在执行 1:1 独立原生 IP 权威校验与清洗..."

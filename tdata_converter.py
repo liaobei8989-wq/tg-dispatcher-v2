@@ -13,7 +13,17 @@ import hashlib
 import glob
 import sqlite3
 import re
+import asyncio
 from typing import Dict, Any, Optional
+
+# Optional import of opentele for high-fidelity native Telegram Desktop decryption
+HAS_OPENTELE = False
+try:
+    from opentele.td import TDesktop
+    from opentele.api import UseCurrentSession
+    HAS_OPENTELE = True
+except Exception:
+    HAS_OPENTELE = False
 
 DC_IPS = {
     1: ("149.154.175.53", 443),
@@ -22,6 +32,35 @@ DC_IPS = {
     4: ("149.154.167.91", 443),
     5: ("91.108.56.130", 443)
 }
+
+async def try_convert_opentele(tdata_dir: str, out_session_path: str, twofa_pwd: str = "") -> Optional[str]:
+    """Uses official opentele library to extract Telegram Desktop key and write valid SQLite .session"""
+    if not HAS_OPENTELE:
+        return None
+    try:
+        target_dir = tdata_dir
+        # Locate actual tdata folder with key_datas
+        if not os.path.exists(os.path.join(target_dir, "key_datas")):
+            for root, dirs, files in os.walk(tdata_dir):
+                if "key_datas" in files:
+                    target_dir = root
+                    break
+
+        td = TDesktop(target_dir)
+        if td.isLoaded():
+            # Generate Telethon SQLite file
+            client = await td.ToTelethon(session=out_session_path, flag=UseCurrentSession)
+            if client:
+                detected_phone = ""
+                try:
+                    if hasattr(client, "session") and hasattr(client.session, "auth_key"):
+                        pass
+                except Exception:
+                    pass
+                return "opentele_success"
+    except Exception as e:
+        sys.stderr.write(f"[opentele notice] {e}\n")
+    return None
 
 def create_telethon_session(session_path: str, dc_id: int, auth_key_bytes: bytes, phone: str = "", user_id: int = 0):
     """Generates standard Telethon SQLite format 3 .session file"""
@@ -154,8 +193,19 @@ def parse_tdata_directory(tdata_path: str, output_sessions_dir: str, default_pho
     out_session_path = os.path.join(output_sessions_dir, f"{clean_digits}.session")
     out_json_path = os.path.join(output_sessions_dir, f"{clean_digits}.json")
 
-    # Create Telethon SQLite .session file
-    create_telethon_session(out_session_path, dc_id, auth_key, clean_digits)
+    # 1. First priority: Convert natively via opentele if installed
+    opentele_converted = False
+    if HAS_OPENTELE:
+        try:
+            res_op = asyncio.run(try_convert_opentele(tdata_path, out_session_path, twofa_pwd))
+            if res_op and os.path.exists(out_session_path) and os.path.getsize(out_session_path) > 500:
+                opentele_converted = True
+        except Exception as oe:
+            sys.stderr.write(f"[opentele error]: {oe}\n")
+
+    # 2. Fallback: Create Telethon SQLite .session file with standard table schemas
+    if not opentele_converted:
+        create_telethon_session(out_session_path, dc_id, auth_key, clean_digits)
 
     # Create official Desktop profile JSON config
     json_data = {
