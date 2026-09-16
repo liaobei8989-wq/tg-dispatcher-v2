@@ -47,17 +47,42 @@ export const USER_60_REAL_PHONES: string[] = [
 
 export const USER_50_REAL_PHONES = USER_60_REAL_PHONES;
 
+// 50 Dedicated Brazilian Native Residential Proxies (100% genuine 200.*)
 export const BRAZIL_PROXIES_POOL: string[] = [
-  '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
-  '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
-  '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
-  '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
-  '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
-  '200.152.153.65:12323:14a5a773a873a:4d841434c6',
-  '200.152.154.182:12323:14a5a773a873a:4d841434c6',
-  '200.152.153.188:12323:14a5a773a873a:4d841434c6',
-  '200.152.153.181:12323:14a5a773a873a:4d841434c6',
-  '200.152.155.148:12323:14a5a773a873a:4d841434c6',
+  '200.160.38.179:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.215:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.90:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.220:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.36.36:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.21:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.149:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.42:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.244:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.8:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.171:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.75:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.12:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.25:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.36.8:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.37.147:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.17:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.151:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.152:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.57:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.179:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.37.235:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.193:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.32.44:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.80:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.175:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.38.77:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.85:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.103:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.213:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.103:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.34.214:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.35.219:12323:14abdb1a0db2e:cb8f30f1a9',
+  '200.160.39.250:12323:14abdb1a0db2e:cb8f30f1a9',
   '200.152.152.137:12323:14abdb1a0db2e:cb8f30f1a9',
   '200.152.152.113:12323:14abdb1a0db2e:cb8f30f1a9',
   '200.152.154.37:12323:14abdb1a0db2e:cb8f30f1a9',
@@ -77,8 +102,23 @@ export const BRAZIL_PROXIES_POOL: string[] = [
 ];
 
 // Dedicated Brazilian Native Proxies (1:1 strictly mapped for each genuine phone)
-export const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {};
-USER_60_REAL_PHONES.forEach((ph, idx) => {
+export const BRAZIL_DEDICATED_PROXIES_MAP: Record<string, string> = {
+  // 10 Original accounts retain their native proxies
+  '5586994428117': '200.160.43.132:12323:14aade52b86e6:70dd653fc2',
+  '5586994581839': '200.239.213.26:12323:14aade52b86e6:70dd653fc2',
+  '5586994709226': '200.160.36.222:12323:14aade52b86e6:70dd653fc2',
+  '5586994684213': '200.239.237.124:12323:14aade52b86e6:70dd653fc2',
+  '5586994687152': '200.160.38.29:12323:14aade52b86e6:70dd653fc2',
+  '5586994850500': '200.152.153.65:12323:14a5a773a873a:4d841434c6',
+  '5586994918471': '200.152.154.182:12323:14a5a773a873a:4d841434c6',
+  '5586994927293': '200.152.153.188:12323:14a5a773a873a:4d841434c6',
+  '5586994943285': '200.152.153.181:12323:14a5a773a873a:4d841434c6',
+  '5586995160291': '200.152.155.148:12323:14a5a773a873a:4d841434c6'
+};
+
+// Map the 50 newly uploaded accounts 1:1 to the 50 new dedicated proxies
+const NEW_50_PHONES = USER_60_REAL_PHONES.slice(10);
+NEW_50_PHONES.forEach((ph, idx) => {
   BRAZIL_DEDICATED_PROXIES_MAP[ph] = BRAZIL_PROXIES_POOL[idx % BRAZIL_PROXIES_POOL.length];
 });
 
