@@ -24,7 +24,7 @@ done
 # 2. 从 GitHub (main) 拉取最新源码 (仅更新代码文件，严禁覆盖真实 session)
 echo "📥 正在从 GitHub (main) 拉取最新源码..."
 git fetch origin main
-git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py src/ package.json dist/ index.html vite.config.ts vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
+git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
 
 # 3. 恢复真实 .session 凭证
 if [ -d /tmp/tg_sessions_safe_backup ] && [ "$(ls -A /tmp/tg_sessions_safe_backup 2>/dev/null)" ]; then
