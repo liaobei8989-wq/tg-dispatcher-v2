@@ -321,6 +321,9 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     clean_target = target.strip()
     peer = None
 
+    if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
+        clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
+
     if clean_target.startswith('@'):
         try:
             peer = await asyncio.wait_for(client.get_entity(clean_target), timeout=8.0)
@@ -329,6 +332,18 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
         phone_variants = [digits]
+
+        # 🇨🇳 中国手机号智能容错 (11位 13~19 开头自动补全 86 国际区号)
+        if len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19')):
+            alt_86 = '86' + digits
+            if alt_86 not in phone_variants:
+                phone_variants.append(alt_86)
+        # 🇧🇷 巴西手机号智能容错 (10位或11位未输 55 自动补全 55 国际区号)
+        elif len(digits) in [10, 11] and not digits.startswith('55'):
+            alt_55 = '55' + digits
+            if alt_55 not in phone_variants:
+                phone_variants.append(alt_55)
+
         # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
         # 很多巴西人早期注册 TG 时未加 9，或号商筛选时带/不带 9，双向探测可大幅提升识别命中率
         if digits.startswith('55'):
@@ -341,14 +356,25 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 if alt_13 not in phone_variants:
                     phone_variants.append(alt_13)
 
-        contacts_to_import = [
-            InputPhoneContact(
-                client_id=random.randint(100000, 999999),
-                phone=f"+{digits}",
-                first_name="Cliente",
-                last_name=""
+        contacts_to_import = []
+        for pv in phone_variants[:2]:
+            contacts_to_import.append(
+                InputPhoneContact(
+                    client_id=random.randint(100000, 999999),
+                    phone=f"+{pv}",
+                    first_name="Cliente",
+                    last_name=""
+                )
             )
-        ]
+            contacts_to_import.append(
+                InputPhoneContact(
+                    client_id=random.randint(100000, 999999),
+                    phone=f"{pv}",
+                    first_name="Cliente",
+                    last_name=""
+                )
+            )
+
         imported_ids_to_del = []
         user_found = None
         
@@ -360,8 +386,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     break
             except Exception:
                 pass
+            try:
+                user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=2.5)
+                if user_found:
+                    break
+            except Exception:
+                pass
 
-        # 2. 本地无会话缓存，发起通讯录单号精准导入 (每次仅导入 1 个真实目标，杜绝双倍消耗配额)
+        # 2. 本地无会话缓存，发起通讯录精准导入 (包含带+与不带+双格式)
         if not user_found:
             try:
                 result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=8.0)
@@ -369,39 +401,25 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     user_found = result.users[0]
                     for u in result.users:
                         imported_ids_to_del.append(u.id)
-                else:
-                    # 如果首个号码未匹配，且存在变体，才尝试第2个变体
-                    if len(phone_variants) > 1:
-                        alt_num = phone_variants[1]
-                        alt_contact = [
-                            InputPhoneContact(
-                                client_id=random.randint(100000, 999999),
-                                phone=f"+{alt_num}",
-                                first_name="Cliente",
-                                last_name=""
-                            )
-                        ]
-                        alt_res = await asyncio.wait_for(client(ImportContactsRequest(alt_contact)), timeout=8.0)
-                        if alt_res and getattr(alt_res, 'users', None) and len(alt_res.users) > 0:
-                            user_found = alt_res.users[0]
-                            for u in alt_res.users:
-                                imported_ids_to_del.append(u.id)
 
                 # 3. 如果仍未找到，尝试直接获取输入实体句柄
                 if not user_found:
-                    try:
-                        user_found = await asyncio.wait_for(client.get_input_entity(f"+{digits}"), timeout=3.0)
-                    except Exception:
-                        pass
+                    for pv in phone_variants:
+                        try:
+                            user_found = await asyncio.wait_for(client.get_input_entity(f"+{pv}"), timeout=3.0)
+                            if user_found:
+                                break
+                        except Exception:
+                            pass
 
                 if not user_found:
                     retry_contacts = getattr(result, 'retry_contacts', []) if 'result' in locals() and result else []
                     if retry_contacts and len(retry_contacts) > 0:
-                        raise Exception(f"目标手机号 +{digits} 未注册 Telegram 或开启了防陌生人隐私限制 (RetryContacts)，账号 100% 正常，已自动跳过该空号")
+                        raise Exception(f"目标 +{digits} 被 Telegram 官方隐私策略保护 (对方开启了【仅联系人可通过手机号找到我】，陌生账号无法匹配)。建议直接使用其 TG 用户名 (@username) 发送，或让对方将本号加为联系人")
                     else:
-                        raise Exception(f"目标手机号 +{digits} 未匹配到 Telegram 用户 (可能未注册或对方开启了严格隐私防骚扰)")
+                        raise Exception(f"目标手机号 +{digits} 未匹配到 Telegram 用户 (可能格式有误、对方未注册 TG，或对方开启了严格防陌生人隐私保护)")
             except Exception as ce:
-                if "未匹配" in str(ce) or "未注册" in str(ce) or "频控保护" in str(ce) or "RetryContacts" in str(ce):
+                if "未匹配" in str(ce) or "未注册" in str(ce) or "频控保护" in str(ce) or "隐私策略" in str(ce):
                     raise ce
                 raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
 
