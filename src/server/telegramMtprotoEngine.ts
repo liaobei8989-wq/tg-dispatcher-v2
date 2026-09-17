@@ -640,8 +640,14 @@ export async function executeTelegramReplyScanner(
           const latestIncomingMsg = messages.find((m: any) => m && !m.out);
           if (!latestIncomingMsg) continue; // 客户从未发言，仅是单向破冰，跳过
 
+          const latestIncomingDate = Number(latestIncomingMsg.date || 0); // 秒级 Unix 时间戳
+          const nowSec = Math.floor(Date.now() / 1000);
+          // ⏰ 时效性拦截：如果消息超过 48 小时 (例如数月前、2025年的老旧记录)，跳过
+          if (latestIncomingDate > 0 && (nowSec - latestIncomingDate) > 48 * 3600) {
+            continue;
+          }
+
           const latestIncomingId = Number(latestIncomingMsg.id || 0);
-          const latestIncomingDate = Number(latestIncomingMsg.date || 0);
           const targetEntityId = String((d.entity as any)?.id || (d as any).id || '');
           const cleanPhone = curPhone.replace(/[^0-9]/g, '');
           const trackKey = `${cleanPhone}_${targetEntityId}`;

@@ -2193,28 +2193,87 @@ async function startServer() {
   // 📥 已回复高意向客户名单库 & 多格式导出 API (Replied Customers Export)
   // =========================================================================
   const REPLIED_CUSTOMERS_PATH = path.join(process.cwd(), "sessions", "replied_customers.json");
+  const CLEARED_AT_PATH = path.join(process.cwd(), "sessions", "customers_cleared_at.json");
 
   const DEMO_MOCK_NAMES = new Set([
     'Gabriel Silva', 'César Vargas', 'Wesley Braga', 'Douglas Tavares', 'Leandro Siqueira',
     'Matheus Oliveira', 'Lucas Santos', 'Thiago Lima'
   ]);
 
-  function isLegacyMockRecord(item: any): boolean {
+  function getClearedTimestamp(): number {
+    if (fs.existsSync(CLEARED_AT_PATH)) {
+      try {
+        const raw = fs.readFileSync(CLEARED_AT_PATH, "utf8");
+        const data = JSON.parse(raw);
+        if (data && typeof data.clearedTimestamp === 'number') {
+          return data.clearedTimestamp;
+        }
+        if (data && data.clearedAt) {
+          const t = new Date(data.clearedAt).getTime();
+          if (!isNaN(t)) return t;
+        }
+      } catch (_) {}
+    }
+    return 0;
+  }
+
+  function isLegacyMockRecord(item: any, clearedTimestamp: number = 0): boolean {
     if (!item) return true;
     const name = String(item.customerName || item.fullName || item.firstName || '').trim();
     if (DEMO_MOCK_NAMES.has(name)) return true;
-    const timeStr = String(item.lastMessageTime || item.repliedAt || item.timestamp || '');
+    const timeStr = String(item.lastMessageTime || item.repliedAt || item.timestamp || '').trim();
     if (timeStr.includes('2026-09-06') || timeStr.includes('2026-09-05') || timeStr.includes('2026-09-04') || timeStr.includes('2026-08')) return true;
+    
+    // 过滤购买的协议号历史远古残留（2025年、2024年、2023年以及 2026年3月份等陈旧聊天）
+    if (timeStr.startsWith('2025') || timeStr.startsWith('2024') || timeStr.startsWith('2023')) return true;
+    
+    // 若该条记录发生在用户执行“清空/删除”之前，坚决排除，绝不打印
+    if (clearedTimestamp > 0 && timeStr) {
+      try {
+        const itemT = new Date(timeStr.replace(' ', 'T')).getTime();
+        if (!isNaN(itemT) && itemT <= clearedTimestamp) {
+          return true; // 已被用户前序清空/删除过，不重复打印
+        }
+      } catch (_) {}
+    }
+
+    // 检查日期是否超过 5 天前的买号旧聊天
+    try {
+      const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        const itemDate = new Date(match[0]);
+        const now = new Date();
+        const diffDays = (now.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
+        if (diffDays > 5) return true; // 排除 5 天前的历史会话
+      }
+    } catch (_) {}
     return false;
   }
 
-  function getRepliedCustomersList(): any[] {
+  function getRepliedCustomersList(range: string = 'recent'): any[] {
     if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
       try {
         const raw = fs.readFileSync(REPLIED_CUSTOMERS_PATH, "utf8");
         const list = JSON.parse(raw);
         if (Array.isArray(list)) {
-          return list.filter((c: any) => !isLegacyMockRecord(c));
+          const clearedTimestamp = getClearedTimestamp();
+          const clean = list.filter((c: any) => !isLegacyMockRecord(c, clearedTimestamp));
+          
+          if (range === 'today') {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            return clean.filter((c: any) => String(c.repliedAt || '').startsWith(todayStr));
+          } else if (range === '48h' || range === 'recent') {
+            const now = Date.now();
+            return clean.filter((c: any) => {
+              const rAt = String(c.repliedAt || '').trim();
+              if (!rAt) return false;
+              // 排除远古买号残留
+              if (rAt.startsWith('2025') || rAt.startsWith('2024') || rAt.startsWith('2023')) return false;
+              const t = new Date(rAt.replace(' ', 'T')).getTime();
+              return !isNaN(t) && (now - t) <= 48 * 3600 * 1000;
+            });
+          }
+          return clean;
         }
       } catch (e) {}
     }
@@ -2224,11 +2283,27 @@ async function startServer() {
   // 1. 获取已回复客户列表 (JSON 供前端弹窗展示与交互)
   app.get("/api/telegram/replied-customers", (req, res) => {
     try {
-      const customers = getRepliedCustomersList();
+      const range = (req.query.range as string) || 'recent';
+      const customers = getRepliedCustomersList(range);
       res.json({
         success: true,
         count: customers.length,
         customers
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 1.1 清理历史协议号远古旧记录 API
+  app.post("/api/telegram/clean-stale-customers", (req, res) => {
+    try {
+      const cleanList = getRepliedCustomersList('recent');
+      fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify(cleanList, null, 2), "utf8");
+      res.json({
+        success: true,
+        count: cleanList.length,
+        message: `已清理买号远古历史残留！保留近期有效活跃客资共 ${cleanList.length} 位。`
       });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -2240,7 +2315,8 @@ async function startServer() {
     try {
       const format = (req.query.format as string || 'csv').toLowerCase();
       const type = (req.query.type as string || 'all').toLowerCase(); // all, usernames, ids, phones
-      const customers = getRepliedCustomersList();
+      const range = (req.query.range as string) || 'recent';
+      const customers = getRepliedCustomersList(range);
       const timestamp = new Date().toISOString().slice(0, 10);
 
       if (format === 'txt') {
@@ -2297,6 +2373,12 @@ async function startServer() {
   app.post("/api/telegram/clear-replied-customers", (req, res) => {
     try {
       fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      // 写入清空时间戳标记，确保后续扫尾程序绝不唤醒和重复打印前序已删除的旧客资
+      fs.writeFileSync(CLEARED_AT_PATH, JSON.stringify({
+        clearedAt: new Date().toISOString(),
+        clearedTimestamp: Date.now()
+      }, null, 2), "utf8");
+
       const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
       if (fs.existsSync(statsFilePath)) {
         try {
@@ -2306,7 +2388,7 @@ async function startServer() {
           fs.writeFileSync(statsFilePath, JSON.stringify(stats, null, 2), "utf8");
         } catch (_) {}
       }
-      res.json({ success: true, message: "已回复客户名单已清空" });
+      res.json({ success: true, message: "已回复客户名单已清空，前序记录已彻底归零" });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }

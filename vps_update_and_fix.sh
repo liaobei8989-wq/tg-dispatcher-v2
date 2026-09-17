@@ -85,6 +85,32 @@ if os.path.exists('sessions'):
             except Exception as e:
                 pass
 print('✅ 物理文件清洗完毕，全部对齐 200.* 原生巴西代理！')
+
+# 自动清洗远古买号残留历史会话 (剔除 2025 年、2026 年 3 月等旧协议号自带的陈旧记录)
+for cfile in ['sessions/replied_customers.json', 'replied_customers.json']:
+    if os.path.exists(cfile):
+        try:
+            with open(cfile, 'r', encoding='utf-8') as f:
+                cdata = json.load(f)
+            if isinstance(cdata, list):
+                from datetime import datetime
+                clean_c = []
+                for c in cdata:
+                    t_str = str(c.get('repliedAt', '') or c.get('timestamp', '')).strip()
+                    if t_str.startswith(('2023', '2024', '2025')) or t_str.startswith('2026-09-06'):
+                        continue
+                    try:
+                        dt = datetime.strptime(t_str[:10], '%Y-%m-%d')
+                        if (datetime.now() - dt).days > 2:
+                            continue
+                    except Exception:
+                        continue
+                    clean_c.append(c)
+                with open(cfile, 'w', encoding='utf-8') as f:
+                    json.dump(clean_c, f, indent=2, ensure_ascii=False)
+                print(f'🧹 [客资库净化完毕]: 已剔除买号远古历史残留，保留近期真实客资 {len(clean_c)} 条')
+        except Exception as e:
+            print(f'⚠️ 客资库清洗跳过: {e}')
 "
 
 # 3. 重新编译生产级代码 (Vite 前端 + Node 服务端)

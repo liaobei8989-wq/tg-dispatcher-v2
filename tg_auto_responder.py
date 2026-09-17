@@ -346,8 +346,45 @@ def save_or_update_replied_customer(session_basename: str, sender_id: str, sende
             except Exception:
                 cust_list = []
 
-        # 剔除旧 demo 数据 (2026-09-06)
-        cust_list = [c for c in cust_list if not str(c.get("repliedAt", "")).startswith("2026-09-06")]
+        def is_stale_date(d_str: str) -> bool:
+            if not d_str:
+                return False
+            d_str = str(d_str).strip()
+            if d_str.startswith(("2023", "2024", "2025")):
+                return True
+            try:
+                dt = datetime.strptime(d_str[:16], "%Y-%m-%d %H:%M")
+                if (datetime.now() - dt).total_seconds() > 48 * 3600:
+                    return True
+            except Exception:
+                pass
+            return False
+
+        # 剔除远古历史聊天与旧 demo 数据
+        cust_list = [c for c in cust_list if not is_stale_date(c.get("repliedAt", "")) and not str(c.get("repliedAt", "")).startswith("2026-09-06")]
+
+        now_dt = datetime.now()
+        date_display = msg_date_str or now_dt.strftime("%Y-%m-%d %H:%M")
+
+        # 若当前会话是 48 小时前的陈旧买号历史会话，坚决不当做营销客资收录
+        if is_stale_date(date_display):
+            return
+
+        # 检查是否发生在用户前序清空/删除操作之前，绝不唤醒已删除的客资
+        cleared_file = os.path.join(sessions_folder, "customers_cleared_at.json")
+        if os.path.exists(cleared_file):
+            try:
+                with open(cleared_file, "r", encoding="utf-8") as cf:
+                    cdata = json.load(cf)
+                cleared_ts = cdata.get("clearedTimestamp", 0)
+                if not cleared_ts and cdata.get("clearedAt"):
+                    cleared_ts = datetime.fromisoformat(cdata["clearedAt"].replace('Z', '+00:00')).timestamp() * 1000.0
+                if cleared_ts > 0:
+                    check_dt = datetime.strptime(date_display[:16], "%Y-%m-%d %H:%M") if date_display else None
+                    if check_dt and (check_dt.timestamp() * 1000.0) <= (cleared_ts if cleared_ts > 1e11 else cleared_ts * 1000.0):
+                        return # 早于用户清空时间点，已被删除过，不重新入库
+            except Exception:
+                pass
 
         clean_username = (username or "").strip()
         if clean_username and not clean_username.startswith("@"):
@@ -360,9 +397,6 @@ def save_or_update_replied_customer(session_basename: str, sender_id: str, sende
         fn = (first_name or "").strip()
         ln = (last_name or "").strip()
         full_name = " ".join([p for p in [fn, ln] if p]).strip() or (sender_name or "").strip() or f"Cliente {sender_id}"
-        
-        now_dt = datetime.now()
-        date_display = msg_date_str or now_dt.strftime("%Y-%m-%d %H:%M")
 
         # 私聊直达链接优先为 t.me/用户名，否则 tg://user?id=...
         direct_link = f"https://t.me/{clean_username.replace('@', '')}" if clean_username else f"tg://user?id={sender_id}"
@@ -929,6 +963,22 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                             incoming_msgs = [m for m in c_msgs if m and not m.out]
                             if incoming_msgs:
                                 latest_incoming = incoming_msgs[0]
+                                
+                                # ⏰ 严格时效性校验：排除买来的协议号自带的数月前/2025年远古历史聊天
+                                msg_date = getattr(latest_incoming, 'date', None)
+                                if msg_date:
+                                    try:
+                                        now_utc = datetime.now(timezone.utc)
+                                        if hasattr(msg_date, 'tzinfo') and msg_date.tzinfo is not None:
+                                            diff_hours = (now_utc - msg_date).total_seconds() / 3600.0
+                                        else:
+                                            diff_hours = (datetime.utcnow() - msg_date).total_seconds() / 3600.0
+                                        if diff_hours > 48.0:
+                                            # 超过 48 小时历史消息，非本次营销互动，跳过
+                                            continue
+                                    except Exception:
+                                        pass
+
                                 c_text = str(latest_incoming.message or latest_incoming.text or '').strip()
                                 
                                 # 1. 总是持久化/刷新记录到 replied_customers.json (补齐真实的姓名、@username、手机号)

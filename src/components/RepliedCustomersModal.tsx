@@ -42,12 +42,14 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   const [exportFormat, setExportFormat] = useState<'csv' | 'txt_usernames' | 'txt_ids' | 'txt_phones'>('csv');
   const [isClearing, setIsClearing] = useState<boolean>(false);
   const [isDeepSyncing, setIsDeepSyncing] = useState<boolean>(false);
+  const [isCleaningStale, setIsCleaningStale] = useState<boolean>(false);
+  const [timeRange, setTimeRange] = useState<'recent' | 'today' | 'all'>('recent');
 
   // Load replied customers list from server
-  const fetchRepliedCustomers = async () => {
+  const fetchRepliedCustomers = async (range: string = timeRange) => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/telegram/replied-customers');
+      const res = await fetch(`/api/telegram/replied-customers?range=${range}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.customers)) {
@@ -58,6 +60,24 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
       console.error('Failed to fetch replied customers:', e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Clean stale history from purchased session accounts (2025, 2026-03 etc.)
+  const handleCleanStale = async () => {
+    setIsCleaningStale(true);
+    try {
+      const res = await fetch('/api/telegram/clean-stale-customers', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        await fetchRepliedCustomers(timeRange);
+        onRefreshStats?.();
+        alert(data.message || '已成功清理远古买号历史聊天！');
+      }
+    } catch (e) {
+      console.error('Failed to clean stale customers', e);
+    } finally {
+      setIsCleaningStale(false);
     }
   };
 
@@ -72,7 +92,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
       });
       // Wait for scanner to scan all dialogs
       await new Promise(r => setTimeout(r, 3000));
-      await fetchRepliedCustomers();
+      await fetchRepliedCustomers(timeRange);
       onRefreshStats?.();
     } catch (e) {
       console.error('Failed to trigger deep sync:', e);
@@ -83,9 +103,9 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetchRepliedCustomers();
+      fetchRepliedCustomers(timeRange);
     }
-  }, [isOpen]);
+  }, [isOpen, timeRange]);
 
   if (!isOpen) return null;
 
@@ -134,7 +154,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
 
   // Direct download trigger
   const handleDownload = (format: 'csv' | 'txt', type: string = 'all') => {
-    const url = `/api/telegram/export-replied-customers?format=${format}&type=${type}`;
+    const url = `/api/telegram/export-replied-customers?format=${format}&type=${type}&range=${timeRange}`;
     const a = document.createElement('a');
     a.href = url;
     a.download = '';
@@ -216,16 +236,69 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
 
         {/* Quick Actions Bar */}
         <div className="p-4 border-b border-slate-800 bg-slate-950/60 flex flex-wrap items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索客户姓名 / Telegram ID / @用户名 / 手机号..."
-              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/60"
-            />
+          {/* Search Input & Time Range Tabs */}
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索客户姓名 / Telegram ID / @用户名 / 手机号..."
+                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500/60"
+              />
+            </div>
+
+            {/* Time Filter Tabs */}
+            <div className="flex items-center rounded-xl bg-slate-900 border border-slate-700/80 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setTimeRange('recent')}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  timeRange === 'recent'
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="默认只展示与导出最近48小时内的新增互动（自动剔除购买的协议号历史旧会话）"
+              >
+                🔥 近48小时实时
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange('today')}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  timeRange === 'today'
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="只展示今天收到的回复客户"
+              >
+                📅 今日
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange('all')}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  timeRange === 'all'
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="展示所有历史有效互动客户"
+              >
+                📦 全部
+              </button>
+            </div>
+
+            {/* Clean Stale History Button */}
+            <button
+              type="button"
+              onClick={handleCleanStale}
+              disabled={isCleaningStale}
+              className="px-2.5 py-1.5 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer active:scale-95 disabled:opacity-40"
+              title="一键清洗剔除协议号之前自带的远古历史私聊（如 2025 年、2026 年 3 月等），只保留本次营销活动的真实意向客户"
+            >
+              <span>{isCleaningStale ? '🧹 正在清洗...' : '🧹 过滤买号远古聊天'}</span>
+            </button>
           </div>
 
           {/* Export & Copy Buttons */}
