@@ -397,7 +397,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 if not user_found:
                     retry_contacts = getattr(result, 'retry_contacts', []) if 'result' in locals() and result else []
                     if retry_contacts and len(retry_contacts) > 0:
-                        raise Exception(f"目标 +{digits} 为全新陌生号，该协议号今日导入陌生通讯录达到 TG 频控保护上限 (RetryContacts)，账号本身健康正常（可与已有客户聊天），建议切换其他协议号开辟新名单")
+                        raise Exception(f"目标手机号 +{digits} 未注册 Telegram 或开启了防陌生人隐私限制 (RetryContacts)，账号 100% 正常，已自动跳过该空号")
                     else:
                         raise Exception(f"目标手机号 +{digits} 未匹配到 Telegram 用户 (可能未注册或对方开启了严格隐私防骚扰)")
             except Exception as ce:
