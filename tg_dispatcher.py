@@ -818,7 +818,9 @@ async def run_worker(
                     await asyncio.sleep(real_delay)
 
     except Exception as ge:
-        err_str = str(ge)
+        err_str = str(ge).strip()
+        if isinstance(ge, (asyncio.TimeoutError, TimeoutError)) or not err_str:
+            err_str = "Telegram云端连接超时(握手未通过或凭证密钥失效)"
         if "file is not a database" in err_str or "database" in err_str.lower():
             worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效的 SQLite 数据库 (大小仅 128 字节或已损坏)，请重新上传号商原始完整 .session 凭证文件！")
         else:

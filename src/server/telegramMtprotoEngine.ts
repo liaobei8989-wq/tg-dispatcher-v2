@@ -480,12 +480,31 @@ export async function executeTelegramDirectSend(
   };
 }
 
+export interface TelegramReplyScannerOptions {
+  second_message?: string;
+  third_message?: string;
+  enable_third_message?: boolean;
+  second_to_third_delay_min?: number;
+  second_to_third_delay_max?: number;
+}
+
 /**
  * 核心 Telegram 客户主动回复全网自动巡检与彩金补发引擎
  */
 export async function executeTelegramReplyScanner(
-  onLog?: (line: string) => void
+  optionsOrOnLog?: TelegramReplyScannerOptions | ((line: string) => void),
+  maybeOnLog?: (line: string) => void
 ): Promise<{ success: boolean; output: string; newlySent: number; totalCompleted: number }> {
+  let options: TelegramReplyScannerOptions | undefined;
+  let onLog: ((line: string) => void) | undefined;
+
+  if (typeof optionsOrOnLog === 'function') {
+    onLog = optionsOrOnLog;
+  } else if (typeof optionsOrOnLog === 'object' && optionsOrOnLog !== null) {
+    options = optionsOrOnLog;
+    onLog = maybeOnLog;
+  }
+
   const logLines: string[] = [];
   const log = (msg: string) => {
     logLines.push(msg);
@@ -493,8 +512,32 @@ export async function executeTelegramReplyScanner(
   };
 
   const accounts = loadAllTelegramAccounts();
-  const secondTemplate = "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
-  const thirdTemplate = "🐯 Qualquer dúvida me dá um toque aqui que te ajudo a resgatar! Bora forrar hoje que o Tigrinho tá soltando carta! Boa sorte lá amigo 🎰🍀";
+  let secondTemplate = "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
+  let thirdTemplate = "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨";
+  let enableThirdMessage = true;
+  let delayMin = 3.5;
+  let delayMax = 6.5;
+
+  // 动态读取保存的配置
+  const cfgPath = path.join(process.cwd(), 'sessions', 'auto_responder_config.json');
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (cfg.second_message) secondTemplate = cfg.second_message;
+      if (cfg.third_message) thirdTemplate = cfg.third_message;
+      if (cfg.enable_third_message !== undefined) enableThirdMessage = Boolean(cfg.enable_third_message);
+      if (cfg.second_to_third_delay_min) delayMin = Number(cfg.second_to_third_delay_min);
+      if (cfg.second_to_third_delay_max) delayMax = Number(cfg.second_to_third_delay_max);
+    } catch (e) {}
+  }
+
+  // 优先应用本次传入的显式参数
+  if (options?.second_message) secondTemplate = options.second_message;
+  if (options?.third_message) thirdTemplate = options.third_message;
+  if (options?.enable_third_message !== undefined) enableThirdMessage = options.enable_third_message;
+  if (options?.second_to_third_delay_min) delayMin = options.second_to_third_delay_min;
+  if (options?.second_to_third_delay_max) delayMax = options.second_to_third_delay_max;
+
   const statsFilePath = path.join(process.cwd(), 'sessions', 'auto_scanner_stats.json');
 
   log("==================================================");
@@ -502,7 +545,13 @@ export async function executeTelegramReplyScanner(
   log("==================================================");
   log(`🕒 巴西利亚巡航时间 (BRT): ${getBrazilTimeFormatted()}`);
   log(`📱 挂载巡检协议号: ${accounts.map(a => a.phone).join(', ')}`);
-  log(`⏱️ 官方风控延时: 彩金发出后随机等待 3.5~6.0s 模拟真人输入追发中奖祝福`);
+  log(`🔗 阶段2彩金链接话术: ${secondTemplate.slice(0, 50)}...`);
+  if (enableThirdMessage) {
+    log(`🍀 阶段3拟人中奖祝福: ${thirdTemplate.slice(0, 50)}...`);
+    log(`⏱️ 官方风控延时: 拟人输入等待 ${delayMin}~${delayMax}s 并伴随 typing 正在输入模拟`);
+  } else {
+    log(`ℹ️ 阶段3祝福追发已关闭，仅推送阶段2彩金链接`);
+  }
   log("==================================================\n");
 
   let newlySent = 0;
@@ -557,18 +606,18 @@ export async function executeTelegramReplyScanner(
         acc.apiId,
         acc.apiHash,
         {
-          connectionRetries: 2,
-          timeout: 8,
+          connectionRetries: 1,
+          timeout: 4,
           deviceModel: acc.deviceModel || 'HP Pavilion P6000 Series'
         }
       );
 
-      await withTimeout(client.connect(), 8000, '连接 Telegram 超时');
-      const me: any = await withTimeout(client.getMe(), 5000, '获取身份超时');
+      await withTimeout(client.connect(), 4000, '连接 Telegram 超时');
+      const me: any = await withTimeout(client.getMe(), 4000, '获取身份超时');
       const accName = me?.firstName || curPhone;
 
-      // 获取私聊会话列表 (限时 8 秒)
-      const dialogs = await withTimeout(client.getDialogs({ limit: 30 }), 8000, '获取会话超时');
+      // 获取私聊会话列表 (限时 5 秒)
+      const dialogs = await withTimeout(client.getDialogs({ limit: 30 }), 5000, '获取会话超时');
       const privateDialogs = (dialogs || []).filter((d: any) => d && d.isUser && !(d.entity as any)?.bot);
 
       log(`🔎 [${curPhone}] 成功获取 ${privateDialogs.length} 个私聊联系人会话，逐一核对互动历史...`);
@@ -668,21 +717,26 @@ export async function executeTelegramReplyScanner(
           newlySent++;
           totalCompleted++;
           
-          // 官方推荐 3~6 秒拟人风控延时 + 模拟正在输入状态 (typing)
-          const blessingDelay = Math.round((Math.random() * 2.5 + 3.5) * 10) / 10;
-          log(`⏳ [拟人拟真延时] 针对 '${targetName}' 等待 ${blessingDelay}s (官方推荐 3~6s 防封黄金区间)，并发送 typing 状态，准备追发中奖祝福语...`);
-          
-          try {
-            await client.invoke(new Api.messages.SetTyping({
-              peer: d.inputEntity,
-              action: new Api.SendMessageTypingAction()
-            }));
-          } catch (tErr) {}
+          // 官方推荐拟人风控延时 + 模拟正在输入状态 (typing)
+          let blessingDelay = 0;
+          let blessingText = "";
+          if (enableThirdMessage) {
+            const range = Math.max(0.5, delayMax - delayMin);
+            blessingDelay = Math.round((Math.random() * range + delayMin) * 10) / 10;
+            log(`⏳ [拟人拟真延时] 针对 '${targetName}' 等待 ${blessingDelay}s (设定区间: ${delayMin}~${delayMax}s)，并发送 typing 状态，准备追发中奖祝福语...`);
+            
+            try {
+              await client.invoke(new Api.messages.SetTyping({
+                peer: d.inputEntity,
+                action: new Api.SendMessageTypingAction()
+              }));
+            } catch (tErr) {}
 
-          await sleep(blessingDelay * 1000);
+            await sleep(blessingDelay * 1000);
 
-          const blessingText = parseSpintax(thirdTemplate);
-          await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText }), 6000, '发送祝福语超时');
+            blessingText = parseSpintax(thirdTemplate);
+            await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText }), 6000, '发送祝福语超时');
+          }
 
           const logEntry = {
             timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
@@ -690,7 +744,9 @@ export async function executeTelegramReplyScanner(
             accountName: accName,
             target: targetName,
             replyText: replySnippet,
-            msg: `✨ 【${curPhone} (${accName})】检测到客户 '${targetName}' 回复: "${replySnippet}"，已即时补发第2阶段彩金文案并在 ${blessingDelay}s 拟人延时后追发专属中奖寄语: "${blessingText.slice(0, 35)}..."！`
+            msg: enableThirdMessage 
+              ? `✨ 【${curPhone} (${accName})】检测到客户 '${targetName}' 回复: "${replySnippet}"，已即时补发第2阶段彩金文案并在 ${blessingDelay}s 拟人延时后追发专属中奖寄语: "${blessingText.slice(0, 35)}..."！`
+              : `✨ 【${curPhone} (${accName})】检测到客户 '${targetName}' 回复: "${replySnippet}"，已即时补发第2阶段彩金文案！`
           };
 
           log(logEntry.msg);

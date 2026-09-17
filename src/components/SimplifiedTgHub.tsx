@@ -50,7 +50,8 @@ import {
   Layers,
   UserPlus,
   Edit3,
-  Archive
+  Archive,
+  Loader2
 } from 'lucide-react';
 import { AccountSession, CampaignLog, ScheduledCampaignConfig } from '../types';
 import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, BRAZIL_PROXIES_POOL, BRAZIL_DEDICATED_PROXIES_MAP, getDedicatedProxyForPhone } from '../data/mockAccounts';
@@ -1302,6 +1303,23 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
   const [massMessageText, setMassMessageText] = useState<string>(() => {
     return `{Opa parceiro!|Fala jogador!} Liberou um bônus especial sem depósito de R$ 15 a R$ 25 no seu cadastro pra rodar o Fortune Tiger 🐯! Saque direto via PIX. Resgate seu acesso aqui: ${get100SubdomainsSpintax()}`;
   });
+  const [isScanningReply, setIsScanningReply] = useState<boolean>(false);
+
+  // 实时同步自动追发话术与开关至服务端 sessions/auto_responder_config.json (支持即改即生效)
+  useEffect(() => {
+    fetch('/api/telegram/save-responder-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: true,
+        second_message: followupLinkText || massMessageText,
+        third_message: blessingText,
+        enable_third_message: enableBlessing,
+        second_to_third_delay_min: blessingDelayMin || 3.5,
+        second_to_third_delay_max: blessingDelayMax || 6.0
+      })
+    }).catch(() => {});
+  }, [followupLinkText, massMessageText, blessingText, enableBlessing, blessingDelayMin, blessingDelayMax]);
 
   // Batch Result Alert Modal State (提示群发结果/失败通知)
   const [batchResultModalState, setBatchResultModalState] = useState<{
@@ -4049,28 +4067,50 @@ if __name__ == "__main__":
     })();
   };
 
-  // 🔍 一键全网拉取客户回复并补发第二条彩金
-  const handleScanAndReply = async () => {
-    setSimpleLogs(prev => [...prev, `[雷达扫描 📡] 正在连接 Telegram 底层集群，拉取全部私聊历史并自动判定客户回复...`]);
+  // 🔍 一键全网拉取客户回复并补发第二条彩金与第三条寄语
+  const handleScanAndReply = async (isSilent: boolean = false) => {
+    if (isScanningReply) return;
+    setIsScanningReply(true);
+    if (!isSilent) {
+      setSimpleLogs(prev => [...prev, `[雷达扫描 📡] 正在连接 Telegram 底层协议集群，拉取全部私聊历史并自动判定客户回复...`]);
+    }
     try {
-      const resp = await fetch('/api/telegram/scan-and-reply', { method: 'POST' });
+      const resp = await fetch('/api/telegram/scan-and-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          second_message: followupLinkText || massMessageText,
+          third_message: blessingText,
+          enable_third_message: enableBlessing,
+          second_to_third_delay_min: blessingDelayMin || 3.5,
+          second_to_third_delay_max: blessingDelayMax || 6.0
+        })
+      });
       const data = await resp.json();
       if (data.success) {
-        const lines = (data.output || '').split('\n').filter((l: string) => l.includes('🎯') || l.includes('✨') || l.includes('📊'));
-        if (lines.length > 0) {
+        const rawOutput = data.output || '';
+        const lines = rawOutput.split('\n').filter((l: string) => 
+          l.includes('🎯') || l.includes('✨') || l.includes('🚀') || l.includes('🍀') || l.includes('自动补发') || l.includes('感知客户私聊回复') || l.includes('拟人拟真延时')
+        );
+        if (data.newlySent > 0 || lines.length > 0) {
           setSimpleLogs(prev => [
             ...prev,
-            `==================== 客户回复扫描与补发结果 ====================`,
+            `==================== ⚡ 客户私聊回复自动追发成功 (第2/3阶段) ====================`,
             ...lines
           ]);
-        } else {
+          fetchScannerStats();
+        } else if (!isSilent) {
           setSimpleLogs(prev => [...prev, `[雷达扫描 ✅] 已完成检查：当前所有收到回复的客户均已成功处理，暂无遗漏待补发客户。`]);
         }
-      } else {
+      } else if (!isSilent) {
         setSimpleLogs(prev => [...prev, `[雷达扫描 ⚠️] 扫描过程提示: ${data.error || '未检索到新变更'}`]);
       }
     } catch (err: any) {
-      setSimpleLogs(prev => [...prev, `[雷达扫描 ❌] 请求网络异常: ${err.message}`]);
+      if (!isSilent) {
+        setSimpleLogs(prev => [...prev, `[雷达扫描 ❌] 请求网络异常: ${err.message}`]);
+      }
+    } finally {
+      setIsScanningReply(false);
     }
   };
 
@@ -7459,20 +7499,35 @@ if __name__ == "__main__":
                     <Flame className="w-4 h-4 text-amber-400" /> 3. TG 群发设置 — 导入数据并开启极速群发
                   </span>
                   
-                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                     <div
                       className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 shadow-sm animate-pulse"
-                      title="后端服务器已开启永久守护，每 15 秒无人值守自动扫描并补发第二条彩金文案"
+                      title="后端服务器已开启永久守护，每 12 秒无人值守自动扫描并补发第二条彩金文案与第三条中奖祝福"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> 🟢 服务器永久守护运行中 (每15秒巡检补发)
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> 🟢 24h全自动追发雷达运行中 (每12秒)
                     </div>
                     <button
                       type="button"
-                      onClick={handleScanAndReply}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm flex items-center gap-1.5 transition-all"
-                      title="实时扫描所有 Telegram 账号私聊记录，自动识别并补发回复了 Quem é? / Oi / 1 等客户的第二条彩金文案"
+                      disabled={isScanningReply}
+                      onClick={() => handleScanAndReply(false)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border shadow-sm flex items-center gap-1.5 transition-all cursor-pointer ${
+                        isScanningReply 
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse' 
+                          : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border-cyan-500/40'
+                      }`}
+                      title="实时扫描所有 Telegram 协议号私聊记录，自动识别并补发第二条彩金文案，并在设定延时后追发第三条中奖寄语"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> 🔍 手动补发第二条彩金
+                      {isScanningReply ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                          <span>正在全网扫描私聊回复...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>⚡ 立即拉取回复并追发第2/3条</span>
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => setActiveSubModal('none')}

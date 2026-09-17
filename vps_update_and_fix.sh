@@ -26,9 +26,9 @@ echo "📥 正在从 GitHub (main) 拉取最新源码..."
 git fetch origin main
 git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py tdata_converter.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
 
-# 安装/更新 tdata 官方转换引擎核心依赖 (opentele / telethon / aiofiles)
-echo "📦 正在校验并安装 tdata 转换引擎官方依赖 (opentele)..."
-pip3 install --break-system-packages opentele telethon tgcrypto aiofiles 2>/dev/null || pip install opentele telethon tgcrypto aiofiles 2>/dev/null || true
+# 安装/更新 tdata 转换引擎与 Telethon 自动追发核心依赖 (opentele / telethon / pysocks / aiofiles)
+echo "📦 正在校验并安装 tdata 与 24h 自动追发雷达依赖 (opentele / telethon / pysocks)..."
+pip3 install --break-system-packages opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || pip install opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || true
 
 # 3. 恢复真实 .session 凭证，并自动清除小于 200 字节的空占位文件
 if [ -d /tmp/tg_sessions_safe_backup ] && [ "$(ls -A /tmp/tg_sessions_safe_backup 2>/dev/null)" ]; then
@@ -94,9 +94,18 @@ npm run build
 # 4. 重启 PM2 进程
 echo "🔄 正在重启 PM2 服务..."
 pm2 restart all || true
+
+# 5. 守护启动 24h Telegram 客户回复自动追发守护进程
+echo "🤖 正在启动/重载 24h 客户私聊回复自动追发雷达 (tg_auto_responder.py)..."
+if pm2 describe tg-responder > /dev/null 2>&1; then
+    pm2 restart tg-responder || true
+else
+    pm2 start tg_auto_responder.py --name "tg-responder" --interpreter python3 || true
+fi
+
 pm2 save || true
 
 echo "=================================================="
-echo "🎉 更新与修复已全部完成！"
+echo "🎉 更新与修复已全部完成！24h 自动追发守护已常驻运行！"
 echo "👉 请在电脑浏览器打开管理面板，按 Ctrl + F5 (或 Cmd + Shift + R) 强制刷新！"
 echo "=================================================="

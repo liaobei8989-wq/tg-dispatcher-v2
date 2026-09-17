@@ -656,24 +656,39 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
         lower_msg = msg_text.lower()
         print(f"\n📩 [感知客户私聊回复] 账号: +{session_basename} | 客户: {sender_id} ({sender_name or '客户'} | {username or '无@'} | {phone or '无手机'}) | 内容: \"{msg_text}\"")
 
-        # 智能客户意图匹配
-        if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
-            matched_intent = "身份释疑"
-            rand_template = random.choice(INTENT_WHO_ARE_YOU_TEMPLATES)
-        elif any(k in lower_msg for k in ['como', 'funciona', 'paga', 'verdade', 'golpe', 'quero', 'manda', 'passa', 'link', 'pix', 'onde clica']):
-            matched_intent = "玩法/领福利"
-            rand_template = random.choice(INTENT_HOW_IT_WORKS_TEMPLATES)
-        else:
-            matched_intent = "通用问候"
-            rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
+        # 动态读取 Web 界面配置的话术与开关 (即改即生效)
+        custom_cfg = {}
+        cfg_file_path = os.path.join(os.getcwd(), "sessions", "auto_responder_config.json")
+        if os.path.exists(cfg_file_path):
+            try:
+                with open(cfg_file_path, "r", encoding="utf-8") as cf:
+                    custom_cfg = json.load(cf)
+            except Exception:
+                custom_cfg = {}
 
-        print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
+        # 智能客户意图匹配与话术选定
+        rand_template = None
+        if custom_cfg.get("second_message"):
+            rand_template = custom_cfg.get("second_message")
+        else:
+            if any(k in lower_msg for k in ['quem', 'onde', 'conhece', 'sabe', 'qual e', 'nao te conheco', 'de onde', 'oq e', 'q e isso', 'quem e']):
+                matched_intent = "身份释疑"
+                rand_template = random.choice(INTENT_WHO_ARE_YOU_TEMPLATES)
+            elif any(k in lower_msg for k in ['como', 'funciona', 'paga', 'verdade', 'golpe', 'quero', 'manda', 'passa', 'link', 'pix', 'onde clica']):
+                matched_intent = "玩法/领福利"
+                rand_template = random.choice(INTENT_HOW_IT_WORKS_TEMPLATES)
+            else:
+                matched_intent = "通用问候"
+                rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
+            print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
 
         # 拟人延时 2.0 ~ 3.8 秒后发送第 2 阶段彩金链接
         await asyncio.sleep(random.uniform(2.0, 3.8))
         
         rand_url = get_random_url()
-        second_msg = parse_spintax(rand_template).replace("{URL}", rand_url)
+        second_msg = parse_spintax(rand_template)
+        if "{URL}" in second_msg:
+            second_msg = second_msg.replace("{URL}", rand_url)
         
         try:
             try:
@@ -697,8 +712,18 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             print(f"❌ [第2条发送失败]: {e2}")
             return False
 
-        # 拟人打字 (Typing) 5.0 ~ 7.5 秒，循环持续发送 typing 动作，确保客户手机端持续显示 "digitando..." (正在打字)
-        human_delay = random.uniform(5.0, 7.5)
+        # 判断是否需要发送第 3 阶段中奖祝福语
+        enable_third = custom_cfg.get("enable_third_message", True)
+        if not enable_third:
+            print(f"ℹ️ [第3阶段已关闭] 跳过第3条祝福语发送")
+            return True
+
+        # 拟人打字 (Typing) 模拟真人输入状态
+        delay_min = float(custom_cfg.get("second_to_third_delay_min", 3.5))
+        delay_max = float(custom_cfg.get("second_to_third_delay_max", 6.5))
+        if delay_max < delay_min:
+            delay_max = delay_min + 1.0
+        human_delay = random.uniform(delay_min, delay_max)
         print(f"⏳ [模拟真人打字]: 持续输入态 {human_delay:.1f}s 后发送第3阶段频道引流与祝福语...")
         typing_start = time.time()
         while time.time() - typing_start < human_delay:
@@ -706,10 +731,14 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
                 await client(SetTypingRequest(peer=chat_id, action=SendMessageTypingAction()))
             except Exception:
                 pass
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(1.8)
 
         # 发送第 3 阶段祝福语
-        third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
+        if custom_cfg.get("third_message"):
+            third_msg = parse_spintax(custom_cfg.get("third_message"))
+        else:
+            third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
+            
         try:
             await client.send_message(chat_id, third_msg)
             print(f"🍀 [自动补发第3条成功] 已向客户 {sender_id} 推送祝福语: \"{third_msg}\"")

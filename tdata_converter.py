@@ -49,15 +49,25 @@ async def try_convert_opentele(tdata_dir: str, out_session_path: str, twofa_pwd:
         td = TDesktop(target_dir)
         if td.isLoaded():
             # Generate Telethon SQLite file
-            client = await td.ToTelethon(session=out_session_path, flag=UseCurrentSession)
+            session_target = out_session_path[:-8] if out_session_path.endswith('.session') else out_session_path
+            client = await td.ToTelethon(session=session_target, flag=UseCurrentSession)
             if client:
-                detected_phone = ""
                 try:
-                    if hasattr(client, "session") and hasattr(client.session, "auth_key"):
-                        pass
+                    if hasattr(client, "session") and hasattr(client.session, "save"):
+                        client.session.save()
+                    if hasattr(client, "disconnect"):
+                        await client.disconnect()
                 except Exception:
                     pass
-                return "opentele_success"
+
+                # Check if session file was written to either session_target.session or out_session_path
+                actual_created = f"{session_target}.session"
+                if os.path.exists(actual_created) and actual_created != out_session_path:
+                    import shutil
+                    shutil.move(actual_created, out_session_path)
+
+                if os.path.exists(out_session_path) and os.path.getsize(out_session_path) > 300:
+                    return "opentele_success"
     except Exception as e:
         sys.stderr.write(f"[opentele notice] {e}\n")
     return None

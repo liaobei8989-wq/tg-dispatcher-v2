@@ -1915,12 +1915,129 @@ async function startServer() {
     }
   });
 
+  // Telegram 客户回复巡检守护进程状态与控制
+  let isScannerRunning = false;
+  let scannerStartTime = 0;
+  let autoScannerEnabled = true;
+
+  // 允许通过 API 查看与开关巡检守护
+  app.get("/api/telegram/auto-scanner-status", (req, res) => {
+    res.json({
+      success: true,
+      autoScannerEnabled,
+      isScannerRunning,
+      intervalSeconds: 12,
+      statusLabel: autoScannerEnabled ? "🟢 24小时全天候即时巡检中" : "⏸️ 巡检守护已暂停"
+    });
+  });
+
+  app.post("/api/telegram/toggle-auto-scanner", (req, res) => {
+    const { enabled } = req.body || {};
+    if (enabled !== undefined) {
+      autoScannerEnabled = Boolean(enabled);
+    } else {
+      autoScannerEnabled = !autoScannerEnabled;
+    }
+    res.json({
+      success: true,
+      autoScannerEnabled,
+      message: autoScannerEnabled ? "已开启 Telegram 自动巡检守护" : "已暂停 Telegram 自动巡检守护"
+    });
+  });
+
+  // API: 保存与获取 24h 自动追发守护配置
+  app.post("/api/telegram/save-responder-config", (req, res) => {
+    try {
+      const cfgFile = path.join(process.cwd(), "sessions", "auto_responder_config.json");
+      let currentCfg: any = {};
+      if (fs.existsSync(cfgFile)) {
+        try { currentCfg = JSON.parse(fs.readFileSync(cfgFile, "utf8")); } catch (e) {}
+      }
+      const newCfg = {
+        ...currentCfg,
+        ...req.body,
+        updated_at: new Date().toISOString()
+      };
+      fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+      fs.writeFileSync(cfgFile, JSON.stringify(newCfg, null, 2), "utf8");
+      res.json({ success: true, config: newCfg });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get("/api/telegram/get-responder-config", (req, res) => {
+    try {
+      const cfgFile = path.join(process.cwd(), "sessions", "auto_responder_config.json");
+      if (fs.existsSync(cfgFile)) {
+        const data = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
+        return res.json({ success: true, config: data });
+      }
+      res.json({
+        success: true,
+        config: {
+          enabled: true,
+          second_message: "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}",
+          third_message: "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
+          enable_third_message: true,
+          second_to_third_delay_min: 3.5,
+          second_to_third_delay_max: 6.5
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // API: Telegram 客户主动回复全网自动扫描与彩金补发引擎
   app.post("/api/telegram/scan-and-reply", async (req, res) => {
     console.log("[Telegram Reply Scanner] 正在启动 Telegram 全网客户回复自动扫描与彩金补发...");
     try {
+      const {
+        second_message,
+        third_message,
+        enable_third_message,
+        second_to_third_delay_min,
+        second_to_third_delay_max
+      } = req.body || {};
+
+      // 实时保存本次请求中携带的最新文案与配置
+      const cfgFile = path.join(process.cwd(), "sessions", "auto_responder_config.json");
+      if (second_message || third_message) {
+        try {
+          let existingCfg: any = {};
+          if (fs.existsSync(cfgFile)) {
+            try { existingCfg = JSON.parse(fs.readFileSync(cfgFile, "utf8")); } catch (e) {}
+          }
+          const merged = {
+            ...existingCfg,
+            ...(second_message ? { second_message } : {}),
+            ...(third_message ? { third_message } : {}),
+            ...(enable_third_message !== undefined ? { enable_third_message } : {}),
+            ...(second_to_third_delay_min ? { second_to_third_delay_min } : {}),
+            ...(second_to_third_delay_max ? { second_to_third_delay_max } : {}),
+            updated_at: new Date().toISOString()
+          };
+          fs.writeFileSync(cfgFile, JSON.stringify(merged, null, 2), "utf8");
+        } catch (e) {}
+      }
+
       const pythonScript = path.join(process.cwd(), "tg_auto_responder.py");
+      let pythonTelethonFunctional = false;
+
+      // 快速探活 Python 环境是否已安装 Telethon 和 socks 依赖
       if (fs.existsSync(pythonScript)) {
+        try {
+          const testRes = execSync('python3 -c "import telethon, socks; print(\'OK\')"', { timeout: 3000 }).toString();
+          if (testRes.includes("OK")) {
+            pythonTelethonFunctional = true;
+          }
+        } catch (e) {
+          pythonTelethonFunctional = false;
+        }
+      }
+
+      if (pythonTelethonFunctional) {
         console.log("[TG Scanner]: 优先调用 Python Telethon 原生高并发扫描追发引擎...");
         const child = spawn("python3", [pythonScript, "--scan-once"], {
           cwd: process.cwd(),
@@ -1930,20 +2047,43 @@ async function startServer() {
         let outputLines: string[] = [];
         child.stdout.on("data", (data) => {
           const text = data.toString();
-          console.log(`[TG Auto-Responder stdout]: ${text}`);
           outputLines.push(...text.split("\n"));
         });
         child.stderr.on("data", (data) => {
-          console.error(`[TG Auto-Responder stderr]: ${data.toString()}`);
+          outputLines.push(...data.toString().split("\n"));
         });
 
         const timer = setTimeout(() => {
           try { child.kill("SIGKILL"); } catch (e) {}
         }, 35000);
 
-        child.on("close", (code) => {
+        child.on("close", async (code) => {
           clearTimeout(timer);
           const fullOutput = outputLines.join("\n");
+          if (code !== 0 || fullOutput.includes("[ERROR]") || fullOutput.includes("Traceback")) {
+            console.warn("[TG Scanner] Python 扫描异常，无缝降级切入 Node.js GramJS MTProto 原生全网扫描与追发引擎...");
+            try {
+              const result = await executeTelegramReplyScanner({
+                second_message,
+                third_message,
+                enable_third_message,
+                second_to_third_delay_min,
+                second_to_third_delay_max
+              }, (line) => {
+                console.log(`[TG Scanner]: ${line}`);
+              });
+              return res.json({
+                success: result.success,
+                output: result.output,
+                newlySent: result.newlySent,
+                totalCompleted: result.totalCompleted,
+                timestamp: new Date().toISOString()
+              });
+            } catch (err: any) {
+              return res.status(500).json({ success: false, error: err.message });
+            }
+          }
+
           const newlySent = (fullOutput.match(/自动补发第2条成功|自动补发第3条成功/g) || []).length;
           return res.json({
             success: true,
@@ -1956,7 +2096,14 @@ async function startServer() {
         return;
       }
 
-      const result = await executeTelegramReplyScanner((line) => {
+      console.log("[TG Scanner]: 运行原生 Node.js GramJS MTProto 智能客户回复巡检与三阶段追发引擎...");
+      const result = await executeTelegramReplyScanner({
+        second_message,
+        third_message,
+        enable_third_message,
+        second_to_third_delay_min,
+        second_to_third_delay_max
+      }, (line) => {
         console.log(`[TG Scanner]: ${line}`);
       });
 
@@ -3971,34 +4118,15 @@ Return ONLY a JSON array with this schema:
     });
   }
 
-  // Telegram 客户回复巡检守护进程 (默认在用户需要时开启，避免刚启动时端口与网络过载)
-  let isScannerRunning = false;
-  let scannerStartTime = 0;
-  let autoScannerEnabled = false;
-
-  // 允许通过 API 开关巡检守护
-  app.post("/api/telegram/toggle-auto-scanner", (req, res) => {
-    const { enabled } = req.body || {};
-    if (enabled !== undefined) {
-      autoScannerEnabled = Boolean(enabled);
-    } else {
-      autoScannerEnabled = !autoScannerEnabled;
-    }
-    res.json({
-      success: true,
-      autoScannerEnabled,
-      message: autoScannerEnabled ? "已开启 Telegram 自动巡检守护" : "已暂停 Telegram 自动巡检守护"
-    });
-  });
-
+  // 全天候 12 秒高频巡检守护：秒级捕获客户私聊回复并自动触发第2/3阶段补发
   setInterval(async () => {
     if (!autoScannerEnabled) return;
     if (isDirectSendActive()) {
       // 正在前台群发/直推中，主动跳过巡检，避免占用端口和 406 AUTH_KEY_DUPLICATED
       return;
     }
-    if (isScannerRunning && Date.now() - scannerStartTime > 60000) {
-      console.warn("⚠️ [Scanner Watchdog] Previous scanner process exceeded 60s, releasing watchdog lock.");
+    if (isScannerRunning && Date.now() - scannerStartTime > 45000) {
+      console.warn("⚠️ [Scanner Watchdog] Previous scanner process exceeded 45s, releasing watchdog lock.");
       isScannerRunning = false;
     }
     if (isScannerRunning) return;
@@ -4015,7 +4143,7 @@ Return ONLY a JSON array with this schema:
     } finally {
       isScannerRunning = false;
     }
-  }, 60000);
+  }, 12000);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
