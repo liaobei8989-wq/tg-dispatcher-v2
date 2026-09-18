@@ -3888,20 +3888,28 @@ if __name__ == "__main__":
               const errorLines = rawLines.filter((l: string) => l.includes('❌') || l.includes('🛑') || l.includes('错误'));
               const warnLines = rawLines.filter((l: string) => l.includes('⚠️'));
               const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || (resData.output ? resData.output.trim().split('\n').pop() : '发件过程网络异常'));
-              const isUnregistered = resData.output?.includes('Cannot find any entity') || resData.error?.includes('Cannot find any entity');
+              
+              const isUnregistered = resData.output?.includes('USERNAME_NOT_OCCUPIED') || resData.output?.includes('PhoneNotRegistered');
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));
-              const errDetail = isUnregistered 
-                ? '⚠️ 该手机号在 TG 无效或未注册 Telegram'
-                : (isDbCorrupt
-                    ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
-                    : (isProxyErr
-                        ? '🛑 巴西住宅代理连接超时或不可达 (请在终端安装 pysocks 或切换直连极速模式)'
-                        : selectedLog));
+              const isAuthKeyErr = (resData.output?.includes('AUTH_KEY_UNREGISTERED') || resData.output?.includes('SESSION_REVOKED') || resData.output?.includes('发件凭证失效'));
+              const isPeerFlood = (resData.output?.includes('PEER_FLOOD') || resData.output?.includes('FLOOD_WAIT'));
+
+              const errDetail = isPeerFlood
+                ? '⚠️ 触发 Telegram 官方限流等待 (PeerFlood/FloodWait)，已自动保护隔离'
+                : (isAuthKeyErr
+                    ? `🔑 发件号 +${acc.phone} Session 登录态失效或未登录 (非官方频控，需有效发件凭证)`
+                    : (isUnregistered 
+                        ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册或用户名不存在`
+                        : (isDbCorrupt
+                            ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
+                            : (isProxyErr
+                                ? '🛑 代理连接超时或不可达 (请切换直连极速模式)'
+                                : selectedLog))));
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 强力频控与死号智能接力机制：遇到官方频控、凭证失效、未登录、握手异常或该小号导入通讯录受限(未匹配到)，自动换其他健康号接力重试
+              // 🛡️ 智能接力机制：发信号凭证未就绪、握手异常或单号导入受限时，自动换其他健康号接力重试
               const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限|未登录|失效|鉴权失败/i.test(errDetail);
               const isContactImportLimited = /未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
 
@@ -4231,7 +4239,7 @@ if __name__ == "__main__":
                 </span>
                 {currentBatchStats.failed > 0 && (
                   <span className="bg-rose-500/20 text-rose-300 font-mono text-xs px-2 py-0.5 rounded border border-rose-500/30">
-                    ⚠️ 频控换号重试: {currentBatchStats.failed}
+                    ⚠️ 异常/换号重试: {currentBatchStats.failed}
                   </span>
                 )}
               </div>

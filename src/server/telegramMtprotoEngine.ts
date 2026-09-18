@@ -357,18 +357,60 @@ export async function executeTelegramDirectSend(
           const displayUser = me?.username ? `@${me.username}` : (me?.phone ? `+${me.phone}` : curPhone);
           log(`✅ [TG 协议号 ${curPhone} 鉴权成功]: ${displayName} (${displayUser})`);
 
-          // 解析目标 Peer (号码、Username 或 ID)
+          // 解析目标 Peer (号码、Username、纯ID 或 t.me 链接)
           let peer: any = target;
-          const targetStr = String(target).trim();
-          const cleanTargetDigits = targetStr.replace(/[^0-9]/g, '');
+          let targetStr = String(target).trim();
+          if (targetStr.startsWith('http://t.me/') || targetStr.startsWith('https://t.me/') || targetStr.startsWith('t.me/')) {
+            targetStr = '@' + targetStr.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+          }
 
-          if (targetStr.startsWith('@')) {
+          const cleanTargetDigits = targetStr.replace(/[^0-9]/g, '');
+          const isExplicitUsername = targetStr.startsWith('@');
+          // Telegram 规范用户名: 5-32位字母数字下划线 (如 luccas_gamer)
+          const isAlphaNumericUsername = !isExplicitUsername && /^[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(targetStr);
+          const isUsername = isExplicitUsername || isAlphaNumericUsername;
+          const cleanUsername = isUsername ? targetStr.replace(/^@/, '').trim() : '';
+
+          if (isUsername && cleanUsername) {
+            log(`🔍 [正在定位目标纯ID/用户名]: @${cleanUsername}...`);
             try {
-              peer = await client.getInputEntity(targetStr);
-              log(`✅ [用户名定位成功]: 已解析 ${targetStr} 对应 InputEntity`);
+              // 优先使用 Telegram 原生 MTProto contacts.ResolveUsername 解析纯ID
+              const resolved: any = await withTimeout(
+                client.invoke(new Api.contacts.ResolveUsername({ username: cleanUsername })),
+                8000,
+                `解析用户名 @${cleanUsername} 超时`
+              );
+
+              if (resolved && resolved.users && resolved.users.length > 0) {
+                const u = resolved.users[0];
+                peer = new Api.InputPeerUser({
+                  userId: u.id,
+                  accessHash: u.accessHash
+                });
+                if ((client as any)._entityCache) {
+                  (client as any)._entityCache.add(resolved);
+                }
+                const tgName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || `@${cleanUsername}`;
+                log(`✅ [用户名定位成功]: @${cleanUsername} ➔ User ID: ${u.id} (${tgName})`);
+              } else if (resolved && resolved.peer) {
+                peer = resolved.peer;
+                log(`✅ [Peer 定位成功]: @${cleanUsername}`);
+              } else {
+                peer = await client.getInputEntity(`@${cleanUsername}`);
+                log(`✅ [InputEntity 定位成功]: @${cleanUsername}`);
+              }
             } catch (uErr: any) {
-              log(`ℹ️ [用户名直接解析]: ${uErr.message}，保持原字符串尝试直推...`);
-              peer = targetStr;
+              const uErrStr = String(uErr.message || uErr);
+              if (uErrStr.includes('USERNAME_NOT_OCCUPIED') || uErrStr.includes('USERNAME_INVALID')) {
+                targetIsInvalid = true;
+                throw new Error(`USERNAME_INVALID: 用户名 @${cleanUsername} 在官方不存在或格式非法`);
+              }
+              log(`ℹ️ [直接解析提示]: ${uErrStr}，尝试使用缓存或备用寻址...`);
+              try {
+                peer = await client.getInputEntity(`@${cleanUsername}`);
+              } catch (e2) {
+                peer = `@${cleanUsername}`;
+              }
             }
           } else if (/^\d{6,10}$/.test(targetStr)) {
             // Telegram 纯数字 User ID (非国际手机号，通常6-10位)
@@ -382,7 +424,7 @@ export async function executeTelegramDirectSend(
             }
           }
 
-          if (!targetStr.startsWith('@') && typeof peer === 'string' && cleanTargetDigits.length >= 7) {
+          if (!isUsername && typeof peer === 'string' && cleanTargetDigits.length >= 7) {
             const intlPhone = `+${cleanTargetDigits}`;
             try {
               const importRes = await withTimeout(client.invoke(
@@ -463,10 +505,16 @@ export async function executeTelegramDirectSend(
           } else if (errStr.includes('USER_PRIVACY_RESTRICTED') || errStr.includes('Privacy')) {
             diag = `🔒 [目标隐私保护]: 目标用户的 Telegram 开启了隐私保护，不允许非好友发起会话`;
           } else if (errStr.includes('AUTH_KEY_UNREGISTERED') || errStr.includes('SESSION_REVOKED')) {
-            diag = `🔑 [发件凭证失效]: 该账号 Session 登录态已被强制登出`;
-          } else if (errStr.includes('Cannot find any entity') || errStr.includes('USERNAME_INVALID') || errStr.includes('PhoneNotRegistered')) {
+            diag = `🔑 [发件凭证失效/未登录]: 发件号 Session 凭证未生效或已被登出 (非频控原因，请确保该账号具有有效登录凭证)`;
+          } else if (errStr.includes('USERNAME_NOT_OCCUPIED') || errStr.includes('USERNAME_INVALID')) {
             targetIsInvalid = true;
-            diag = `🚫 [目标未注册 TG 快速熔断]: 目标号码 ${target} 尚未在 Telegram 注册或格式无效，系统已立即熔断跳过，严禁后续其他账号重复请求！`;
+            diag = `🚫 [用户名不存在]: 目标 @${cleanUsername || target} 在 Telegram 官方不存在或已被注销`;
+          } else if (errStr.includes('PhoneNotRegistered')) {
+            targetIsInvalid = true;
+            diag = `🚫 [手机号未注册]: 目标号码 ${target} 尚未在 Telegram 注册`;
+          } else if (errStr.includes('Cannot find any entity')) {
+            // 严禁设置 targetIsInvalid = true！该错误通常是当前发件号未完成登录鉴权无法检索所致，不代表目标不存在
+            diag = `⚠️ [目标寻址未完成]: 当前发件号无法在 Telegram 检索到目标 ${target} (发件号 Session 鉴权未完成或通讯录权限受限)，已自动换下一个健康账号重试`;
           }
 
           log(`⚠️ [发件号 ${curPhone} 处理详情]: ${diag}`);
