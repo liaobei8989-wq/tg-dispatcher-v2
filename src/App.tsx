@@ -36,8 +36,8 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const uniqueMap = new Map<string, AccountSession>();
-          const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
-          const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
+          const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207', '5586994687152']);
+          const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213']);
           const usedIps = new Set<string>();
 
           parsed.forEach((acc: AccountSession, idx: number) => {
@@ -104,8 +104,8 @@ export default function App() {
 
   // Async hydration from server API and IndexedDB on initial load
   React.useEffect(() => {
-    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207']);
-    const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152']);
+    const obsoletePhones = new Set(['5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207', '5586994687152']);
+    const top5Phones = new Set(['5586994428117', '5586994581839', '5586994709226', '5586994684213']);
 
     // 1. Fetch live accounts and dedicated 1-to-1 proxy mappings from server disk
     Promise.all([

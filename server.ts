@@ -19,8 +19,8 @@ process.on('uncaughtException', (err) => {
 
 // Real 60+1 Brazilian Phones uploaded by user
 const USER_60_REAL_PHONES = [
-  // 10 Original accounts
-  '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
+  // Original accounts
+  '5586994428117', '5586994581839', '5586994709226', '5586994684213',
   '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
   // 51 Newly uploaded accounts
   '5598984569687', '5598984627175', '5598984670055', '5598984671221', '5598984730611',
@@ -633,7 +633,7 @@ async function startServer() {
       };
 
       const getAccountMeta = (rawPhone: string, idx: number, userJsonMeta?: any) => {
-        const isTop5 = ['5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152'].includes(rawPhone) || idx < 5;
+        const isTop5 = ['5586994428117', '5586994581839', '5586994709226', '5586994684213'].includes(rawPhone) || idx < 4;
         const todayStr = new Date().toISOString().split('T')[0];
         const targetDefaultDay = isTop5 ? 7 : 1;
         const createdAt = userJsonMeta?.createdAt || todayStr;

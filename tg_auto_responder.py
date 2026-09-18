@@ -37,7 +37,7 @@ except ImportError:
 
 import sqlite3
 
-BANNED_OBSOLETE_PHONES = {'5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207'}
+BANNED_OBSOLETE_PHONES = {'5538988630899', '5538991977854', '5538992304845', '5541987023810', '5586995118207', '5586994687152'}
 
 def is_valid_telethon_session(session_path: str) -> bool:
     """检查文件是否为有效的 Telethon SQLite 数据库文件"""

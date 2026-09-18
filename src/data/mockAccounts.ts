@@ -29,8 +29,8 @@ export function calculateWarmupDays(createdAtStr?: string, baseWarmupDay: number
 
 // Real 60 Brazilian Phones uploaded by user (10 original + 50 active newly uploaded, excluding 1 banned phone)
 export const USER_60_REAL_PHONES: string[] = [
-  // 10 Original accounts
-  '5586994428117', '5586994581839', '5586994709226', '5586994684213', '5586994687152',
+  // Original accounts
+  '5586994428117', '5586994581839', '5586994709226', '5586994684213',
   '5586994850500', '5586994918471', '5586994927293', '5586994943285', '5586995160291',
   // 50 Newly uploaded accounts (1 banned phone 5599984388206 removed)
   '5598984569687', '5598984627175', '5598984670055', '5598984671221', '5598984730611',
