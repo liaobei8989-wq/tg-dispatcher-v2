@@ -320,6 +320,7 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
     clean_target = target.strip()
     peer = None
+    imported_ids_to_del = []
 
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]

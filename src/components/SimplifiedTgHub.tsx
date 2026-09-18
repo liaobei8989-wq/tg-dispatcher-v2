@@ -3898,7 +3898,7 @@ if __name__ == "__main__":
               const errDetail = isPeerFlood
                 ? '⚠️ 触发 Telegram 官方限流等待 (PeerFlood/FloodWait)，已自动保护隔离'
                 : (isAuthKeyErr
-                    ? `🔑 发件号 +${acc.phone} Session 登录态失效或未登录 (非官方频控，需有效发件凭证)`
+                    ? `🔑 发件号 +${acc.phone.replace(/^\+/, '')} Session 登录态失效或未登录 (非官方频控，需有效发件凭证)`
                     : (isUnregistered 
                         ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册或用户名不存在`
                         : (isDbCorrupt
@@ -3907,7 +3907,7 @@ if __name__ == "__main__":
                                 ? '🛑 代理连接超时或不可达 (请切换直连极速模式)'
                                 : selectedLog))));
               lastErrorDetail = errDetail;
-              setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
+              setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
               // 🛡️ 智能接力机制：发信号凭证未就绪、握手异常或单号导入受限时，自动换其他健康号接力重试
               const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限|未登录|失效|鉴权失败/i.test(errDetail);
@@ -3921,7 +3921,7 @@ if __name__ == "__main__":
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 账号 +${acc.phone} 对目标 (${targetItem}) 寻址未响应，已自动转入其他健康在线通道接力重发！`
+                    `🔄 [智能无缝接力] 账号 +${acc.phone.replace(/^\+/, '')} 对目标 (${targetItem}) 寻址未响应，已自动转入其他健康在线通道接力重发！`
                   ]);
                 }
 
@@ -3932,7 +3932,7 @@ if __name__ == "__main__":
                   }
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
+                    `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone.replace(/^\+/, '')} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
                   ]);
                   break; // 🚨 该异常账号必须立即退出发信任务！
                 }
