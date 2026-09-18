@@ -433,7 +433,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     pass
 
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能该发信号的陌生人导入受限，或对方未开通 TG)")
+            raise Exception(f"目标手机号 +{digits} 通讯录导入暂未匹配 (该发信通道陌生人导入配额暂满，已触发智能换号接力)")
 
         peer = user_found
 

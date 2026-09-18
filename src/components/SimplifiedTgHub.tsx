@@ -3909,33 +3909,41 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 智能接力机制：发信号凭证未就绪、握手异常或单号导入受限时，自动换其他健康号接力重试
-              const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限|未登录|失效|鉴权失败/i.test(errDetail);
-              const isContactImportLimited = /未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
+              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 单个目标通讯录导入未匹配
+              const isContactImportLimited = /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位|未开通 TG/i.test(errDetail);
+              const isTgRestricted = !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败/i.test(errDetail);
 
-              if (isTgRestricted || isContactImportLimited) {
-                // 1. 本次目标由于发信号自身限制未送达，放回重试队列让其他健康在线通道接力发送！
+              if (isContactImportLimited) {
+                // 单个目标在该发信号未匹配到：不熔断发信号！由智能无缝接力分配给其他通道重试发信
                 if ((task.retries || 0) < 2) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 账号 +${acc.phone.replace(/^\+/, '')} 对目标 (${targetItem}) 寻址未响应，已自动转入其他健康在线通道接力重发！`
+                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 导入目标 (${targetItem}) 未响应，已自动转入其他健康在线通道接力重发！`
+                  ]);
+                }
+              } else if (isTgRestricted) {
+                // 真正的账号封禁或登录凭证失效：将目标转给其他号，并将该异常发信账号熔断退出
+                if ((task.retries || 0) < 2) {
+                  runFailCount = Math.max(0, runFailCount - 1);
+                  setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
+                  retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
+                  setSimpleLogs(prev => [
+                    ...prev,
+                    `🔄 [智能无缝接力] 账号 +${acc.phone.replace(/^\+/, '')} 异常，已将目标 (${targetItem}) 转入其他健康在线通道接力重发！`
                   ]);
                 }
 
-                // 2. 若是彻底失效或风控，则该账号退出；若是单号导入受限，继续处理后续或根据设置隔离
-                if (isTgRestricted) {
-                  if (autoQuarantineRestricted) {
-                    quarantineAccounts([acc.phone], `发件中遇到账号失效或限制: ${errDetail}`);
-                  }
-                  setSimpleLogs(prev => [
-                    ...prev,
-                    `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone.replace(/^\+/, '')} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
-                  ]);
-                  break; // 🚨 该异常账号必须立即退出发信任务！
+                if (autoQuarantineRestricted) {
+                  quarantineAccounts([acc.phone], `发件中遇到账号失效或限制: ${errDetail}`);
                 }
+                setSimpleLogs(prev => [
+                  ...prev,
+                  `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone.replace(/^\+/, '')} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
+                ]);
+                break; // 🚨 仅在账号真正失效/风控时退出发信任务！
               }
             }
           } catch (err: any) {
