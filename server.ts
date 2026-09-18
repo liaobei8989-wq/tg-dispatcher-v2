@@ -1811,9 +1811,12 @@ async function startServer() {
       ? targets
       : ["+5571996984203"];
     
-    // Auto format pure digit international phone numbers
+    // Auto format pure digit international phone numbers, while preserving @username and t.me links
     const targetList = rawTargets.map((t: any) => {
-      const str = String(t).trim();
+      let str = String(t).trim();
+      if (str.startsWith('http://t.me/') || str.startsWith('https://t.me/') || str.startsWith('t.me/')) {
+        str = '@' + str.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+      }
       if (/^\d{10,15}$/.test(str)) {
         return `+${str}`;
       }

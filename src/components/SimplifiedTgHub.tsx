@@ -3736,10 +3736,16 @@ if __name__ == "__main__":
         }
         if (nextTaskQueueIndex >= rawLines.length) return null;
         const taskIdx = nextTaskQueueIndex++;
+        const rawTarget = rawLines[taskIdx].trim();
+        // 智能保留 @username、链接或标准国际手机号
+        let targetParam = rawTarget.replace(/\s*\(.*?\)/, '').trim();
+        if (targetParam.startsWith('http://t.me/') || targetParam.startsWith('https://t.me/') || targetParam.startsWith('t.me/')) {
+          targetParam = '@' + targetParam.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+        }
         return {
           taskIndex: taskIdx,
-          targetItem: rawLines[taskIdx],
-          cleanPhone: rawLines[taskIdx].replace(/\s*\(.*?\)/, '').trim(),
+          targetItem: rawTarget,
+          cleanPhone: targetParam,
           retries: 0
         };
       };
@@ -3895,31 +3901,33 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 强力频控与死号智能接力机制：遇到官方频控、凭证失效、未登录或握手异常，自动换健康号重试，并退出该死号
+              // 🛡️ 强力频控与死号智能接力机制：遇到官方频控、凭证失效、未登录、握手异常或该小号导入通讯录受限(未匹配到)，自动换其他健康号接力重试
               const isTgRestricted = /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|受限|未登录|失效|鉴权失败/i.test(errDetail);
-              if (isTgRestricted) {
-                // 1. 本次目标由于发信号自身原因未送达，放回重试队列让其他健康在线通道接力发送！
+              const isContactImportLimited = /未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
+
+              if (isTgRestricted || isContactImportLimited) {
+                // 1. 本次目标由于发信号自身限制未送达，放回重试队列让其他健康在线通道接力发送！
                 if ((task.retries || 0) < 2) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 账号 +${acc.phone} 凭证异常/受限，未送达目标 (${targetItem}) 已自动转入健康在线账号队列接力重发！`
+                    `🔄 [智能无缝接力] 账号 +${acc.phone} 对目标 (${targetItem}) 寻址未响应，已自动转入其他健康在线通道接力重发！`
                   ]);
                 }
 
-                // 2. 若开启了风控隔离组，自动归档
-                if (autoQuarantineRestricted) {
-                  quarantineAccounts([acc.phone], `发件中遇到账号失效或限制: ${errDetail}`);
+                // 2. 若是彻底失效或风控，则该账号退出；若是单号导入受限，继续处理后续或根据设置隔离
+                if (isTgRestricted) {
+                  if (autoQuarantineRestricted) {
+                    quarantineAccounts([acc.phone], `发件中遇到账号失效或限制: ${errDetail}`);
+                  }
+                  setSimpleLogs(prev => [
+                    ...prev,
+                    `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
+                  ]);
+                  break; // 🚨 该异常账号必须立即退出发信任务！
                 }
-
-                // 3. 打印醒目的红字停止日志并退出该失效账号 Worker
-                setSimpleLogs(prev => [
-                  ...prev,
-                  `🛑 [通道 #${workerIdx + 1} 异常熔断退出] 账号 +${acc.phone} 凭证失效或受限 (${errDetail.slice(0, 50)})！系统已强制该账号退出本次任务，不再使用它发信。`
-                ]);
-                break; // 🚨 该异常账号必须立即退出发信任务！
               }
             }
           } catch (err: any) {

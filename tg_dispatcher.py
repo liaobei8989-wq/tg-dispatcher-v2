@@ -324,11 +324,44 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
 
-    if clean_target.startswith('@'):
+    # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID)
+    if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
+        uname = clean_target if clean_target.startswith('@') else f"@{clean_target}"
         try:
-            peer = await asyncio.wait_for(client.get_entity(clean_target), timeout=8.0)
+            peer = await asyncio.wait_for(client.get_entity(uname), timeout=8.0)
         except Exception as e:
-            raise Exception(f"无法找到 Telegram 用户名 {clean_target}: {str(e)}")
+            try:
+                peer = await asyncio.wait_for(client.get_input_entity(uname), timeout=6.0)
+            except Exception:
+                raise Exception(f"无法找到 Telegram 用户名 {uname}: 对方不存在或未设置公开用户名 ({str(e)})")
+    # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
+    elif clean_target.isdigit() and len(clean_target) <= 10:
+        target_uid = int(clean_target)
+        try:
+            peer = await asyncio.wait_for(client.get_entity(target_uid), timeout=5.0)
+        except Exception:
+            try:
+                peer = await asyncio.wait_for(client.get_input_entity(target_uid), timeout=4.0)
+            except Exception:
+                # 尝试作为国际号码导入通讯录建立关联
+                digits = clean_target
+                phone_variants = [digits, "86" + digits if len(digits) == 11 else "55" + digits]
+                imported_ids_to_del = []
+                user_found = None
+                for pv in phone_variants:
+                    try:
+                        c = InputPhoneContact(client_id=random.randint(1000000, 9999999), phone=f"+{pv}", first_name="Cliente", last_name="")
+                        result = await asyncio.wait_for(client(ImportContactsRequest([c])), timeout=6.0)
+                        if result and getattr(result, 'users', None) and len(result.users) > 0:
+                            user_found = result.users[0]
+                            imported_ids_to_del.append(user_found.id)
+                            break
+                    except Exception:
+                        pass
+                if user_found:
+                    peer = user_found
+                else:
+                    raise Exception(f"纯数字 ID {target_uid} 未能在该小号会话中定位 (TG协议底层安全限制：向纯数字ID首次发起私聊必须拥有对方手机号或@用户名)")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
         phone_variants = [digits]
@@ -345,7 +378,6 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 phone_variants.append(alt_55)
 
         # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
-        # 很多巴西人早期注册 TG 时未加 9，或号商筛选时带/不带 9，双向探测可大幅提升识别命中率
         if digits.startswith('55'):
             if len(digits) == 13 and digits[4] == '9':
                 alt_12 = digits[:4] + digits[5:]
@@ -356,20 +388,19 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 if alt_13 not in phone_variants:
                     phone_variants.append(alt_13)
 
-        contacts_to_import = []
         imported_ids_to_del = []
         user_found = None
         
         # 1. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
         for pv in phone_variants:
             try:
-                user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=2.0)
+                user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=2.5)
                 if user_found:
                     break
             except Exception:
                 pass
 
-        # 2. 依次单号精准导入通讯录 (严禁批量混合或无+号重复提交，避免触发 Telegram retry 拦截)
+        # 2. 依次单号精准导入通讯录
         if not user_found:
             for pv in phone_variants:
                 try:
@@ -401,7 +432,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     pass
 
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 未匹配到 Telegram 用户 (请检查号码格式是否完整，或对方未开通 TG)")
+            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能该发信号的陌生人导入受限，或对方未开通 TG)")
 
         peer = user_found
 
@@ -410,20 +441,20 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
     # Stage 1: Send Greeting with realistic human typing action
     try:
-        # Simulate employee looking at dialog and typing message (1.0 ~ 1.8s)
         await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-        await asyncio.sleep(random.uniform(1.0, 1.8))
+        await asyncio.sleep(random.uniform(0.8, 1.5))
     except Exception:
         pass
 
     sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
 
-    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致会话 peer 句柄失效
+    # 保留联系人卡片关系，不立即删除，保障后续第二阶段彩金能 100% 连续送达！
     if imported_ids_to_del:
         async def delayed_delete():
             try:
-                await asyncio.sleep(3.0)
+                # 延后 30 分钟或者保留，保障追发第二、第三阶段消息时有完整的联系人句柄
+                await asyncio.sleep(1800.0)
                 await client(DeleteContactsRequest(id=imported_ids_to_del))
             except Exception:
                 pass

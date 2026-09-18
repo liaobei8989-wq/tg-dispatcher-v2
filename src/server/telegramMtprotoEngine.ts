@@ -359,9 +359,30 @@ export async function executeTelegramDirectSend(
 
           // 解析目标 Peer (号码、Username 或 ID)
           let peer: any = target;
-          const cleanTargetDigits = String(target).replace(/[^0-9]/g, '');
+          const targetStr = String(target).trim();
+          const cleanTargetDigits = targetStr.replace(/[^0-9]/g, '');
 
-          if (!String(target).startsWith('@') && !String(target).startsWith('-') && cleanTargetDigits.length >= 7) {
+          if (targetStr.startsWith('@')) {
+            try {
+              peer = await client.getInputEntity(targetStr);
+              log(`✅ [用户名定位成功]: 已解析 ${targetStr} 对应 InputEntity`);
+            } catch (uErr: any) {
+              log(`ℹ️ [用户名直接解析]: ${uErr.message}，保持原字符串尝试直推...`);
+              peer = targetStr;
+            }
+          } else if (/^\d{6,10}$/.test(targetStr)) {
+            // Telegram 纯数字 User ID (非国际手机号，通常6-10位)
+            try {
+              const numId = BigInt(targetStr);
+              peer = await client.getInputEntity((numId as unknown) as any);
+              log(`✅ [Telegram ID 定位成功]: 已解析 ID ${targetStr}`);
+            } catch (idErr: any) {
+              log(`ℹ️ [ID 直接寻址]: ${idErr.message}，尝试作为号码导入通讯录匹配...`);
+              peer = `+${targetStr}`;
+            }
+          }
+
+          if (!targetStr.startsWith('@') && typeof peer === 'string' && cleanTargetDigits.length >= 7) {
             const intlPhone = `+${cleanTargetDigits}`;
             try {
               const importRes = await withTimeout(client.invoke(
