@@ -3909,19 +3909,26 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 单个目标通讯录导入未匹配
-              const isContactImportLimited = /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位|未开通 TG/i.test(errDetail);
-              const isTgRestricted = !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败/i.test(errDetail);
+              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
+              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索/i.test(errDetail);
+              const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
+              const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败/i.test(errDetail);
 
-              if (isContactImportLimited) {
+              if (isNotRegistered) {
+                // 目标未在 TG 官方注册：直接标记为无效数据并跳过，绝不在其他发信通道反复尝试，避免耗尽所有账号的导入配额！
+                setSimpleLogs(prev => [
+                  ...prev,
+                  `ℹ️ [云端清洗] 目标 (${targetItem}) 经 Telegram 官方核实未注册该平台 (空号/未开通)，系统已自动跳过！`
+                ]);
+              } else if (isContactImportLimited) {
                 // 单个目标在该发信号未匹配到：不熔断发信号！由智能无缝接力分配给其他通道重试发信
-                if ((task.retries || 0) < 2) {
+                if ((task.retries || 0) < 1) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 导入目标 (${targetItem}) 未响应，已自动转入其他健康在线通道接力重发！`
+                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 导入目标 (${targetItem}) 临时限额，已转入其他在线通道接力！`
                   ]);
                 }
               } else if (isTgRestricted) {
@@ -4156,6 +4163,47 @@ if __name__ == "__main__":
         }
       };
       reader.readAsText(file);
+    }
+  };
+
+  // 🎯 目标名单智能预筛：批量检测 Telegram 注册与隐私权限，剔除未开通空号
+  const [isScrubbingTargets, setIsScrubbingTargets] = useState<boolean>(false);
+  const handleScrubTargets = async () => {
+    const rawLines = massDataText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (rawLines.length === 0) {
+      alert('请先在下方输入框中粘贴或上传待检测的号码/用户名名单！');
+      return;
+    }
+    setIsScrubbingTargets(true);
+    setSimpleLogs(prev => [...prev, `[⚡ 目标智能预检] 正在对当前 ${rawLines.length} 个目标进行 Telegram 注册与有效性检测...`]);
+
+    try {
+      const res = await fetch('/api/telegram/scrub-targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets: rawLines })
+      });
+      const data = await res.json();
+      if (data && Array.isArray(data.valid_targets)) {
+        if (data.valid_targets.length > 0) {
+          setMassDataText(data.valid_targets.join('\n'));
+          setSimpleLogs(prev => [
+            ...prev,
+            `[⚡ 预检完成] 原 ${rawLines.length} 个目标 ➔ 筛出 ${data.valid_count} 个已开通 TG 客户，自动剔除 ${data.invalid_count} 个未开通空号！`
+          ]);
+          alert(`🎯 检测完成！\n原始名单: ${rawLines.length} 个\n已开通 TG 目标: ${data.valid_count} 个 (已保留在待发区)\n未开通/空号: ${data.invalid_count} 个 (已自动剔除)`);
+        } else {
+          setSimpleLogs(prev => [
+            ...prev,
+            `[⚡ 预检提示] 检测完毕：当前 ${rawLines.length} 个号码均未在 Telegram 注册。`
+          ]);
+          alert(`提示：当前列表中的 ${rawLines.length} 个号码在 Telegram 上均未检测到开通记录。`);
+        }
+      }
+    } catch (err: any) {
+      setSimpleLogs(prev => [...prev, `[预检失败] 网络或脚本响应异常: ${err.message}`]);
+    } finally {
+      setIsScrubbingTargets(false);
     }
   };
 
@@ -7730,6 +7778,21 @@ if __name__ == "__main__":
                           onChange={handleTxtFileImport}
                         />
                       </label>
+
+                      <button
+                        type="button"
+                        onClick={handleScrubTargets}
+                        disabled={isScrubbingTargets}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border shadow-sm flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isScrubbingTargets
+                            ? 'bg-purple-950/60 text-purple-300 border-purple-500/50 animate-pulse'
+                            : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border-purple-500/40 hover:border-purple-400'
+                        }`}
+                        title="穿透检测当前列表中哪些号码开通了 Telegram，剔除未注册空号，保护小号配额并保障100%成功率"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        {isScrubbingTargets ? '正在智能穿透检测...' : '⚡ 筛除未注册 (保留开通TG)'}
+                      </button>
 
                       <button
                         type="button"

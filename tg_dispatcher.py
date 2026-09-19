@@ -365,29 +365,32 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     raise Exception(f"纯数字 ID {target_uid} 未能在该小号会话中定位 (TG协议底层安全限制：向纯数字ID首次发起私聊必须拥有对方手机号或@用户名)")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
-        phone_variants = [digits]
+        phone_variants = []
 
-        # 🇨🇳 中国手机号智能容错 (11位 13~19 开头自动补全 86 国际区号)
-        if len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19')):
-            alt_86 = '86' + digits
-            if alt_86 not in phone_variants:
-                phone_variants.append(alt_86)
-        # 🇧🇷 巴西手机号智能容错 (10位或11位未输 55 自动补全 55 国际区号)
-        elif len(digits) in [10, 11] and not digits.startswith('55'):
-            alt_55 = '55' + digits
-            if alt_55 not in phone_variants:
-                phone_variants.append(alt_55)
+        # 🇧🇷 巴西手机号智能提取与双向 9 位变体穿透
+        pure_no_cc = digits[2:] if digits.startswith('55') else digits
+        if len(pure_no_cc) in [10, 11]:
+            # 11 位 (含第9位)
+            if len(pure_no_cc) == 11 and pure_no_cc[2] == '9':
+                v13 = '55' + pure_no_cc
+                v12 = '55' + pure_no_cc[:2] + pure_no_cc[3:] # 去掉 9
+                phone_variants.extend([v13, v12])
+            elif len(pure_no_cc) == 10:
+                v12 = '55' + pure_no_cc
+                v13 = '55' + pure_no_cc[:2] + '9' + pure_no_cc[2:] # 补上 9
+                phone_variants.extend([v13, v12])
+            else:
+                phone_variants.append('55' + pure_no_cc)
+        elif digits.startswith('86') or (len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19'))):
+            if not digits.startswith('86'):
+                phone_variants.append('86' + digits)
+            else:
+                phone_variants.append(digits)
+        else:
+            phone_variants.append(digits)
 
-        # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
-        if digits.startswith('55'):
-            if len(digits) == 13 and digits[4] == '9':
-                alt_12 = digits[:4] + digits[5:]
-                if alt_12 not in phone_variants:
-                    phone_variants.append(alt_12)
-            elif len(digits) == 12:
-                alt_13 = digits[:4] + '9' + digits[4:]
-                if alt_13 not in phone_variants:
-                    phone_variants.append(alt_13)
+        if digits not in phone_variants:
+            phone_variants.append(digits)
 
         imported_ids_to_del = []
         user_found = None
@@ -401,39 +404,43 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
 
-        # 2. 依次单号精准导入通讯录
+        # 2. 一次性打包导入通讯录 (1 次 MTProto 请求完成全部变体探查，不浪费配额)
         if not user_found:
-            for pv in phone_variants:
-                try:
-                    c = InputPhoneContact(
+            try:
+                contacts = [
+                    InputPhoneContact(
                         client_id=random.randint(1000000, 9999999),
                         phone=f"+{pv}",
                         first_name="Cliente",
                         last_name=""
                     )
-                    result = await asyncio.wait_for(client(ImportContactsRequest([c])), timeout=8.0)
-                    if result and getattr(result, 'users', None) and len(result.users) > 0:
-                        user_found = result.users[0]
-                        for u in result.users:
-                            imported_ids_to_del.append(u.id)
-                        break
-                except Exception as ce:
-                    if "FLOOD_WAIT" in str(ce):
-                        raise ce
-                    pass
+                    for pv in phone_variants
+                ]
+                result = await asyncio.wait_for(client(ImportContactsRequest(contacts)), timeout=8.0)
+                if result and getattr(result, 'users', None) and len(result.users) > 0:
+                    user_found = result.users[0]
+                    for u in result.users:
+                        imported_ids_to_del.append(u.id)
+                else:
+                    raise Exception(f"目标手机号 +{digits} 经 TG 官方云端核实未注册 (空号或对方未开通 TG)")
+            except Exception as ce:
+                err_s = str(ce)
+                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s or "未注册" in err_s or "未开通" in err_s:
+                    raise ce
+                pass
 
-        # 3. 如果仍未找到，尝试直接获取输入实体句柄
+        # 3. 如果仍未找到，尝试获取实体句柄
         if not user_found:
             for pv in phone_variants:
                 try:
-                    user_found = await asyncio.wait_for(client.get_input_entity(f"+{pv}"), timeout=3.0)
+                    user_found = await asyncio.wait_for(client.get_input_entity(f"+{pv}"), timeout=2.5)
                     if user_found:
                         break
                 except Exception:
                     pass
 
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 通讯录导入暂未匹配 (该发信通道陌生人导入配额暂满，已触发智能换号接力)")
+            raise Exception(f"目标手机号 +{digits} 经 TG 官方云端核实未注册 (空号或对方未开通 TG)")
 
         peer = user_found
 
