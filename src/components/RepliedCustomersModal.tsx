@@ -43,7 +43,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
   const [isClearing, setIsClearing] = useState<boolean>(false);
   const [isDeepSyncing, setIsDeepSyncing] = useState<boolean>(false);
   const [isCleaningStale, setIsCleaningStale] = useState<boolean>(false);
-  const [timeRange, setTimeRange] = useState<'recent' | 'today' | 'all'>('recent');
+  const [timeRange, setTimeRange] = useState<'recent' | 'today' | 'all'>('all');
 
   // Load replied customers list from server
   const fetchRepliedCustomers = async (range: string = timeRange) => {
@@ -54,6 +54,7 @@ export const RepliedCustomersModal: React.FC<RepliedCustomersModalProps> = ({
         const data = await res.json();
         if (data.success && Array.isArray(data.customers)) {
           setCustomers(data.customers);
+          onRefreshStats?.();
         }
       }
     } catch (e) {

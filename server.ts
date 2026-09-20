@@ -2132,71 +2132,6 @@ async function startServer() {
     }
   });
 
-  // API: Get Telegram Auto-Scanner Stats & Reply History (以独立回复客户去重精准统计)
-  app.get(["/api/telegram/auto-scanner-stats", "/api/tg-matrix/scanner-stats"], (req, res) => {
-    const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
-    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
-    
-    let repliedData: any = {};
-    if (fs.existsSync(repliedChatsFile)) {
-      try {
-        repliedData = JSON.parse(fs.readFileSync(repliedChatsFile, "utf8"));
-      } catch (e) {}
-    }
-
-    // 统计独立有效回复客户数 (Unique Replied Customers)
-    const uniqueCustomerKeys = Object.keys(repliedData);
-    const uniqueCustomerCount = uniqueCustomerKeys.length;
-
-    let statsData: any = {
-      status: "ACTIVE",
-      statusLabel: "🟢 24小时全天候即时巡航补发",
-      todayCount: uniqueCustomerCount,
-      totalCount: uniqueCustomerCount,
-      uniqueRepliedCustomers: uniqueCustomerCount,
-      logs: []
-    };
-
-    if (fs.existsSync(statsFilePath)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
-        statsData = { ...statsData, ...raw };
-        // 保证按客户去重统计精准展示
-        statsData.uniqueRepliedCustomers = uniqueCustomerCount || statsData.todayCount || 0;
-        statsData.todayCount = uniqueCustomerCount || statsData.todayCount || 0;
-        statsData.totalCount = Math.max(uniqueCustomerCount, statsData.totalCount || 0);
-      } catch (e) {}
-    }
-
-    return res.json(statsData);
-  });
-
-  // API: Reset Telegram Reply Stats (一键清零回复统计与客户记录)
-  app.post(["/api/telegram/reset-reply-stats", "/api/tg-matrix/reset-stats"], (req, res) => {
-    const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
-    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
-    
-    try {
-      if (fs.existsSync(repliedChatsFile)) {
-        fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
-      }
-      const emptyStats = {
-        status: "ACTIVE",
-        statusLabel: "🟢 24小时全天候即时巡航补发",
-        todayCount: 0,
-        totalCount: 0,
-        uniqueRepliedCustomers: 0,
-        lastResetTime: new Date().toISOString(),
-        accountStats: {},
-        logs: []
-      };
-      fs.writeFileSync(statsFilePath, JSON.stringify(emptyStats, null, 2), "utf8");
-      return res.json({ success: true, message: "✅ 回复与补发统计已全部清零重置为 0！", data: emptyStats });
-    } catch (e: any) {
-      return res.status(500).json({ success: false, error: e.message });
-    }
-  });
-
   // =========================================================================
   // 📥 已回复高意向客户名单库 & 多格式导出 API (Replied Customers Export)
   // =========================================================================
@@ -2232,10 +2167,10 @@ async function startServer() {
     const timeStr = String(item.lastMessageTime || item.repliedAt || item.timestamp || '').trim();
     if (timeStr.includes('2026-09-06') || timeStr.includes('2026-09-05') || timeStr.includes('2026-09-04') || timeStr.includes('2026-08')) return true;
     
-    // 过滤购买的协议号历史远古残留（2025年、2024年、2023年以及 2026年3月份等陈旧聊天）
+    // 过滤购买的协议号历史远古残留（2025年、2024年、2023年陈旧历史）
     if (timeStr.startsWith('2025') || timeStr.startsWith('2024') || timeStr.startsWith('2023')) return true;
     
-    // 若该条记录发生在用户执行“清空/删除”之前，坚决排除，绝不打印
+    // 若该条记录发生在用户执行“清空/删除”之前，坚决排除
     if (clearedTimestamp > 0 && timeStr) {
       try {
         const itemT = new Date(timeStr.replace(' ', 'T')).getTime();
@@ -2245,20 +2180,10 @@ async function startServer() {
       } catch (_) {}
     }
 
-    // 检查日期是否超过 5 天前的买号旧聊天
-    try {
-      const match = timeStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (match) {
-        const itemDate = new Date(match[0]);
-        const now = new Date();
-        const diffDays = (now.getTime() - itemDate.getTime()) / (1000 * 3600 * 24);
-        if (diffDays > 5) return true; // 排除 5 天前的历史会话
-      }
-    } catch (_) {}
     return false;
   }
 
-  function getRepliedCustomersList(range: string = 'recent'): any[] {
+  function getRepliedCustomersList(range: string = 'all'): any[] {
     if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
       try {
         const raw = fs.readFileSync(REPLIED_CUSTOMERS_PATH, "utf8");
@@ -2267,31 +2192,114 @@ async function startServer() {
           const clearedTimestamp = getClearedTimestamp();
           const clean = list.filter((c: any) => !isLegacyMockRecord(c, clearedTimestamp));
           
+          // 严格按 Telegram ID 或 @username 去重，确保每个回复客户只统计 1 次，名单与数字 100% 对齐
+          const seen = new Set<string>();
+          const deduped: any[] = [];
+          for (const c of clean) {
+            const rawId = String(c.id || '').trim();
+            const rawUname = String(c.username || '').replace('@', '').trim().toLowerCase();
+            const rawPhone = String(c.phone || '').replace(/[^0-9]/g, '').trim();
+            const key = rawId ? `id_${rawId}` : (rawUname ? `u_${rawUname}` : (rawPhone ? `p_${rawPhone}` : ''));
+            if (key) {
+              if (seen.has(key)) continue;
+              seen.add(key);
+            }
+            deduped.push(c);
+          }
+
           if (range === 'today') {
             const todayStr = new Date().toISOString().slice(0, 10);
-            return clean.filter((c: any) => String(c.repliedAt || '').startsWith(todayStr));
-          } else if (range === '48h' || range === 'recent') {
-            const now = Date.now();
-            return clean.filter((c: any) => {
-              const rAt = String(c.repliedAt || '').trim();
-              if (!rAt) return false;
-              // 排除远古买号残留
-              if (rAt.startsWith('2025') || rAt.startsWith('2024') || rAt.startsWith('2023')) return false;
-              const t = new Date(rAt.replace(' ', 'T')).getTime();
-              return !isNaN(t) && (now - t) <= 48 * 3600 * 1000;
-            });
+            return deduped.filter((c: any) => String(c.repliedAt || '').startsWith(todayStr));
           }
-          return clean;
+          return deduped;
         }
       } catch (e) {}
     }
     return [];
   }
 
+  // API: Get Telegram Auto-Scanner Stats & Reply History (以真实客资库统一对齐，保证顶栏、弹窗、导出数字100%一致)
+  app.get(["/api/telegram/auto-scanner-stats", "/api/tg-matrix/scanner-stats"], (req, res) => {
+    const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
+    const customers = getRepliedCustomersList('all');
+    const exactCount = customers.length;
+
+    const now = new Date();
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const brtMs = utcMs - 3 * 3600000;
+    const brtDate = new Date(brtMs);
+    const hour = brtDate.getHours();
+    const isNight = hour >= 22 || hour < 7;
+
+    let statsData: any = {
+      status: isNight ? "PAUSED_NIGHT" : "ACTIVE",
+      statusLabel: isNight 
+        ? `🌙 夜间关断停发 (巴西时间 ${hour}:00 已过 22:00，早晨 07:00 自动恢复)` 
+        : "🟢 24小时全天候即时巡航补发 (07:00 - 22:00 BRT)",
+      brazilTime: `${brtDate.toISOString().replace('T', ' ').slice(0, 19)} BRT`,
+      todayCount: exactCount,
+      totalCount: exactCount,
+      uniqueRepliedCustomers: exactCount,
+      nightPauseEnabled: true,
+      stopHourBRT: 22,
+      startHourBRT: 7,
+      accountStats: {},
+      logs: []
+    };
+
+    if (fs.existsSync(statsFilePath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
+        statsData = { ...statsData, ...raw };
+      } catch (e) {}
+    }
+
+    // 强行对齐标准：无论何时，今日补发量与客资总数必须100%严格等于客户表真实总人数
+    statsData.todayCount = exactCount;
+    statsData.totalCount = exactCount;
+    statsData.uniqueRepliedCustomers = exactCount;
+
+    return res.json(statsData);
+  });
+
+  // API: Reset Telegram Reply Stats (一键清零回复统计与客户记录)
+  app.post(["/api/telegram/reset-reply-stats", "/api/tg-matrix/reset-stats"], (req, res) => {
+    const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
+    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
+    
+    try {
+      if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
+        fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      }
+      fs.writeFileSync(CLEARED_AT_PATH, JSON.stringify({
+        clearedAt: new Date().toISOString(),
+        clearedTimestamp: Date.now()
+      }, null, 2), "utf8");
+
+      if (fs.existsSync(repliedChatsFile)) {
+        fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
+      }
+      const emptyStats = {
+        status: "ACTIVE",
+        statusLabel: "🟢 24小时全天候即时巡航补发",
+        todayCount: 0,
+        totalCount: 0,
+        uniqueRepliedCustomers: 0,
+        lastResetTime: new Date().toISOString(),
+        accountStats: {},
+        logs: []
+      };
+      fs.writeFileSync(statsFilePath, JSON.stringify(emptyStats, null, 2), "utf8");
+      return res.json({ success: true, message: "✅ 回复与补发统计已全部清零重置为 0！", data: emptyStats });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // 1. 获取已回复客户列表 (JSON 供前端弹窗展示与交互)
   app.get("/api/telegram/replied-customers", (req, res) => {
     try {
-      const range = (req.query.range as string) || 'recent';
+      const range = (req.query.range as string) || 'all';
       const customers = getRepliedCustomersList(range);
       res.json({
         success: true,
@@ -2306,12 +2314,12 @@ async function startServer() {
   // 1.1 清理历史协议号远古旧记录 API
   app.post("/api/telegram/clean-stale-customers", (req, res) => {
     try {
-      const cleanList = getRepliedCustomersList('recent');
+      const cleanList = getRepliedCustomersList('all');
       fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify(cleanList, null, 2), "utf8");
       res.json({
         success: true,
         count: cleanList.length,
-        message: `已清理买号远古历史残留！保留近期有效活跃客资共 ${cleanList.length} 位。`
+        message: `已剔除买号远古历史残留！保留近期真实有效客资共 ${cleanList.length} 位。`
       });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -2323,7 +2331,7 @@ async function startServer() {
     try {
       const format = (req.query.format as string || 'csv').toLowerCase();
       const type = (req.query.type as string || 'all').toLowerCase(); // all, usernames, ids, phones
-      const range = (req.query.range as string) || 'recent';
+      const range = (req.query.range as string) || 'all';
       const customers = getRepliedCustomersList(range);
       const timestamp = new Date().toISOString().slice(0, 10);
 
@@ -4048,63 +4056,23 @@ Return ONLY a JSON array with this schema:
     });
   });
 
-  // 补发与宵禁守护统计 API
-  app.get("/api/tg-matrix/scanner-stats", (req, res) => {
-    try {
-      const sessionsDir = path.join(process.cwd(), "sessions");
-      if (!fs.existsSync(sessionsDir)) {
-        fs.mkdirSync(sessionsDir, { recursive: true });
-      }
-      const statsFile = path.join(sessionsDir, "auto_scanner_stats.json");
-      if (fs.existsSync(statsFile)) {
-        try {
-          const data = fs.readFileSync(statsFile, "utf-8");
-          return res.json(JSON.parse(data));
-        } catch (e) {
-          // Fallback below
-        }
-      }
-      const now = new Date();
-      const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-      const brtMs = utcMs - 3 * 3600000;
-      const brtDate = new Date(brtMs);
-      const hour = brtDate.getHours();
-      const isNight = hour >= 22 || hour < 7;
-
-      return res.json({
-        status: isNight ? "PAUSED_NIGHT" : "ACTIVE",
-        statusLabel: isNight 
-          ? `🌙 夜间关断停发 (巴西时间 ${hour}:00 已过 22:00，早晨 07:00 自动恢复)` 
-          : "🟢 正常守护巡航中 (07:00 - 22:00 BRT)",
-        brazilTime: `${brtDate.toISOString().replace('T', ' ').slice(0, 19)} BRT`,
-        todayCount: 0,
-        totalCount: 0,
-        nightPauseEnabled: true,
-        stopHourBRT: 22,
-        startHourBRT: 7,
-        accountStats: {},
-        logs: []
-      });
-    } catch (err: any) {
-      return res.status(500).json({
-        status: "ERROR",
-        statusLabel: "⚠️ 统计数据拉取异常",
-        todayCount: 0,
-        totalCount: 0,
-        nightPauseEnabled: true,
-        stopHourBRT: 22,
-        startHourBRT: 7,
-        accountStats: {},
-        logs: []
-      });
-    }
-  });
-
   // 手动重置今日补发计数 API (24小时自动重置的辅助手动清零入口)
   app.post("/api/tg-matrix/reset-today-stats", (req, res) => {
     const statsFile = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
     const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
     
+    if (fs.existsSync(REPLIED_CUSTOMERS_PATH)) {
+      try {
+        fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      } catch (e) {}
+    }
+    try {
+      fs.writeFileSync(CLEARED_AT_PATH, JSON.stringify({
+        clearedAt: new Date().toISOString(),
+        clearedTimestamp: Date.now()
+      }, null, 2), "utf8");
+    } catch (e) {}
+
     if (fs.existsSync(repliedChatsFile)) {
       try {
         fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
@@ -4118,6 +4086,7 @@ Return ONLY a JSON array with this schema:
       } catch (e) {}
     }
     statsData.todayCount = 0;
+    statsData.totalCount = 0;
     statsData.uniqueRepliedCustomers = 0;
     if (statsData.accountStats) {
       Object.keys(statsData.accountStats).forEach(phone => {
