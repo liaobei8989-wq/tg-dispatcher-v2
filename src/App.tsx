@@ -360,32 +360,27 @@ export default function App() {
     );
   };
 
-  const [totalFollowupToday, setTotalFollowupToday] = React.useState<number>(() => {
-    const saved = localStorage.getItem('tg_cached_followup_today');
-    return saved ? parseInt(saved, 10) || 0 : 0;
-  });
-
-  const fetchFollowupStats = React.useCallback(async () => {
-    try {
-      const res = await fetch('/api/tg-matrix/scanner-stats');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data.todayCount === 'number') {
-          setTotalFollowupToday(data.todayCount);
-          localStorage.setItem('tg_cached_followup_today', String(data.todayCount));
-        }
-      }
-    } catch (e) {
-      // silent
-    }
-  }, []);
+  const [totalFollowupToday, setTotalFollowupToday] = React.useState<number>(0);
 
   // Poll 24/7 auto-scanner follow-up stats from server
   React.useEffect(() => {
+    const fetchFollowupStats = async () => {
+      try {
+        const res = await fetch('/api/tg-matrix/scanner-stats');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data.todayCount === 'number') {
+            setTotalFollowupToday(data.todayCount);
+          }
+        }
+      } catch (e) {
+        // silent
+      }
+    };
     fetchFollowupStats();
     const interval = setInterval(fetchFollowupStats, 15000);
     return () => clearInterval(interval);
-  }, [fetchFollowupStats]);
+  }, []);
 
   // Reset daily sent counts for all accounts
   const handleResetDailySent = () => {
@@ -403,14 +398,9 @@ export default function App() {
 
   // Reset daily followup stats (一键清零【自动补发】计数)
   const handleResetFollowupToday = async () => {
-    if (!window.confirm('确定要一键清零今日【自动补发】计数吗？\n（不会影响账号发件历史，仅重置今日自动补发数据为 0）')) {
-      return;
-    }
     setTotalFollowupToday(0);
-    localStorage.setItem('tg_cached_followup_today', '0');
     try {
       await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
-      await fetch('/api/tg-matrix/reset-today-stats', { method: 'POST' });
     } catch (e) {
       console.warn('Failed to reset reply stats', e);
     }
@@ -652,7 +642,7 @@ export default function App() {
       <RepliedCustomersModal
         isOpen={showRepliedCustomersModal}
         onClose={() => setShowRepliedCustomersModal(false)}
-        onRefreshStats={fetchFollowupStats}
+        onRefreshStats={() => setTotalFollowupToday(0)}
       />
     </div>
   );

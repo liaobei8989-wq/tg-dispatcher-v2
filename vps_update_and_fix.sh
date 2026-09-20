@@ -28,11 +28,7 @@ git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py tdat
 
 # 安装/更新 tdata 转换引擎与 Telethon 自动追发核心依赖 (opentele / telethon / pysocks / aiofiles)
 echo "📦 正在校验并安装 tdata 与 24h 自动追发雷达依赖 (opentele / telethon / pysocks)..."
-if ! command -v pip3 &>/dev/null && ! command -v pip &>/dev/null; then
-    echo "⚠️ 检测到系统未安装 pip3，正在尝试自动补齐 python3-pip..."
-    (apt-get update -y && apt-get install -y python3-pip python3-socks) 2>/dev/null || true
-fi
-pip3 install --break-system-packages opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || pip install opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || python3 -m pip install --break-system-packages opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || true
+pip3 install --break-system-packages opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || pip install opentele telethon tgcrypto aiofiles pysocks 2>/dev/null || true
 
 # 3. 恢复真实 .session 凭证，并自动清除小于 200 字节的空占位文件
 if [ -d /tmp/tg_sessions_safe_backup ] && [ "$(ls -A /tmp/tg_sessions_safe_backup 2>/dev/null)" ]; then
@@ -89,6 +85,32 @@ if os.path.exists('sessions'):
             except Exception as e:
                 pass
 print('✅ 物理文件清洗完毕，全部对齐 200.* 原生巴西代理！')
+
+# 自动清洗远古买号残留历史会话 (剔除 2025 年、2026 年 3 月等旧协议号自带的陈旧记录)
+for cfile in ['sessions/replied_customers.json', 'replied_customers.json']:
+    if os.path.exists(cfile):
+        try:
+            with open(cfile, 'r', encoding='utf-8') as f:
+                cdata = json.load(f)
+            if isinstance(cdata, list):
+                from datetime import datetime
+                clean_c = []
+                for c in cdata:
+                    t_str = str(c.get('repliedAt', '') or c.get('timestamp', '')).strip()
+                    if t_str.startswith(('2023', '2024', '2025')) or t_str.startswith('2026-09-06'):
+                        continue
+                    try:
+                        dt = datetime.strptime(t_str[:10], '%Y-%m-%d')
+                        if (datetime.now() - dt).days > 2:
+                            continue
+                    except Exception:
+                        continue
+                    clean_c.append(c)
+                with open(cfile, 'w', encoding='utf-8') as f:
+                    json.dump(clean_c, f, indent=2, ensure_ascii=False)
+                print(f'🧹 [客资库净化完毕]: 已剔除买号远古历史残留，保留近期真实客资 {len(clean_c)} 条')
+        except Exception as e:
+            print(f'⚠️ 客资库清洗跳过: {e}')
 "
 
 # 3. 重新编译生产级代码 (Vite 前端 + Node 服务端)
