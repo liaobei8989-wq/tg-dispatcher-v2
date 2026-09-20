@@ -214,6 +214,12 @@ async function startServer() {
   };
 
   // API endpoints
+  app.get(["/api/download/tg-dispatcher", "/tg_dispatcher.py"], (req, res) => {
+    const filePath = path.join(process.cwd(), "tg_dispatcher.py");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.sendFile(filePath);
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({
       status: "ok",
