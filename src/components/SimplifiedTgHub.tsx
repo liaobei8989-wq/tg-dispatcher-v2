@@ -3919,11 +3919,10 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 智能接力机制：区分真正的封号/失效/IP冲突 vs 空号未注册 vs 通讯录导入暂未匹配 vs 用户名跨DC检索
-              const isNotRegistered = /手机号.*未注册|未开通.*TG|空号|关闭了手机号搜索|PhoneNotRegistered/i.test(errDetail);
+              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
+              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索/i.test(errDetail);
               const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
-              const isUsernameRetryable = !isNotRegistered && !isContactImportLimited && /无法找到 Telegram 用户名|No user has.*as username|未开启全局公开搜索|跨数据中心索引延迟/i.test(errDetail);
-              const isTgRestricted = !isNotRegistered && !isContactImportLimited && !isUsernameRetryable && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
+              const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
 
               if (isNotRegistered) {
                 // 目标未在 TG 官方注册：直接标记为无效数据并跳过，绝不在其他发信通道反复尝试，避免耗尽所有账号的导入配额！
@@ -3931,15 +3930,15 @@ if __name__ == "__main__":
                   ...prev,
                   `ℹ️ [云端清洗] 目标 (${targetItem}) 经 Telegram 官方核实未注册该平台 (空号/未开通)，系统已自动跳过！`
                 ]);
-              } else if (isContactImportLimited || isUsernameRetryable) {
-                // 通讯录未匹配或用户名跨DC索引延迟：不熔断发信号！由智能无缝接力分配给其他健康通道接力全局搜索与发信
-                if ((task.retries || 0) < 2) {
+              } else if (isContactImportLimited) {
+                // 单个目标在该发信号未匹配到：不熔断发信号！由智能无缝接力分配给其他通道重试发信
+                if ((task.retries || 0) < 1) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} 检索目标 (${targetItem}) 遇到跨区延迟，已转入其他在线通道接力检索发信！`
+                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 导入目标 (${targetItem}) 临时限额，已转入其他在线通道接力！`
                   ]);
                 }
               } else if (isTgRestricted) {
