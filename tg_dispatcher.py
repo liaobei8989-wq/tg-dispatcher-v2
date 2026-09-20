@@ -30,7 +30,7 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, ResolveUsernameRequest, SearchRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -330,26 +330,46 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
         raw_uname = clean_target.lstrip('@')
         uname_with_at = f"@{raw_uname}"
-        
-        # 双轨优先解析：先试 @username，若未命中再试纯 username
-        lookup_candidates = [uname_with_at, raw_uname]
         last_resolve_err = ""
-        for cand in lookup_candidates:
-            try:
-                peer = await asyncio.wait_for(client.get_entity(cand), timeout=8.0)
-                if peer:
-                    break
-            except Exception as e1:
-                last_resolve_err = str(e1)
+
+        # 1.1 官方直接解析通道 (ResolveUsernameRequest)
+        try:
+            r_res = await asyncio.wait_for(client(ResolveUsernameRequest(raw_uname)), timeout=8.0)
+            if r_res and getattr(r_res, 'users', None) and len(r_res.users) > 0:
+                peer = r_res.users[0]
+            elif r_res and getattr(r_res, 'chats', None) and len(r_res.chats) > 0:
+                peer = r_res.chats[0]
+        except Exception as re_err:
+            last_resolve_err = str(re_err)
+
+        # 1.2 若未命中，尝试 Telethon 原生 get_entity
+        if not peer:
+            for cand in [uname_with_at, raw_uname]:
                 try:
-                    peer = await asyncio.wait_for(client.get_input_entity(cand), timeout=6.0)
+                    peer = await asyncio.wait_for(client.get_entity(cand), timeout=8.0)
                     if peer:
                         break
-                except Exception as e2:
-                    last_resolve_err = str(e2)
+                except Exception as ge_err:
+                    last_resolve_err = str(ge_err)
+
+        # 1.3 终极穿透：使用 Telegram 官方客户端全局搜索 (contacts.SearchRequest)
+        # 100% 同步 Telegram 桌面端顶栏搜索框的“全局搜索结果”逻辑
+        if not peer:
+            try:
+                s_res = await asyncio.wait_for(client(SearchRequest(q=raw_uname, limit=10)), timeout=8.0)
+                if s_res and getattr(s_res, 'users', None) and len(s_res.users) > 0:
+                    for u in s_res.users:
+                        u_uname = getattr(u, 'username', '') or ''
+                        if u_uname.lower() == raw_uname.lower():
+                            peer = u
+                            break
+                    if not peer:
+                        peer = s_res.users[0]
+            except Exception as se_err:
+                last_resolve_err = str(se_err)
 
         if not peer:
-            raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: 对方不存在或未设置公开用户名 ({last_resolve_err})")
+            raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: 官方全局搜索未检索到该用户名 ({last_resolve_err})")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:
         target_uid = int(clean_target)
@@ -1045,7 +1065,8 @@ async def main():
     third_template = payload.get("third_message", "")
     enable_third_message = payload.get("enable_third_message", True)
     wait_for_reply = payload.get("wait_for_reply", True)
-    sender_phone = payload.get("sender_phone", "")
+    session_file_param = payload.get("session_file") or payload.get("sessionFile")
+    sender_phone = payload.get("sender_phone") or payload.get("senderPhone") or ""
     target_group_tag = payload.get("group_tag") or payload.get("targetGroupTag") or "ALL"
     custom_proxy = payload.get("proxy", "")
     delay_min = float(payload.get("delay_min", 45.0))
@@ -1060,13 +1081,20 @@ async def main():
         }, ensure_ascii=False))
         return
 
-    # If user specified a specific single sender phone, use only that session
+    # If user specified a specific session file or sender phone, use only that session
     assigned_sessions = []
-    if sender_phone:
+    if session_file_param:
+        s_cand = session_file_param if os.path.isabs(session_file_param) else os.path.join(os.getcwd(), "sessions", os.path.basename(session_file_param))
+        if os.path.exists(s_cand) and os.path.getsize(s_cand) > 100:
+            assigned_sessions = [s_cand]
+        elif os.path.exists(session_file_param) and os.path.getsize(session_file_param) > 100:
+            assigned_sessions = [session_file_param]
+
+    if not assigned_sessions and sender_phone:
         found = find_session_file(sender_phone)
         if found:
             assigned_sessions = [found]
-    elif target_group_tag and str(target_group_tag).strip().upper() != 'ALL':
+    elif not assigned_sessions and target_group_tag and str(target_group_tag).strip().upper() != 'ALL':
         # Filter sessions by groupTag configured in companion JSON files
         group_matched_sessions = []
         clean_target_tag = str(target_group_tag).strip()

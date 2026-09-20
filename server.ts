@@ -1797,7 +1797,9 @@ async function startServer() {
       apiHash,
       sessionString,
       sender_phone,
+      senderPhone,
       session_file,
+      sessionFile,
       force_user_mode,
       delay_min,
       delay_max,
@@ -1806,6 +1808,9 @@ async function startServer() {
       batch_rest_min,
       batch_rest_max
     } = req.body || {};
+
+    const effectiveSenderPhone = sender_phone || senderPhone || '';
+    const effectiveSessionFile = session_file || sessionFile || '';
 
     const rawTargets = Array.isArray(targets) && targets.length > 0
       ? targets
@@ -1823,7 +1828,7 @@ async function startServer() {
       return str;
     });
 
-    console.log(`[Telegram Direct Runner] 启动 Telegram 协议发信引擎，发件号: ${sender_phone || '全集群健康协议号轮询'}, 目标数量: ${targetList.length}`);
+    console.log(`[Telegram Direct Runner] 启动 Telegram 协议发信引擎，发件号: ${effectiveSenderPhone || effectiveSessionFile || '全集群健康协议号轮询'}, 目标数量: ${targetList.length}`);
 
     // 1. 优先尝试使用 Python 原生 Telethon 引擎 (直接挂载 sessions/*.session SQLite 真实二进制凭证)
     const pyDispatcherPath = path.join(process.cwd(), "tg_dispatcher.py");
@@ -1835,8 +1840,8 @@ async function startServer() {
           second_message,
           third_message,
           wait_for_reply: wait_for_reply !== undefined ? wait_for_reply : true,
-          sender_phone,
-          session_file,
+          sender_phone: effectiveSenderPhone,
+          session_file: effectiveSessionFile,
           proxy: req.body.proxy || ''
         });
 
