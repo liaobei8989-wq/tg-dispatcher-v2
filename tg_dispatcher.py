@@ -30,11 +30,12 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, SearchRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
-        SendMessageTypingAction
+        SendMessageTypingAction,
+        InputPeerUser
     )
     from telethon.errors import (
         UserPrivacyRestrictedError,
@@ -329,12 +330,30 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
         uname = clean_target if clean_target.startswith('@') else f"@{clean_target}"
         try:
-            peer = await asyncio.wait_for(client.get_entity(uname), timeout=8.0)
-        except Exception as e:
+            peer = await asyncio.wait_for(client.get_entity(uname), timeout=6.0)
+        except Exception:
             try:
-                peer = await asyncio.wait_for(client.get_input_entity(uname), timeout=6.0)
+                peer = await asyncio.wait_for(client.get_input_entity(uname), timeout=5.0)
             except Exception:
-                raise Exception(f"无法找到 Telegram 用户名 {uname}: 对方不存在或未设置公开用户名 ({str(e)})")
+                # 电脑端同款全局搜索穿透 (Telegram Desktop contacts.Search)
+                try:
+                    search_query = uname.lstrip('@')
+                    search_res = await asyncio.wait_for(client(SearchRequest(q=search_query, limit=5)), timeout=5.0)
+                    if search_res and hasattr(search_res, 'users') and search_res.users:
+                        matched = None
+                        for u in search_res.users:
+                            u_uname = getattr(u, 'username', '') or ''
+                            if u_uname.lower() == search_query.lower():
+                                matched = u
+                                break
+                        if not matched:
+                            matched = search_res.users[0]
+                        peer = InputPeerUser(user_id=matched.id, access_hash=matched.access_hash)
+                except Exception:
+                    pass
+
+        if not peer:
+            raise Exception(f"USERNAME_NOT_OCCUPIED: 目标 {uname} 尚未在 Telegram 官方注册或用户名不存在/已注销")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:
         target_uid = int(clean_target)
