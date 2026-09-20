@@ -30,7 +30,12 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
+    from telethon.tl.functions.contacts import (
+        ImportContactsRequest,
+        DeleteContactsRequest,
+        ResolveUsernameRequest,
+        SearchRequest
+    )
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -326,17 +331,66 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
 
-    # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID)
+    # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID，对齐 Telegram 电脑端全局搜索)
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
         raw_uname = clean_target.lstrip('@')
         uname_with_at = f"@{raw_uname}"
+
+        # 🎯 五维穿透解析 (对齐 Telegram 电脑端 Desktop 全局搜索逻辑)
+        # 梯级 1: 原生用户名 get_entity
         try:
-            peer = await asyncio.wait_for(client.get_entity(uname_with_at), timeout=12.0)
-        except Exception as e1:
+            peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=6.0)
+        except Exception:
+            pass
+
+        # 梯级 2: 带 @ 标识 get_entity
+        if not peer:
             try:
-                peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=10.0)
-            except Exception as e2:
-                raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: {str(e2 or e1)}")
+                peer = await asyncio.wait_for(client.get_entity(uname_with_at), timeout=6.0)
+            except Exception:
+                pass
+
+        # 梯级 3: MTProto 底层协议原生 ResolveUsernameRequest
+        if not peer:
+            try:
+                res_resolved = await asyncio.wait_for(client(ResolveUsernameRequest(username=raw_uname)), timeout=7.0)
+                if res_resolved and getattr(res_resolved, 'users', None) and len(res_resolved.users) > 0:
+                    peer = res_resolved.users[0]
+                elif res_resolved and getattr(res_resolved, 'chats', None) and len(res_resolved.chats) > 0:
+                    peer = res_resolved.chats[0]
+            except Exception:
+                pass
+
+        # 梯级 4: Telegram 官方全局搜索 contacts.SearchRequest (对齐电脑端搜索框全局搜索结果)
+        if not peer:
+            try:
+                search_res = await asyncio.wait_for(client(SearchRequest(q=raw_uname, limit=10)), timeout=7.0)
+                if search_res and getattr(search_res, 'users', None) and len(search_res.users) > 0:
+                    for u in search_res.users:
+                        if getattr(u, 'username', None) and u.username.lower() == raw_uname.lower():
+                            peer = u
+                            break
+                    if not peer and len(search_res.users) > 0:
+                        peer = search_res.users[0]
+            except Exception:
+                pass
+
+        # 梯级 5: Telegram 官方全局搜索带 @ 标识查询
+        if not peer:
+            try:
+                search_res = await asyncio.wait_for(client(SearchRequest(q=uname_with_at, limit=10)), timeout=7.0)
+                if search_res and getattr(search_res, 'users', None) and len(search_res.users) > 0:
+                    for u in search_res.users:
+                        if getattr(u, 'username', None) and u.username.lower() == raw_uname.lower():
+                            peer = u
+                            break
+                    if not peer and len(search_res.users) > 0:
+                        peer = search_res.users[0]
+            except Exception:
+                pass
+
+        if not peer:
+            raise Exception(f"当前通道暂时未能从TG检索到该用户名 (可能受该号频控或网络节点影响，已触发健康通道自动接力): {uname_with_at}")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:
         target_uid = int(clean_target)
