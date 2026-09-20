@@ -3920,7 +3920,7 @@ if __name__ == "__main__":
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
               // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
-              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索|用户名不存在/i.test(errDetail);
+              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索/i.test(errDetail);
               const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
               const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
 
