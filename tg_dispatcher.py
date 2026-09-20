@@ -318,7 +318,8 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
         return orig_session_path
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
-    clean_target = target.strip()
+    # 彻底过滤隐藏不可见字符、BOM 头、零宽字符与首尾空格
+    clean_target = re.sub(r'[\r\n\t\s\u200b\u200e\u200f\ufeff]', '', str(target)).strip()
     peer = None
     imported_ids_to_del = []
 
@@ -327,14 +328,28 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
     # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID)
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
-        uname = clean_target if clean_target.startswith('@') else f"@{clean_target}"
-        try:
-            peer = await asyncio.wait_for(client.get_entity(uname), timeout=8.0)
-        except Exception as e:
+        raw_uname = clean_target.lstrip('@')
+        uname_with_at = f"@{raw_uname}"
+        
+        # 双轨优先解析：先试 @username，若未命中再试纯 username
+        lookup_candidates = [uname_with_at, raw_uname]
+        last_resolve_err = ""
+        for cand in lookup_candidates:
             try:
-                peer = await asyncio.wait_for(client.get_input_entity(uname), timeout=6.0)
-            except Exception:
-                raise Exception(f"无法找到 Telegram 用户名 {uname}: 对方不存在或未设置公开用户名 ({str(e)})")
+                peer = await asyncio.wait_for(client.get_entity(cand), timeout=8.0)
+                if peer:
+                    break
+            except Exception as e1:
+                last_resolve_err = str(e1)
+                try:
+                    peer = await asyncio.wait_for(client.get_input_entity(cand), timeout=6.0)
+                    if peer:
+                        break
+                except Exception as e2:
+                    last_resolve_err = str(e2)
+
+        if not peer:
+            raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: 对方不存在或未设置公开用户名 ({last_resolve_err})")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:
         target_uid = int(clean_target)

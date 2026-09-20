@@ -3889,7 +3889,7 @@ if __name__ == "__main__":
               const warnLines = rawLines.filter((l: string) => l.includes('⚠️'));
               const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || (resData.output ? resData.output.trim().split('\n').pop() : '发件过程网络异常'));
               
-              const isUnregistered = resData.output?.includes('USERNAME_NOT_OCCUPIED') || resData.output?.includes('PhoneNotRegistered');
+              const isUnregistered = resData.output?.includes('USERNAME_NOT_OCCUPIED') || resData.output?.includes('PhoneNotRegistered') || resData.output?.includes('无法找到 Telegram 用户名') || resData.output?.includes('No user has');
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));
               const isSessionConflict = (
@@ -3910,7 +3910,7 @@ if __name__ == "__main__":
                     : (isAuthKeyErr
                         ? `🔑 发件号 +${acc.phone.replace(/^\+/, '')} Session 登录态失效或未登录 (已自动隔离，目标接力中)`
                         : (isUnregistered 
-                            ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册或用户名不存在`
+                            ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册或用户名不存在/已注销`
                             : (isDbCorrupt
                                 ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
                                 : (isProxyErr
@@ -3919,19 +3919,19 @@ if __name__ == "__main__":
               lastErrorDetail = errDetail;
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
-              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
-              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索/i.test(errDetail);
+              // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册/用户名不存在 vs 通讯录导入暂未匹配
+              const isNotRegistered = /未注册|未开通|空号|关闭了手机号搜索|无法找到 Telegram 用户名|No user has.*as username|未设置公开用户名|不存在/i.test(errDetail);
               const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配到|未能定位|导入受限|无法定位/i.test(errDetail);
               const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
 
               if (isNotRegistered) {
-                // 目标未在 TG 官方注册：直接标记为无效数据并跳过，绝不在其他发信通道反复尝试，避免耗尽所有账号的导入配额！
+                // 目标未在 TG 官方注册或已注销/不存在：直接标记为无效数据并跳过，绝不在其他发信通道反复尝试，保护所有健康账号！
                 setSimpleLogs(prev => [
                   ...prev,
-                  `ℹ️ [云端清洗] 目标 (${targetItem}) 经 Telegram 官方核实未注册该平台 (空号/未开通)，系统已自动跳过！`
+                  `ℹ️ [云端清洗] 目标 (${targetItem}) 经 Telegram 官方核实不存在/已注销/未注册，系统已自动跳过！`
                 ]);
               } else if (isContactImportLimited) {
-                // 单个目标在该发信号未匹配到：不熔断发信号！由智能无缝接力分配给其他通道重试发信
+                // 通讯录导入临时未匹配（如个别号配额临时饱和）：由智能无缝接力分配给其他通道重试发信
                 if ((task.retries || 0) < 1) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
