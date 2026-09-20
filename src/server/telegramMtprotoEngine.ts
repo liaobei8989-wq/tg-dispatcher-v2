@@ -508,7 +508,7 @@ export async function executeTelegramDirectSend(
             diag = `🔑 [发件凭证失效/未登录]: 发件号 Session 凭证未生效或已被登出 (非频控原因，请确保该账号具有有效登录凭证)`;
           } else if (errStr.includes('USERNAME_NOT_OCCUPIED') || errStr.includes('USERNAME_INVALID')) {
             targetIsInvalid = true;
-            diag = `🚫 [用户名不存在]: 目标 @${cleanUsername || target} 在 Telegram 官方不存在或已被注销`;
+            diag = `🚫 [用户名不存在]: 目标 ${target} 在 Telegram 官方不存在或已被注销`;
           } else if (errStr.includes('PhoneNotRegistered')) {
             targetIsInvalid = true;
             diag = `🚫 [手机号未注册]: 目标号码 ${target} 尚未在 Telegram 注册`;

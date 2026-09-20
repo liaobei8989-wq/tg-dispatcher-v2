@@ -858,10 +858,36 @@ async def run_worker(
         err_str = str(ge).strip()
         if isinstance(ge, (asyncio.TimeoutError, TimeoutError)) or not err_str:
             err_str = "Telegram云端连接超时(握手未通过或凭证密钥失效)"
-        if "file is not a database" in err_str or "database" in err_str.lower():
-            worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效的 SQLite 数据库 (大小仅 128 字节或已损坏)，请重新上传号商原始完整 .session 凭证文件！")
+        
+        is_session_ip_conflict = "two different ip" in err_str.lower() or "authkeyduplicated" in err_str.lower()
+        is_auth_invalid = "auth_key_unregistered" in err_str.lower() or "session_revoked" in err_str.lower() or is_session_ip_conflict
+        
+        if is_session_ip_conflict:
+            worker_logs.append(f"⚠️ [Worker #{worker_id} 双IP并发冲突自动隔离]: 协议号 +{clean_digits} 在云端检测到被异地IP/其他进程并发抢登，系统已自动将其从活跃发信池隔离，目标将自动转移接力！")
+            try:
+                # 自动隔离该冲突 session，避免后续群发再次排入该号
+                if os.path.exists(session_file):
+                    conflict_mark = session_file + ".conflict"
+                    shutil.move(session_file, conflict_mark)
+                    worker_logs.append(f"🛡️ [安全自愈]: 冲突凭证已重命名隔离为 {os.path.basename(conflict_mark)}，号池已自动剔除！")
+            except Exception:
+                pass
+        elif is_auth_invalid:
+            worker_logs.append(f"⚠️ [Worker #{worker_id} 登录态失效隔离]: 协议号 +{clean_digits} 凭证已失效，已自动隔离！")
+            try:
+                if os.path.exists(session_file):
+                    shutil.move(session_file, session_file + ".revoked")
+            except Exception:
+                pass
+        elif "file is not a database" in err_str or "database" in err_str.lower():
+            worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效数据库，请重新上传号商原始完整 .session 凭证！")
         else:
             worker_logs.append(f"❌ [Worker #{worker_id} 运行异常]: {err_str}")
+            
+        # 计算未完成发送的目标名单，供调度器自动无缝接力
+        unhandled = [t for t in target_subset if t not in [r.get("target") for r in worker_results]]
+        if unhandled:
+            worker_logs.append(f"🔄 [任务交接]: Worker #{worker_id} 尚有 {len(unhandled)} 笔未发目标，已提交调度中心接力发信！")
     finally:
         if os.path.exists(lock_file):
             try:
@@ -882,12 +908,16 @@ async def run_worker(
             except Exception:
                 pass
 
+    sent_targets = [r.get("target") for r in worker_results]
+    remaining_unhandled = [t for t in target_subset if t not in sent_targets]
+
     return {
         "workerId": worker_id,
         "accountPhone": clean_digits,
         "successCount": success_count,
         "failCount": fail_count,
         "results": worker_results,
+        "unhandledTargets": remaining_unhandled,
         "logs": worker_logs
     }
 
@@ -1092,6 +1122,7 @@ async def main():
     total_success = 0
     total_fail = 0
     all_results = []
+    unhandled_batch = []
 
     for w_out in worker_outputs:
         if isinstance(w_out, Exception):
@@ -1101,6 +1132,43 @@ async def main():
         total_fail += w_out.get("failCount", 0)
         all_results.extend(w_out.get("results", []))
         all_logs.extend(w_out.get("logs", []))
+        unhandled_batch.extend(w_out.get("unhandledTargets", []))
+
+    # 🛡️ 智能自动容灾接力：如果有 Worker 发生多IP冲突或掉线导致目标未发，自动寻找健康备用账号接力
+    if unhandled_batch and len(assigned_sessions) > num_workers:
+        backup_sessions = assigned_sessions[num_workers:]
+        relay_count = min(len(backup_sessions), len(unhandled_batch))
+        all_logs.append(f"🔄 【启动容灾无缝接力】检测到 {len(unhandled_batch)} 笔目标因通道冲突未发出，已立即调起 {relay_count} 个健康备用协议号无缝接力！")
+        
+        relay_chunks = [[] for _ in range(relay_count)]
+        for idx_u, u_target in enumerate(unhandled_batch):
+            relay_chunks[idx_u % relay_count].append(u_target)
+            
+        relay_tasks = []
+        for r_wid in range(relay_count):
+            relay_tasks.append(run_worker(
+                worker_id=num_workers + r_wid + 1,
+                session_file=backup_sessions[r_wid],
+                target_subset=relay_chunks[r_wid],
+                message_template=message_template,
+                second_template=second_template,
+                third_template=third_template,
+                enable_third_message=enable_third_message,
+                wait_for_reply=wait_for_reply,
+                custom_proxy=custom_proxy,
+                delay_min=delay_min,
+                delay_max=delay_max,
+                total_workers=relay_count
+            ))
+            
+        relay_outputs = await asyncio.gather(*relay_tasks, return_exceptions=True)
+        for r_out in relay_outputs:
+            if isinstance(r_out, Exception):
+                continue
+            total_success += r_out.get("successCount", 0)
+            total_fail = max(0, total_fail - r_out.get("successCount", 0))
+            all_results.extend(r_out.get("results", []))
+            all_logs.extend(r_out.get("logs", []))
 
     all_logs.append(f"🏁 【群发任务全网执行完毕】 成功: {total_success} 条 | 失败: {total_fail} 条 | 耗时: 极速并发完成")
 
