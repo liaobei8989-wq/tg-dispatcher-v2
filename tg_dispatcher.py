@@ -30,7 +30,7 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, ResolveUsernameRequest, SearchRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -330,46 +330,13 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
         raw_uname = clean_target.lstrip('@')
         uname_with_at = f"@{raw_uname}"
-        last_resolve_err = ""
-
-        # 1.1 官方直接解析通道 (ResolveUsernameRequest)
         try:
-            r_res = await asyncio.wait_for(client(ResolveUsernameRequest(raw_uname)), timeout=8.0)
-            if r_res and getattr(r_res, 'users', None) and len(r_res.users) > 0:
-                peer = r_res.users[0]
-            elif r_res and getattr(r_res, 'chats', None) and len(r_res.chats) > 0:
-                peer = r_res.chats[0]
-        except Exception as re_err:
-            last_resolve_err = str(re_err)
-
-        # 1.2 若未命中，尝试 Telethon 原生 get_entity
-        if not peer:
-            for cand in [uname_with_at, raw_uname]:
-                try:
-                    peer = await asyncio.wait_for(client.get_entity(cand), timeout=8.0)
-                    if peer:
-                        break
-                except Exception as ge_err:
-                    last_resolve_err = str(ge_err)
-
-        # 1.3 终极穿透：使用 Telegram 官方客户端全局搜索 (contacts.SearchRequest)
-        # 100% 同步 Telegram 桌面端顶栏搜索框的“全局搜索结果”逻辑
-        if not peer:
+            peer = await asyncio.wait_for(client.get_entity(uname_with_at), timeout=12.0)
+        except Exception as e1:
             try:
-                s_res = await asyncio.wait_for(client(SearchRequest(q=raw_uname, limit=10)), timeout=8.0)
-                if s_res and getattr(s_res, 'users', None) and len(s_res.users) > 0:
-                    for u in s_res.users:
-                        u_uname = getattr(u, 'username', '') or ''
-                        if u_uname.lower() == raw_uname.lower():
-                            peer = u
-                            break
-                    if not peer:
-                        peer = s_res.users[0]
-            except Exception as se_err:
-                last_resolve_err = str(se_err)
-
-        if not peer:
-            raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: 官方全局搜索未检索到该用户名 ({last_resolve_err})")
+                peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=10.0)
+            except Exception as e2:
+                raise Exception(f"无法找到 Telegram 用户名 {uname_with_at}: {str(e2 or e1)}")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:
         target_uid = int(clean_target)
