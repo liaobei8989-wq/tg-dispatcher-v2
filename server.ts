@@ -2199,6 +2199,14 @@ async function startServer() {
       if (fs.existsSync(repliedChatsFile)) {
         fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
       }
+
+      // 同步清空已回复客户库并记录清空时间戳
+      fs.writeFileSync(REPLIED_CUSTOMERS_PATH, JSON.stringify([], null, 2), "utf8");
+      fs.writeFileSync(CLEARED_AT_PATH, JSON.stringify({
+        clearedAt: new Date().toISOString(),
+        clearedTimestamp: Date.now()
+      }, null, 2), "utf8");
+
       const emptyStats = {
         status: "ACTIVE",
         statusLabel: "🟢 24小时全天候即时巡航补发",

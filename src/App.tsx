@@ -396,13 +396,23 @@ export default function App() {
     }
   };
 
-  // Reset daily followup stats (一键清零【自动补发】计数)
+  // Reset daily followup stats (一键清零【自动补发】计数与已回复客资名单)
   const handleResetFollowupToday = async () => {
-    setTotalFollowupToday(0);
-    try {
-      await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
-    } catch (e) {
-      console.warn('Failed to reset reply stats', e);
+    if (window.confirm('确定要清零【自动补发】计数并同步清空已导出的已回复客户名单吗？\n（清零后计数归 0，下次统计将全部为全新的回复客户！）')) {
+      setTotalFollowupToday(0);
+      try {
+        const res = await fetch('/api/telegram/reset-reply-stats', { method: 'POST' });
+        if (res.ok) {
+          // 重新拉取一次确保完全归零
+          const statRes = await fetch('/api/tg-matrix/scanner-stats');
+          if (statRes.ok) {
+            const data = await statRes.json();
+            setTotalFollowupToday(data?.todayCount || 0);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to reset reply stats', e);
+      }
     }
   };
 
