@@ -607,7 +607,7 @@ def record_auto_reply_stat(session_basename: str, sender_id: str, sender_name: s
     except Exception as e:
         print(f"⚠️ [写入客资库与收件箱失败]: {e}")
 
-async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name, username="", phone="", first_name="", last_name=""):
+async def process_and_reply_customer(client, session_basename, chat_id, incoming_msg_id, msg_text, sender_name, username="", phone="", first_name="", last_name="", event=None, peer=None):
     try:
         sender_id = str(chat_id)
         track_key = f"{session_basename}_{sender_id}"
@@ -615,7 +615,7 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
         # 尝试深度抓取客户真实的 TG 详细资料（@username、手机号、全名）
         if not username or not phone or not first_name:
             try:
-                user_entity = await client.get_entity(chat_id)
+                user_entity = await client.get_entity(peer or chat_id)
                 if user_entity:
                     if not username and getattr(user_entity, 'username', None):
                         username = f"@{user_entity.username}"
@@ -652,20 +652,37 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             except Exception:
                 replied_history = {}
 
-        last_recorded_id = replied_history.get(track_key, 0)
+        # 兼容处理 last_recorded_id：可能为数值，也可能为 tg_dispatcher 写入的对象字典
+        raw_recorded = replied_history.get(track_key, 0)
+        last_recorded_id = 0
+        if isinstance(raw_recorded, dict):
+            last_recorded_id = int(raw_recorded.get("msg_id", 0) or 0)
+            if "stage2" in raw_recorded.get("stagesSent", []):
+                # 调度器已发送过阶段2，无需二次重复打扰
+                return False
+        else:
+            try:
+                last_recorded_id = int(raw_recorded or 0)
+            except Exception:
+                last_recorded_id = 0
+
         if incoming_msg_id > 0 and incoming_msg_id <= last_recorded_id:
             return False
 
-        # 检查最新消息是否已回复过
+        # 检查最新消息是否已真正回复过彩金链接
         try:
-            recent_msgs = await client.get_messages(chat_id, limit=6)
-            has_replied_already = False
+            target_for_check = peer or chat_id
+            recent_msgs = await client.get_messages(target_for_check, limit=8)
+            has_sent_link_after_incoming = False
             if recent_msgs:
                 for rm in recent_msgs:
-                    if rm.out and rm.id > incoming_msg_id:
-                        has_replied_already = True
-                        break
-            if has_replied_already:
+                    if rm and rm.out and rm.id > incoming_msg_id:
+                        rm_text = str(getattr(rm, 'message', '') or getattr(rm, 'text', '') or '')
+                        # 只有当发出过包含链接或彩金关键词的消息时，才算真正回复完成
+                        if 'http' in rm_text or 'promobr' in rm_text or 't.me/' in rm_text or 'Tiger' in rm_text or 'saldo' in rm_text or 'cadastro' in rm_text:
+                            has_sent_link_after_incoming = True
+                            break
+            if has_sent_link_after_incoming:
                 replied_history[track_key] = incoming_msg_id
                 try:
                     with open(replied_chats_file, "w", encoding="utf-8") as wf:
@@ -676,17 +693,9 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
         except Exception:
             pass
 
-        # 20秒防抖
+        # 20秒防抖，防止同一时间并发调用
         if not check_and_mark_reply(track_key, cooldown_seconds=20):
             return False
-
-        replied_history[track_key] = incoming_msg_id
-        try:
-            os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
-            with open(replied_chats_file, "w", encoding="utf-8") as wf:
-                json.dump(replied_history, wf, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
 
         msg_text = str(msg_text or "").strip()
         lower_msg = msg_text.lower()
@@ -718,20 +727,39 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
                 rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
             print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
 
-        # 拟人延时 2.0 ~ 3.8 秒后发送第 2 阶段彩金链接
-        await asyncio.sleep(random.uniform(2.0, 3.8))
+        # 拟人延时 2.0 ~ 3.5 秒后发送第 2 阶段彩金链接
+        await asyncio.sleep(random.uniform(2.0, 3.5))
         
         rand_url = get_random_url()
         second_msg = parse_spintax(rand_template)
         if "{URL}" in second_msg:
             second_msg = second_msg.replace("{URL}", rand_url)
         
+        # 目标 Peer 寻址：优先使用完整 InputPeer (含 access_hash) 或 event 原生对象，确保 100% 成功送达
+        target_peer = peer or chat_id
         try:
-            try:
-                await client.send_message(chat_id, second_msg, parse_mode='html')
-            except Exception:
-                await client.send_message(chat_id, second_msg)
+            if event is not None and hasattr(event, 'respond'):
+                try:
+                    await event.respond(second_msg, parse_mode='html')
+                except Exception:
+                    await event.respond(second_msg)
+            else:
+                try:
+                    await client.send_message(target_peer, second_msg, parse_mode='html')
+                except Exception:
+                    await client.send_message(target_peer, second_msg)
+
             print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
+            
+            # 仅在真正送达成功后，记录已完成标记
+            replied_history[track_key] = incoming_msg_id
+            try:
+                os.makedirs(os.path.dirname(replied_chats_file), exist_ok=True)
+                with open(replied_chats_file, "w", encoding="utf-8") as wf:
+                    json.dump(replied_history, wf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
             record_auto_reply_stat(
                 session_basename=session_basename,
                 sender_id=sender_id,
@@ -745,7 +773,7 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
                 last_name=last_name
             )
         except Exception as e2:
-            print(f"❌ [第2条发送失败]: {e2}")
+            print(f"❌ [第2条发送失败]: {e2} (目标: {sender_id})")
             return False
 
         # 判断是否需要发送第 3 阶段中奖祝福语
@@ -764,7 +792,8 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
         typing_start = time.time()
         while time.time() - typing_start < human_delay:
             try:
-                await client(SetTypingRequest(peer=chat_id, action=SendMessageTypingAction()))
+                typing_peer = peer or (await event.get_input_chat() if (event and hasattr(event, 'get_input_chat')) else None) or target_peer
+                await client(SetTypingRequest(peer=typing_peer, action=SendMessageTypingAction()))
             except Exception:
                 pass
             await asyncio.sleep(1.8)
@@ -776,10 +805,13 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
             
         try:
-            await client.send_message(chat_id, third_msg)
+            if event is not None and hasattr(event, 'respond'):
+                await event.respond(third_msg)
+            else:
+                await client.send_message(target_peer, third_msg)
             print(f"🍀 [自动补发第3条成功] 已向客户 {sender_id} 推送祝福语: \"{third_msg}\"")
         except Exception as e3:
-            print(f"❌ [第3条发送失败]: {e3}")
+            print(f"❌ [第3条发送失败]: {e3} (目标: {sender_id})")
             return False
 
         return True
@@ -842,33 +874,9 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
             print(f"📡 [{'单次扫描' if scan_once else '24h常驻监听'}] 正在挂载并连接账号: {session_basename} ...")
             
             connected_ok = False
-            # 优先直连高速专线守护，确保毫秒级感知客户回复；如用户配置了独立代理则使用代理
-            try:
-                client = TelegramClient(
-                    session_prefix,
-                    api_id,
-                    api_hash,
-                    proxy=None,
-                    device_model=device_model,
-                    system_version=system_version,
-                    app_version=app_version,
-                    connection_retries=3,
-                    retry_delay=1,
-                    auto_reconnect=True,
-                    timeout=8
-                )
-                await asyncio.wait_for(client.connect(), timeout=10.0)
-                connected_ok = True
-            except Exception as direct_err:
+            # 1. 优先使用专属配置的巴西独享代理（与群发 IP 保持一致，防止 IP 剧烈跳跃导致官方风控或踢出）
+            if proxy_tuple:
                 try:
-                    await client.disconnect()
-                except Exception:
-                    pass
-                client = None
-
-            if not connected_ok and proxy_tuple:
-                try:
-                    print(f"🔄 切换代理节点重试连接 +{clean_digits}...")
                     client = TelegramClient(
                         session_prefix,
                         api_id,
@@ -877,24 +885,25 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         device_model=device_model,
                         system_version=system_version,
                         app_version=app_version,
-                        connection_retries=2,
+                        connection_retries=3,
                         retry_delay=1,
                         auto_reconnect=True,
-                        timeout=8
+                        timeout=10
                     )
-                    await asyncio.wait_for(client.connect(), timeout=10.0)
+                    await asyncio.wait_for(client.connect(), timeout=12.0)
                     connected_ok = True
-                except Exception:
+                except Exception as proxy_err:
                     try:
                         await client.disconnect()
                     except Exception:
                         pass
                     client = None
 
-            # 若代理未通，自动降级为海外高速专线直连守护，确保 100% 接管客户消息
+            # 2. 若未配置独立代理或代理偶发超时，安全启用专线直连守护，确保 100% 毫秒级感知
             if not connected_ok:
                 try:
-                    print(f"⚡ [专线直连接管] 账号 +{clean_digits} 启动海外 VPS 原生极速通道直连守护...")
+                    if proxy_tuple:
+                        print(f"⚡ [专线直连接管] 账号 +{clean_digits} 代理暂不可达，切换高速直连通道...")
                     client = TelegramClient(
                         session_prefix,
                         api_id,
@@ -906,12 +915,11 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         connection_retries=2,
                         retry_delay=1,
                         auto_reconnect=True,
-                        timeout=10
+                        timeout=8
                     )
-                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    await asyncio.wait_for(client.connect(), timeout=10.0)
                     connected_ok = True
-                except Exception as dc_err:
-                    print(f"❌ [直连异常]: {dc_err}")
+                except Exception as direct_err:
                     try:
                         await client.disconnect()
                     except Exception:
@@ -996,8 +1004,15 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                                     msg_date_str=latest_incoming.date.strftime("%Y-%m-%d %H:%M") if hasattr(latest_incoming, 'date') and latest_incoming.date else None
                                 )
 
-                                # 2. 若最新一条仍是客户发言且我们未回，立即补发
-                                if not c_msgs[0].out:
+                                # 2. 检查我们在客户发言后是否已真正投递了彩金链接
+                                has_replied_link = False
+                                for rm in c_msgs:
+                                    if rm and rm.out and rm.id > latest_incoming.id:
+                                        rm_text = str(getattr(rm, 'message', '') or getattr(rm, 'text', '') or '')
+                                        if 'http' in rm_text or 'promobr' in rm_text or 't.me/' in rm_text or 'Tiger' in rm_text or 'saldo' in rm_text or 'cadastro' in rm_text:
+                                            has_replied_link = True
+                                            break
+                                if not has_replied_link:
                                     await process_and_reply_customer(
                                         client=client,
                                         session_basename=session_basename,
@@ -1163,6 +1178,7 @@ async def main():
     # 单例进程锁保护（防止后台与 PM2 重复启动两个实例导致 SQLite 文件锁冲突）
     if not scan_once:
         pid_file = os.path.join(os.getcwd(), "sessions", "auto_responder.pid")
+        is_pm2 = "PM2_HOME" in os.environ or "pm_id" in os.environ or "PM2_USAGE" in os.environ
         try:
             os.makedirs(os.path.dirname(pid_file), exist_ok=True)
             if os.path.exists(pid_file):
@@ -1173,8 +1189,15 @@ async def main():
                         # 检查旧 PID 是否还存活
                         try:
                             os.kill(old_pid, 0)
-                            print(f"ℹ️ [单例保护] 已有守护实例在运行 (PID: {old_pid})，当前进程直接退出，避免冲突。")
-                            return
+                            if is_pm2:
+                                # 若由 PM2 监管，权威接管终止旧的孤儿后台进程，彻底终结 PM2 循环重启 ↺
+                                print(f"🛡️ [PM2 守护接管] 终止旧守护进程 (PID: {old_pid})，由当前主进程权威接管...")
+                                import signal
+                                os.kill(old_pid, signal.SIGTERM)
+                                await asyncio.sleep(1.0)
+                            else:
+                                print(f"ℹ️ [单例保护] 已有守护实例在运行 (PID: {old_pid})，当前进程直接退出，避免冲突。")
+                                return
                         except OSError:
                             pass
                 except Exception:

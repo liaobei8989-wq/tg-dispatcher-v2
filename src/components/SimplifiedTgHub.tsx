@@ -3727,27 +3727,43 @@ if __name__ == "__main__":
       let activeHttpSendingCount = 0;
       const MAX_ACTIVE_HTTP_SENDERS = 3; // 🛡️ 限制最多 3 个通道同时向云端握手发信，大幅降低代理并发压力，彻底杜绝握手超时与并发踩踏
 
+      // 🛡️ 全局绝对去重锁：单批次内每个目标只允许分配给一个账号，绝不同时或先后重复发信！
+      const dispatchedTargetsSet = new Set<string>();
+
       // 线程安全原子任务取模器 (支持频控失败目标放回 retryTasks，由其他健康通道接手)
       const retryTasks: { taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }[] = [];
       const getNextTask = () => {
         if (isAbortedRef.current) return null;
         if (retryTasks.length > 0) {
-          return retryTasks.shift()!;
+          const retried = retryTasks.shift()!;
+          return retried;
         }
-        if (nextTaskQueueIndex >= rawLines.length) return null;
-        const taskIdx = nextTaskQueueIndex++;
-        const rawTarget = rawLines[taskIdx].trim();
-        // 智能保留 @username、链接或标准国际手机号
-        let targetParam = rawTarget.replace(/\s*\(.*?\)/, '').trim();
-        if (targetParam.startsWith('http://t.me/') || targetParam.startsWith('https://t.me/') || targetParam.startsWith('t.me/')) {
-          targetParam = '@' + targetParam.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+        while (nextTaskQueueIndex < rawLines.length) {
+          const taskIdx = nextTaskQueueIndex++;
+          const rawTarget = rawLines[taskIdx].trim();
+          if (!rawTarget) continue;
+
+          // 智能保留 @username、链接或标准国际手机号
+          let targetParam = rawTarget.replace(/\s*\(.*?\)/, '').trim();
+          if (targetParam.startsWith('http://t.me/') || targetParam.startsWith('https://t.me/') || targetParam.startsWith('t.me/')) {
+            targetParam = '@' + targetParam.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+          }
+          const cleanKey = targetParam.replace(/[^a-zA-Z0-9_@]/g, '');
+
+          // 若此前已派发过该号码，坚决跳过，绝对防止“两个号发给同一个号”
+          if (dispatchedTargetsSet.has(cleanKey)) {
+            continue;
+          }
+          dispatchedTargetsSet.add(cleanKey);
+
+          return {
+            taskIndex: taskIdx,
+            targetItem: rawTarget,
+            cleanPhone: targetParam,
+            retries: 0
+          };
         }
-        return {
-          taskIndex: taskIdx,
-          targetItem: rawTarget,
-          cleanPhone: targetParam,
-          retries: 0
-        };
+        return null;
       };
 
       // 启动所有账号并发 Worker (模拟任意 N 位员工早鸟、正点、稍后陆续到岗，绝不同秒并发)
@@ -3835,7 +3851,7 @@ if __name__ == "__main__":
             const resp = await fetch('/api/telethon/run-direct', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              signal: AbortSignal.timeout(35000),
+              signal: AbortSignal.timeout(120000), // 🛡️ 提升至 120 秒，给 MTProto 和国际专线充足的握手与通讯录同步时间，彻底消灭 signal timed out
               body: JSON.stringify({
                 targets: [cleanPhone],
                 message: msgToSend,
@@ -3974,10 +3990,17 @@ if __name__ == "__main__":
           } catch (err: any) {
             if (isAbortedRef.current) break;
             const errMsg = String(err?.message || err || '');
-            const isRetryable = !/未注册|空号/i.test(errMsg);
+            const isTimeout = /timed out|timeout|AbortError/i.test(errMsg);
+            const isRetryable = !isTimeout && !/未注册|空号/i.test(errMsg);
             if (isRetryable && (task.retries || 0) < 2) {
               retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
               setSimpleLogs(prev => [...prev, `[云端 🔄 接力重试] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): 握手异常 (${errMsg.slice(0, 40)})，已自动转交其他健康通道接力！`]);
+            } else if (isTimeout) {
+              // 🛡️ 超时代表后台很可能已在向 TG 服务器递送，坚决不重试接力，避免两号重复发信
+              runFailCount++;
+              setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));
+              lastErrorDetail = `云端握手耗时较长 (${errMsg.slice(0, 30)})`;
+              setSimpleLogs(prev => [...prev, `[云端 ⚠️ 握手等待较长] [通道 #${workerIdx + 1}: ${acc.phone}] (目标: ${targetItem}): TG 节点响应缓慢，为防止对同一客户重复发信，已锁定该目标不再由其他号重复投递。`]);
             } else {
               runFailCount++;
               setCurrentBatchStats(prev => ({ ...prev, failed: prev.failed + 1 }));

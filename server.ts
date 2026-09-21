@@ -2151,21 +2151,13 @@ async function startServer() {
     }
   });
 
-  // API: Get Telegram Auto-Scanner Stats & Reply History (以独立回复客户去重精准统计)
+  // API: Get Telegram Auto-Scanner Stats & Reply History (以实际有效客资库精准对齐展示)
   app.get(["/api/telegram/auto-scanner-stats", "/api/tg-matrix/scanner-stats"], (req, res) => {
     const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
-    const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
     
-    let repliedData: any = {};
-    if (fs.existsSync(repliedChatsFile)) {
-      try {
-        repliedData = JSON.parse(fs.readFileSync(repliedChatsFile, "utf8"));
-      } catch (e) {}
-    }
-
-    // 统计独立有效回复客户数 (Unique Replied Customers)
-    const uniqueCustomerKeys = Object.keys(repliedData);
-    const uniqueCustomerCount = uniqueCustomerKeys.length;
+    // 直接取经过过滤与清空校验的活跃客资数量，保证前台显示的“自动补发”与“导出客资”数量完全一致
+    const activeCustomers = getRepliedCustomersList('recent');
+    const uniqueCustomerCount = activeCustomers.length;
 
     let statsData: any = {
       status: "ACTIVE",
@@ -2180,10 +2172,10 @@ async function startServer() {
       try {
         const raw = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
         statsData = { ...statsData, ...raw };
-        // 保证按客户去重统计精准展示
-        statsData.uniqueRepliedCustomers = uniqueCustomerCount || statsData.todayCount || 0;
-        statsData.todayCount = uniqueCustomerCount || statsData.todayCount || 0;
-        statsData.totalCount = Math.max(uniqueCustomerCount, statsData.totalCount || 0);
+        // 保证按有效客户库精准展示：若已被用户清空，则显示为 0
+        statsData.uniqueRepliedCustomers = uniqueCustomerCount;
+        statsData.todayCount = uniqueCustomerCount;
+        statsData.totalCount = Math.max(uniqueCustomerCount, Number(statsData.totalCount || 0));
       } catch (e) {}
     }
 
@@ -2433,12 +2425,20 @@ async function startServer() {
         clearedTimestamp: Date.now()
       }, null, 2), "utf8");
 
+      const repliedChatsFile = path.join(process.cwd(), "sessions", "replied_chats.json");
+      if (fs.existsSync(repliedChatsFile)) {
+        try {
+          fs.writeFileSync(repliedChatsFile, JSON.stringify({}, null, 2), "utf8");
+        } catch (_) {}
+      }
+
       const statsFilePath = path.join(process.cwd(), "sessions", "auto_scanner_stats.json");
       if (fs.existsSync(statsFilePath)) {
         try {
           const stats = JSON.parse(fs.readFileSync(statsFilePath, "utf8"));
           stats.todayCount = 0;
           stats.totalCount = 0;
+          stats.uniqueRepliedCustomers = 0;
           fs.writeFileSync(statsFilePath, JSON.stringify(stats, null, 2), "utf8");
         } catch (_) {}
       }
@@ -4285,8 +4285,10 @@ Return ONLY a JSON array with this schema:
     console.log(`Server running on http://localhost:${PORT}`);
 
     // 守护启动 Telegram 24h 自动追发守护引擎 (Auto-Responder Daemon)
+    // 🛡️ 协同保护：若处于 PM2 环境中，由 PM2 进程池中的 tg-responder 独立常驻守护，避免 Node 与 PM2 发生多进程抢占与重复启动
+    const isPm2Managed = process.env.PM2_HOME !== undefined || process.env.pm_id !== undefined;
     const autoResponderPath = path.join(process.cwd(), "tg_auto_responder.py");
-    if (fs.existsSync(autoResponderPath)) {
+    if (!isPm2Managed && fs.existsSync(autoResponderPath)) {
       try {
         console.log("🤖 [Auto-Responder] 正在自动启动后台 24 小时自动追发守护进程 (tg_auto_responder.py)...");
         const responderProcess = spawn("python3", [autoResponderPath], {
@@ -4299,6 +4301,8 @@ Return ONLY a JSON array with this schema:
       } catch (err) {
         console.warn("⚠️ [Auto-Responder Spawn Error]:", err);
       }
+    } else if (isPm2Managed) {
+      console.log("🛡️ [PM2 环境识别] 检测到系统正由 PM2 监管，由 PM2 原生 tg-responder 进程权威守护自动追发。");
     }
   });
 }
