@@ -407,6 +407,8 @@ def save_or_update_replied_customer(session_basename: str, sender_id: str, sende
                 existing_idx = idx
                 break
 
+        clean_msg = " ".join((incoming_msg or "").replace('\r', ' ').replace('\n', ' ').split()).strip()
+
         if existing_idx >= 0:
             curr = cust_list[existing_idx]
             if clean_username:
@@ -418,8 +420,8 @@ def save_or_update_replied_customer(session_basename: str, sender_id: str, sende
                 curr["firstName"] = fn or full_name
             if ln:
                 curr["lastName"] = ln
-            if incoming_msg:
-                curr["lastReplyText"] = incoming_msg
+            if clean_msg:
+                curr["lastReplyText"] = clean_msg
             curr["receivedByAccount"] = session_basename
             curr["receivedByAccountName"] = f"TG协议号-{session_basename[-4:]}"
             curr["directChatUrl"] = direct_link
@@ -434,7 +436,7 @@ def save_or_update_replied_customer(session_basename: str, sender_id: str, sende
                 "phone": clean_phone,
                 "receivedByAccount": session_basename,
                 "receivedByAccountName": f"TG协议号-{session_basename[-4:]}",
-                "lastReplyText": incoming_msg or "Oi",
+                "lastReplyText": clean_msg or "Oi",
                 "repliedAt": date_display,
                 "repliedAtIso": now_dt.isoformat(),
                 "directChatUrl": direct_link

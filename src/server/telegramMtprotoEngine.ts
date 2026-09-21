@@ -748,7 +748,8 @@ export async function executeTelegramReplyScanner(
           const trackKey = `${cleanPhone}_${targetEntityId}`;
           const lastRecordedId = Number(repliedHistory[trackKey] || 0);
           const targetName = (d.entity as any)?.firstName || (d.entity as any)?.phone || 'Cliente';
-          const replySnippet = String(latestIncomingMsg.message || latestIncomingMsg.text || '客户回复').slice(0, 50);
+          const rawReply = String(latestIncomingMsg.message || latestIncomingMsg.text || '客户回复');
+          const replySnippet = rawReply.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
 
           // 无论是否已回复，首先确保持久化同步到客资库 (replied_customers.json)
           try {

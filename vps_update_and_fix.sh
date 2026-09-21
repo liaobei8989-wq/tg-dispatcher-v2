@@ -86,7 +86,7 @@ if os.path.exists('sessions'):
                 pass
 print('✅ 物理文件清洗完毕，全部对齐 200.* 原生巴西代理！')
 
-# 自动清洗远古买号残留历史会话 (剔除 2025 年、2026 年 3 月等旧协议号自带的陈旧记录)
+# 自动清洗远古买号残留历史会话 (剔除 2025 年、2026 年 3 月等旧协议号自带的陈旧记录，并清洗换行符)
 for cfile in ['sessions/replied_customers.json', 'replied_customers.json']:
     if os.path.exists(cfile):
         try:
@@ -105,10 +105,13 @@ for cfile in ['sessions/replied_customers.json', 'replied_customers.json']:
                             continue
                     except Exception:
                         continue
+                    # 彻底清洗换行与首尾空白
+                    if 'lastReplyText' in c:
+                        c['lastReplyText'] = ' '.join(str(c['lastReplyText']).replace('\r', ' ').replace('\n', ' ').split()).strip()
                     clean_c.append(c)
                 with open(cfile, 'w', encoding='utf-8') as f:
                     json.dump(clean_c, f, indent=2, ensure_ascii=False)
-                print(f'🧹 [客资库净化完毕]: 已剔除买号远古历史残留，保留近期真实客资 {len(clean_c)} 条')
+                print(f'🧹 [客资库净化完毕]: 已剔除买号远古历史残留并洗净多余换行，保留近期真实客资 {len(clean_c)} 条')
         except Exception as e:
             print(f'⚠️ 客资库清洗跳过: {e}')
 "

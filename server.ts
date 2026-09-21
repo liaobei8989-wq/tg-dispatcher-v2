@@ -2370,19 +2370,38 @@ async function startServer() {
       // Default: CSV with UTF-8 BOM (\uFEFF) for Excel
       const headers = ['序号', 'Telegram ID', '@用户名', '客户姓名', '客户手机号', '客户回复内容', '接待小号', '最后回复时间', '主号直达私聊链接'];
       const rows = customers.map((c, idx) => {
-        const escapeCsv = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+        // 彻底清洗换行符和回车符，防止多行内容撑爆 Excel 行高或错位
+        const cleanField = (str: any) => {
+          if (str === null || str === undefined) return '';
+          return String(str)
+            .replace(/\r\n/g, ' ')
+            .replace(/[\r\n\t]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        };
+
+        const escapeCsv = (str: any) => `"${cleanField(str).replace(/"/g, '""')}"`;
+        
         const directUrl = c.username 
-          ? `https://t.me/${c.username.replace('@', '')}` 
+          ? `https://t.me/${c.username.replace('@', '').trim()}` 
           : (c.directChatUrl || `tg://user?id=${c.id}`);
+
+        // ID 和手机号通过制表符后缀或标准文本格式包裹，避免 Excel 科学计数法，同时不留下丑陋的单引号 '
+        const formatNumericText = (val: string) => {
+          const v = cleanField(val).replace(/^['+]/, '');
+          if (!v) return '""';
+          return `"\t${cleanField(val)}"`;
+        };
+
         return [
           idx + 1,
-          `'${c.id || ''}`,
+          formatNumericText(c.id || ''),
           escapeCsv(c.username || ''),
           escapeCsv(c.fullName || c.firstName || `Cliente ${c.id}`),
-          escapeCsv(c.phone ? `'${c.phone}` : ''),
+          c.phone ? formatNumericText(c.phone) : '""',
           escapeCsv(c.lastReplyText || ''),
-          escapeCsv(c.receivedByAccount ? `'${c.receivedByAccount}` : ''),
-          escapeCsv(c.repliedAt ? `'${c.repliedAt}` : ''),
+          c.receivedByAccount ? formatNumericText(c.receivedByAccount) : '""',
+          escapeCsv(c.repliedAt || ''),
           escapeCsv(directUrl)
         ].join(',');
       });
