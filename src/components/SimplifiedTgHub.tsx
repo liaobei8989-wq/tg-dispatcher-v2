@@ -3810,8 +3810,16 @@ if __name__ == "__main__":
           await interruptibleSleep(typingDurationMs);
           if (isAbortedRef.current) break;
 
-          // 🛡️ 浏览器并发管道与 VPS 进程防挤压信号量：若同时有 5 个通道正在向服务器执行发信，其余通道稍微等候，绝不阻塞浏览器网络栈
+          // 🛡️ 浏览器并发管道与 VPS 进程防挤压信号量：若已有通道正在向服务器执行发信，其余通道稍微等候，绝不阻塞浏览器网络栈
+          let waitCounter = 0;
           while (activeHttpSendingCount >= MAX_ACTIVE_HTTP_SENDERS && !isAbortedRef.current) {
+            waitCounter++;
+            if (waitCounter % 15 === 0) {
+              setSimpleLogs(prev => [
+                ...prev,
+                `[⏳ 并发排队等待] 通道 #${workerIdx + 1} (${acc.phone.slice(-4)}) 正在排队等候空闲握手位 (当前并发: ${activeHttpSendingCount}/${MAX_ACTIVE_HTTP_SENDERS})...`
+              ]);
+            }
             await interruptibleSleep(300);
           }
           if (isAbortedRef.current) break;
@@ -3827,7 +3835,7 @@ if __name__ == "__main__":
             const resp = await fetch('/api/telethon/run-direct', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              signal: AbortSignal.timeout(180000),
+              signal: AbortSignal.timeout(35000),
               body: JSON.stringify({
                 targets: [cleanPhone],
                 message: msgToSend,

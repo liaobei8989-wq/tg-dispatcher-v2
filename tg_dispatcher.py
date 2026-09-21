@@ -319,9 +319,12 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
         return orig_session_path
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
-    clean_target = re.sub(r'[\u200b-\u200f\ufeff\xa0\s]', '', str(target)).strip()
+    clean_target = re.sub(r'[​-‏﻿ \s]', '', str(target)).strip()
     peer = None
     imported_ids_to_del = []
+
+    if logs is None:
+        logs = []
 
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
@@ -329,7 +332,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID)
     if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
         raw_uname = clean_target.lstrip('@')
-        # 尝试 1: 直接精准解析 (不带@与带@各试一次)
+        # 尝试 1: 直接精准解析
         try:
             peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=6.0)
         except Exception:
@@ -345,7 +348,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
 
-        # 尝试 3: 电脑端同款全局搜索穿透 (Telegram Desktop contacts.Search)
+        # 尝试 3: 电脑端同款全局搜索穿透
         if not peer:
             try:
                 search_res = await asyncio.wait_for(client(SearchRequest(q=raw_uname, limit=10)), timeout=6.0)
@@ -361,7 +364,6 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 pass
 
         if not peer:
-            # 关键：抛出“未能匹配到”，使前端智能接力机制立即将该目标交由其他健康通道（如刚才成功的 #31）接力重发，绝不丢单！
             raise Exception(f"未能在本小号通讯录中匹配到目标 @{raw_uname}，已触发智能通道接力重试")
     # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
     elif clean_target.isdigit() and len(clean_target) <= 10:

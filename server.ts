@@ -1871,6 +1871,24 @@ async function startServer() {
         }
       } catch (pyErr: any) {
         console.warn("[Python Telethon Fallback] Python 引擎调用执行异常或切入备用引擎:", pyErr.message);
+        if (pyErr.stdout) {
+          try {
+            const parsedPy = JSON.parse(pyErr.stdout.trim());
+            if (parsedPy && typeof parsedPy === 'object') {
+              return res.json({
+                success: parsedPy.success,
+                code: parsedPy.success ? 0 : 1,
+                targets: targetList,
+                output: parsedPy.output || (parsedPy.logs ? parsedPy.logs.join('\n') : '') || parsedPy.error || '',
+                sentCount: parsedPy.sentCount || 0,
+                failCount: parsedPy.failCount || targetList.length,
+                results: parsedPy.results || [],
+                engine: 'python_telethon_native',
+                timestamp: new Date().toISOString()
+              });
+            }
+          } catch (_) {}
+        }
       }
     }
 

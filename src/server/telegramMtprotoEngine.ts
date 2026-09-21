@@ -255,11 +255,24 @@ export async function executeTelegramDirectSend(
   const allAccounts = loadAllTelegramAccounts();
   let candidateAccounts = [...allAccounts];
 
+  // 🛡️ 仅筛选拥有合法 MTProto StringSession 的账号供 Node 引擎使用，严禁空字符串触发 Step 3 invalid new nonce hash
+  const accountsWithSession = candidateAccounts.filter(a => a.sessionString && a.sessionString.trim().length > 10);
+  if (accountsWithSession.length === 0) {
+    log("⚠️ [Node MTProto 备用引擎提示] 当前本地账号未包含有效的 MTProto StringSession 字符串凭证。");
+    log("💡 若您使用的是 .session 真实 SQLite 二进制协议文件，已由底层 Python Telethon 原生引擎执行。");
+    return {
+      success: false,
+      output: logLines.join('\n') + "\n❌ [发信未启动]: 未检测到有效的 MTProto StringSession 凭证，请确保已在 sessions/ 目录下上传完整的 .session 凭证文件。",
+      sentCount: 0,
+      failCount: targets.length
+    };
+  }
+
   log("==================================================");
   log("🚀 Telegram Telethon MTProto 协议动态加载防封直推引擎 (三阶段拟人增强版)");
   log("==================================================");
   log(`🇧🇷 [巴西 SOCKS5 代理网络]: 已绑定出口 IP ${randomProxy}`);
-  log(`🟢 [健康发件协议号集群]: 共载入 ${candidateAccounts.length} 个协议发件账号`);
+  log(`🟢 [健康发件协议号集群]: 共载入 ${accountsWithSession.length} 个可用协议发件账号`);
   log(`📦 [凭证模式]: 全程使用 MTProto StringSession 动态握手，防坏块零死锁`);
   log(`📊 待处理目标名单: ${targets.join(', ')}`);
   log(`💬 阶段一纯问候语: ${greetingTemplate}`);
@@ -275,10 +288,14 @@ export async function executeTelegramDirectSend(
 
   if (options.sender_phone) {
     const cleanSender = options.sender_phone.replace(/[^0-9]/g, '');
-    const matched = allAccounts.find(a => a.phone.replace(/[^0-9]/g, '') === cleanSender);
+    const matched = accountsWithSession.find(a => a.phone.replace(/[^0-9]/g, '') === cleanSender);
     if (matched) {
-      candidateAccounts = [matched, ...allAccounts.filter(a => a.phone.replace(/[^0-9]/g, '') !== cleanSender)];
+      candidateAccounts = [matched, ...accountsWithSession.filter(a => a.phone.replace(/[^0-9]/g, '') !== cleanSender)];
+    } else {
+      candidateAccounts = accountsWithSession;
     }
+  } else {
+    candidateAccounts = accountsWithSession;
   }
 
   let successCount = 0;
@@ -580,7 +597,16 @@ export async function executeTelegramReplyScanner(
     if (onLog) onLog(msg);
   };
 
-  const accounts = loadAllTelegramAccounts();
+  const allAccounts = loadAllTelegramAccounts();
+  const accounts = allAccounts.filter(a => a.sessionString && a.sessionString.trim().length > 10);
+  if (accounts.length === 0) {
+    return {
+      success: true,
+      output: "ℹ️ 当前无可用 StringSession 协议号，跳过 Node MTProto 扫描",
+      newlySent: 0,
+      totalCompleted: 0
+    };
+  }
   let secondTemplate = "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
   let thirdTemplate = "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨";
   let enableThirdMessage = true;
