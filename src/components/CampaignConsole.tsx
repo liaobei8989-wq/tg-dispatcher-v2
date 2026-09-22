@@ -161,7 +161,7 @@ export const CampaignConsole: React.FC<CampaignConsoleProps> = ({
   const [step3BlessingText, setStep3BlessingText] = useState<string>(
     DEFAULT_BLESSING_SPINTAX
   );
-  const [enableThirdStep, setEnableThirdStep] = useState<boolean>(true);
+  const [enableThirdStep, setEnableThirdStep] = useState<boolean>(false);
 
   // Daily Scheduled Automation State (定时群发与每日阶梯递增计划)
   const [enableDailySchedule, setEnableDailySchedule] = useState<boolean>(antiBan.enableWarmupSchedule ?? true);

@@ -104,17 +104,30 @@ def backup_and_heal_session(session_path: str) -> bool:
     return is_valid_telethon_session(real_path)
 
 def parse_proxy(proxy_str: str):
-    """解析 host:port:user:pass 代理，支持 SOCKS5 与 HTTP"""
+    """解析 host:port:user:pass 代理，支持 SOCKS5 与 HTTP (自适应 12323 端口和 HTTP CONNECT)"""
     if not proxy_str or not isinstance(proxy_str, str):
         return None
     try:
-        clean = proxy_str.strip().replace("socks5://", "").replace("http://", "")
+        raw = proxy_str.strip()
+        is_explicit_http = raw.lower().startswith("http://")
+        clean = raw.replace("socks5://", "").replace("http://", "")
         parts = clean.split(':')
-        ptype = socks.SOCKS5 if (socks and hasattr(socks, 'SOCKS5')) else (socks.HTTP if (socks and hasattr(socks, 'HTTP')) else 2)
+        if len(parts) < 2:
+            return None
+        port = int(parts[1])
+        # 端口 12323 是典型的 HTTP/HTTPS CONNECT 住宅代理端口 (返回 'H'=72)，或显式指定了 http
+        is_http = is_explicit_http or (port == 12323)
+        if is_http and socks and hasattr(socks, 'HTTP'):
+            ptype = socks.HTTP
+        elif socks and hasattr(socks, 'SOCKS5'):
+            ptype = socks.SOCKS5
+        else:
+            ptype = 3 if is_http else 2
+
         if len(parts) >= 4:
-            return (ptype, parts[0], int(parts[1]), True, parts[2], parts[3])
+            return (ptype, parts[0], port, True, parts[2], parts[3])
         elif len(parts) == 2:
-            return (ptype, parts[0], int(parts[1]))
+            return (ptype, parts[0], port)
     except Exception:
         pass
     return None
@@ -222,7 +235,27 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
             await client.connect()
             connected_ok = True
         except Exception as connect_err:
-            if proxy_tuple and len(BRAZIL_PROXY_POOL) > 0:
+            err_str = str(connect_err)
+            if ("72" in err_str or "SOCKS version" in err_str) and proxy_tuple and socks and hasattr(socks, 'HTTP'):
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                http_tuple = (socks.HTTP, proxy_tuple[1], proxy_tuple[2], *proxy_tuple[3:])
+                client = TelegramClient(
+                    session_file,
+                    acc["api_id"],
+                    acc["api_hash"],
+                    proxy=http_tuple,
+                    timeout=25
+                )
+                try:
+                    await client.connect()
+                    connected_ok = True
+                except Exception:
+                    connected_ok = False
+
+            if not connected_ok and proxy_tuple and len(BRAZIL_PROXY_POOL) > 0:
                 try:
                     await client.disconnect()
                 except Exception:
@@ -244,8 +277,6 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
                     connected_ok = True
                 except Exception:
                     connected_ok = False
-            else:
-                connected_ok = False
         
         if not connected_ok:
             result["auth_status"] = "⚠️ 代理超时（已安全阻断直连防封）"

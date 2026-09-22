@@ -2004,9 +2004,9 @@ async function startServer() {
         success: true,
         config: {
           enabled: true,
-          second_message: "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}",
-          third_message: "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
-          enable_third_message: true,
+          second_message: "{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: https://brazilgo888.com/pankou5 🎰💵",
+          third_message: "",
+          enable_third_message: false,
           second_to_third_delay_min: 3.5,
           second_to_third_delay_max: 6.5
         }
@@ -2662,8 +2662,9 @@ async function startServer() {
                 group_tag: wave.targetGroupTag || 'ALL',
                 targetGroupTag: wave.targetGroupTag || 'ALL',
                 message: "{Olá|Oi|E aí}, {tudo bem|como você tá}? {Boa semana|Espero que esteja bem}! 👍",
-                second_message: "🔥 PROMOÇÃO EXCLUSIVA! 🎁 Claim 500% Bônus PIX Imediato + 150 Giros Grátis! 🎰 Acesse: https://brazilgo888.com/vip",
-                third_message: "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨",
+                second_message: "{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: https://brazilgo888.com/pankou5 🎰💵",
+                third_message: "",
+                enable_third_message: false,
                 wait_for_reply: true,
                 delay_min: 45.0,
                 delay_max: 65.0

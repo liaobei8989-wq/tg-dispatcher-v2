@@ -239,9 +239,9 @@ export async function executeTelegramDirectSend(
 
   const targets = options.targets && options.targets.length > 0 ? options.targets : ['+5571996984203'];
   const greetingTemplate = options.message || "{Oi, tudo bem? Vi você lá no grupo dos jogos, achei seu perfil tão legal e resolvi chamar. 😊|Olá! Tudo bem? Entrei no grupo de jogos esses dias e vi você comentando, adoro gente que joga sério! 😉}";
-  const secondTemplate = options.second_message || "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
-  const thirdTemplate = options.third_message || "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨";
-  const enableThirdMessage = options.enable_third_message !== undefined ? options.enable_third_message : true;
+  const secondTemplate = options.second_message || "{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
+  const thirdTemplate = options.third_message || "";
+  const enableThirdMessage = options.enable_third_message !== undefined ? options.enable_third_message : false;
   const autoSendSecond = options.auto_send_second !== undefined ? options.auto_send_second : true;
   const waitForReply = options.wait_for_reply !== undefined ? options.wait_for_reply : true;
   const listenTimeout = options.listen_timeout || 5; // 默认监听 5 秒
@@ -481,13 +481,13 @@ export async function executeTelegramDirectSend(
             } else {
               await sleep(1500);
               const finalSecondMsg = parseSpintax(secondTemplate);
-              const sentMsg2: any = await withTimeout(client.sendMessage(peer, { message: finalSecondMsg, parseMode: 'html' }), 8000, '发送彩金文案超时');
+              const sentMsg2: any = await withTimeout(client.sendMessage(peer, { message: finalSecondMsg, parseMode: 'html', linkPreview: false }), 8000, '发送彩金文案超时');
               log(`🚀 【第二步彩金文案已送达】 Message ID: ${sentMsg2?.id || 2}`);
 
-              // 第 3 阶段：祝老板中奖寄语 (官方推荐 3~6 秒延时 + typing 正在输入模拟)
+              // 第 3 阶段：祝老板中奖寄语 (按需启用，默认关闭)
               if (enableThirdMessage && thirdTemplate) {
                 const humanDelay = Math.round((Math.random() * (thirdDelayMax - thirdDelayMin) + thirdDelayMin) * 10) / 10;
-                log(`⏳ 【官方风控拟人延时】等待 ${humanDelay} 秒 (推荐 3~6s 防封区间)，模拟真人输入中奖祝福语...`);
+                log(`⏳ 【官方风控拟人延时】等待 ${humanDelay} 秒，模拟真人输入中奖祝福语...`);
                 try {
                   await client.invoke(new Api.messages.SetTyping({
                     peer,
@@ -496,7 +496,7 @@ export async function executeTelegramDirectSend(
                 } catch (tErr) {}
                 await sleep(humanDelay * 1000);
                 const finalThirdMsg = parseSpintax(thirdTemplate);
-                const sentMsg3: any = await withTimeout(client.sendMessage(peer, { message: finalThirdMsg }), 8000, '发送祝福语超时');
+                const sentMsg3: any = await withTimeout(client.sendMessage(peer, { message: finalThirdMsg, linkPreview: false }), 8000, '发送祝福语超时');
                 log(`🍀 【第三步中奖寄语已送达】 Message ID: ${sentMsg3?.id || 3} ➔ "${finalThirdMsg}"`);
               }
             }
@@ -607,9 +607,9 @@ export async function executeTelegramReplyScanner(
       totalCompleted: 0
     };
   }
-  let secondTemplate = "Opa parceiro! Passando pra avisar que liberou R$ 15 de saldo teste SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto. Aproveita o link exclusivo: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
-  let thirdTemplate = "{🍀 Boa sorte|💰 Desejo muita sorte|🤑 Bora forrar|🚀 Arrebenta lá|🔥 Muito sucesso} {meu amigo|parceiro|campeão|chefe|jogador}! {Que venha o grande jackpot|Hoje a forra é certa no Tigrinho|Que você dobre sua banca hoje}! 🎰💵 {E entra também no nosso canal VIP de estratégias e dicas diárias|Aproveita e entra no nosso canal oficial de sinais e bônus|Não esquece de entrar no nosso grupo de dicas exclusivas}: {👉 t.me/brazilgo_chat|👉 https://t.me/brazilgo_chat} {pra pegar os horários que tão pagando e não perder nada|com sinais com 98% de assertividade e suporte direto|onde a gente posta as melhores estratégias pra lucrar}! {Tamo junto|Qualquer dúvida estou por aqui}! 🐯✨";
-  let enableThirdMessage = true;
+  let secondTemplate = "{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: {https://vip01.promobr1.xyz/pt|https://vip02.promobr1.xyz/pt|https://vip03.promobr2.xyz/pt}";
+  let thirdTemplate = "";
+  let enableThirdMessage = false;
   let delayMin = 3.5;
   let delayMax = 6.5;
 

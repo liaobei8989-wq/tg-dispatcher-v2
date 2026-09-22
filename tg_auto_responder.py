@@ -307,11 +307,26 @@ def parse_proxy_str(proxy_str):
     if not proxy_str or not isinstance(proxy_str, str):
         return None
     try:
-        parts = proxy_str.strip().split(':')
+        raw = proxy_str.strip()
+        is_explicit_http = raw.lower().startswith("http://")
+        clean = raw.replace("socks5://", "").replace("http://", "")
+        parts = clean.split(':')
+        if len(parts) < 2:
+            return None
+        port = int(parts[1])
+        # 端口 12323 是典型的 HTTP/HTTPS CONNECT 住宅代理端口 (返回 'H'=72)，或显式指定了 http
+        is_http = is_explicit_http or (port == 12323)
+        if is_http and socks and hasattr(socks, 'HTTP'):
+            ptype = socks.HTTP
+        elif socks and hasattr(socks, 'SOCKS5'):
+            ptype = socks.SOCKS5
+        else:
+            ptype = 3 if is_http else 2
+
         if len(parts) >= 4:
-            return (socks.SOCKS5 if socks else 2, parts[0], int(parts[1]), True, parts[2], parts[3])
+            return (ptype, parts[0], port, True, parts[2], parts[3])
         elif len(parts) == 2:
-            return (socks.SOCKS5 if socks else 2, parts[0], int(parts[1]))
+            return (ptype, parts[0], port)
     except Exception:
         pass
     return None
@@ -784,8 +799,8 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             print(f"❌ [第2条发送失败]: {e2} (目标: {sender_id})")
             return False
 
-        # 判断是否需要发送第 3 阶段中奖祝福语
-        enable_third = custom_cfg.get("enable_third_message", True)
+        # 判断是否需要发送第 3 阶段中奖祝福语 (默认关闭，仅在客户回复后发送1条聚合落地页链接)
+        enable_third = custom_cfg.get("enable_third_message", False)
         if not enable_third:
             print(f"ℹ️ [第3阶段已关闭] 跳过第3条祝福语发送")
             return True
@@ -897,40 +912,73 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         connection_retries=3,
                         retry_delay=1,
                         auto_reconnect=True,
-                        timeout=10
+                        timeout=15
                     )
-                    await asyncio.wait_for(client.connect(), timeout=12.0)
+                    await asyncio.wait_for(client.connect(), timeout=18.0)
                     connected_ok = True
                 except Exception as proxy_err:
+                    err_str = str(proxy_err)
                     try:
-                        await client.disconnect()
+                        if client:
+                            await client.disconnect()
                     except Exception:
                         pass
                     client = None
+                    
+                    # 针对 Unexpected SOCKS version number: 72 错误，自动秒转 HTTP CONNECT 隧道重试
+                    if ("72" in err_str or "SOCKS version" in err_str) and socks and hasattr(socks, 'HTTP'):
+                        try:
+                            http_tuple = (socks.HTTP, proxy_tuple[1], proxy_tuple[2], *proxy_tuple[3:])
+                            client = TelegramClient(
+                                session_prefix,
+                                api_id,
+                                api_hash,
+                                proxy=http_tuple,
+                                device_model=device_model,
+                                system_version=system_version,
+                                app_version=app_version,
+                                connection_retries=3,
+                                retry_delay=1,
+                                auto_reconnect=True,
+                                timeout=15
+                            )
+                            await asyncio.wait_for(client.connect(), timeout=18.0)
+                            connected_ok = True
+                            print(f"✅ [代理自适应] 账号 +{clean_digits} 检测到 HTTP CONNECT 协议 (Port {proxy_tuple[2]})，已自动转换并握手成功！")
+                        except Exception:
+                            try:
+                                if client:
+                                    await client.disconnect()
+                            except Exception:
+                                pass
+                            client = None
 
-            # 2. 若未配置独立代理或代理偶发超时，安全启用专线直连守护，确保 100% 毫秒级感知
-            if not connected_ok:
+            # 2. 【安全红线】：若专属代理不可达，尝试巴西住宅备用代理池，绝对禁止 VPS 原生机房 IP 裸连直跑！
+            if not connected_ok and len(BRAZIL_PROXY_POOL) > 0:
                 try:
-                    if proxy_tuple:
-                        print(f"⚡ [专线直连接管] 账号 +{clean_digits} 代理暂不可达，切换高速直连通道...")
-                    client = TelegramClient(
-                        session_prefix,
-                        api_id,
-                        api_hash,
-                        proxy=None,
-                        device_model=device_model,
-                        system_version=system_version,
-                        app_version=app_version,
-                        connection_retries=2,
-                        retry_delay=1,
-                        auto_reconnect=True,
-                        timeout=8
-                    )
-                    await asyncio.wait_for(client.connect(), timeout=10.0)
-                    connected_ok = True
-                except Exception as direct_err:
+                    p_idx = (int(clean_digits[-4:]) if (clean_digits and clean_digits[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
+                    backup_p_str = BRAZIL_PROXY_POOL[p_idx]
+                    backup_tuple = parse_proxy_str(backup_p_str)
+                    if backup_tuple:
+                        client = TelegramClient(
+                            session_prefix,
+                            api_id,
+                            api_hash,
+                            proxy=backup_tuple,
+                            device_model=device_model,
+                            system_version=system_version,
+                            app_version=app_version,
+                            connection_retries=2,
+                            retry_delay=1,
+                            auto_reconnect=True,
+                            timeout=15
+                        )
+                        await asyncio.wait_for(client.connect(), timeout=18.0)
+                        connected_ok = True
+                except Exception:
                     try:
-                        await client.disconnect()
+                        if client:
+                            await client.disconnect()
                     except Exception:
                         pass
                     client = None

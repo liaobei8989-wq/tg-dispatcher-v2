@@ -1266,9 +1266,9 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   // 3. TG 群发设置 State
   const [sendStrategyMode, setSendStrategyMode] = useState<'two_stage' | 'direct'>('two_stage');
-  // 🌐 发信网络专线通道: 'direct' (VPS 极速直连专线，强烈推荐，0延时杜绝超时) | 'brazil_proxy' (巴西原生住宅代理池)
+  // 🌐 发信网络专线通道: 'brazil_proxy' (巴西原生住宅代理池，1号1IP独享防封) | 'direct' (VPS 极速直连专线)
   const [networkRouteMode, setNetworkRouteMode] = useState<'direct' | 'brazil_proxy'>(() => {
-    return (localStorage.getItem('tg_network_route_mode') as any) || 'direct';
+    return (localStorage.getItem('tg_network_route_mode') as any) || 'brazil_proxy';
   });
   // 🎲 群发速率模式: 'conservative' (真人业务员 45~60秒/条，15条约12~15分钟) | 'balanced' (平稳 20~35秒/条) | 'turbo' (极速 5~12秒/条) | 'custom' (自定义)
   const [tgSendSpeedMode, setTgSendSpeedMode] = useState<'turbo' | 'balanced' | 'conservative' | 'custom'>('conservative');
@@ -1286,13 +1286,13 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   const [greetingText, setGreetingText] = useState<string>(OPTIMIZED_100_DAY_SPINTAX_GREETING);
   const [followupLinkText, setFollowupLinkText] = useState<string>(() => {
-    return `{Opa parceiro!|Fala amigo!} Passando pra te avisar que liberou R$ 15 de saldo cortesia SEM DEPÓSITO no seu cadastro hoje pra forrar no Fortune Tiger 🐯! Saque direto no PIX em menos de 1 minuto sem enrolação. Resgata por aqui antes que expire: ${get100SubdomainsSpintax()}`;
+    return `{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: ${get100SubdomainsSpintax()} 🎰💵`;
   });
-  // 阶段三：祝老板中奖/暴富祝福语 (Spintax 变量语法 + 官方推荐 3~6s 拟人延时)
+  // 阶段三：祝老板中奖/暴富祝福语 (默认停用：客户回复后仅补发1条落地页链接，落地页已整合4盘口+VIP频道)
   const [blessingText, setBlessingText] = useState<string>(() => {
     return DEFAULT_BLESSING_SPINTAX;
   });
-  const [enableBlessing, setEnableBlessing] = useState<boolean>(true);
+  const [enableBlessing, setEnableBlessing] = useState<boolean>(false);
   const [blessingDelayMin, setBlessingDelayMin] = useState<number>(3.5);
   const [blessingDelayMax, setBlessingDelayMax] = useState<number>(6.0);
   const [blessingSamplePreview, setBlessingSamplePreview] = useState<string>('');
@@ -8730,6 +8730,20 @@ if __name__ == "__main__":
                             </div>
                           </div>
                         </>
+                      )}
+
+                      {!enableBlessing && (
+                        <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-2.5 text-xs text-emerald-300 flex items-start gap-2 animate-in fade-in">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="font-bold text-emerald-200">
+                              🎯 单条聚合模式生效中（推荐，彻底防举报防风控）：
+                            </p>
+                            <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                              客户回复问候后，系统仅自动回复 <strong>1 条带防封网站链接的话术</strong>。由于您的官方活动网站已整合 4 大盘口平台与 VIP 频道入口，无需在 TG 内再发送第三方频道链接，且已强制关闭 Telegram 网页卡片预览（<code className="text-amber-300 font-mono">link_preview=False</code>），不触发 TG 内容审核蜘蛛，回复干净自然，彻底消除封号与举报隐患！
+                            </p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

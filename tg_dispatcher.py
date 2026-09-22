@@ -551,15 +551,15 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 except Exception:
                     pass
 
-                # 补发第二条彩金文案
+                # 补发第二条彩金文案 (强制 link_preview=False 彻底关闭网页预览卡片，防止TG爬虫与风控)
                 if second_msg:
                     await asyncio.sleep(1.0)
-                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
+                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html', link_preview=False), timeout=10.0)
                     second_sent_id = getattr(sent2, 'id', 2)
                     if logs is not None:
                         logs.append(f"🚀 [第2阶段彩金文案已补发]: ID: {second_sent_id}")
                 
-                # 补发第三条中奖祝福语 (伴随打字与延时)
+                # 补发第三条中奖祝福语 (默认已关闭，按需启用)
                 if enable_third and third_msg:
                     human_delay = random.uniform(third_delay_min, third_delay_max)
                     try:
@@ -567,7 +567,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     except Exception:
                         pass
                     await asyncio.sleep(human_delay)
-                    sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
+                    sent3 = await asyncio.wait_for(client.send_message(peer, third_msg, link_preview=False), timeout=10.0)
                     third_sent_id = getattr(sent3, 'id', 3)
                     if logs is not None:
                         logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
@@ -577,7 +577,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         # 直接连发模式
         if second_msg:
             await asyncio.sleep(1.2)
-            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
+            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html', link_preview=False), timeout=10.0)
             second_sent_id = getattr(sent2, 'id', 2)
             if logs is not None:
                 logs.append(f"🚀 [第2阶段彩金文案已送达]: ID: {second_sent_id}")
@@ -589,7 +589,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
             await asyncio.sleep(human_delay)
-            sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
+            sent3 = await asyncio.wait_for(client.send_message(peer, third_msg, link_preview=False), timeout=10.0)
             third_sent_id = getattr(sent3, 'id', 3)
             if logs is not None:
                 logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
@@ -1061,7 +1061,7 @@ async def main():
     message_template = payload.get("message", "Oi, tudo bem?")
     second_template = payload.get("second_message", "")
     third_template = payload.get("third_message", "")
-    enable_third_message = payload.get("enable_third_message", True)
+    enable_third_message = payload.get("enable_third_message", False)
     wait_for_reply = payload.get("wait_for_reply", True)
     sender_phone = payload.get("sender_phone", "")
     target_group_tag = payload.get("group_tag") or payload.get("targetGroupTag") or "ALL"
