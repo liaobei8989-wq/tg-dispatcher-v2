@@ -45,7 +45,8 @@ try:
         SessionPasswordNeededError,
         UserDeactivatedError,
         UserDeactivatedBanError,
-        PhoneNumberBannedError
+        PhoneNumberBannedError,
+        PeerIdInvalidError
     )
 except ImportError:
     print(json.dumps({
@@ -434,7 +435,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
 
-        # 2. 一次性打包导入通讯录 (1 次 MTProto 请求完成全部变体探查，不浪费配额)
+        # 2. 打包导入通讯录
         if not user_found:
             try:
                 contacts = [
@@ -451,31 +452,44 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     user_found = result.users[0]
                     for u in result.users:
                         imported_ids_to_del.append(u.id)
-                else:
-                    raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该通道导入受限)")
             except Exception as ce:
                 err_s = str(ce)
-                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s or "未能在本小号通讯录中匹配" in err_s:
+                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
                     raise ce
                 pass
 
-        # 3. 如果仍未找到，尝试从已导入联系人列表中反查
+        # 3. 如果仍未找到，尝试从已导入联系人列表中反查 (已导入过的联系人再次导入时 result.users 为空)
         if not user_found:
             try:
                 all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
                 if all_contacts and getattr(all_contacts, 'users', None):
                     for u in all_contacts.users:
-                        u_phone = getattr(u, 'phone', '') or ''
-                        if u_phone and any(pv in u_phone or u_phone in pv for pv in phone_variants):
+                        u_phone = re.sub(r'[^0-9]', '', getattr(u, 'phone', '') or '')
+                        if u_phone and (any(pv in u_phone or u_phone in pv for pv in phone_variants) or (len(u_phone) >= 8 and any(pv.endswith(u_phone[-8:]) for pv in phone_variants))):
                             user_found = u
                             break
             except Exception:
                 pass
 
+        # 4. 如果仍未找到，尝试从已有会话对话列表 (Dialogs) 中快速匹配 (历史发过消息的用户)
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该通道导入受限)")
+            try:
+                async for dialog in client.iter_dialogs(limit=30):
+                    if dialog.is_user and dialog.entity:
+                        ent_phone = re.sub(r'[^0-9]', '', getattr(dialog.entity, 'phone', '') or '')
+                        if ent_phone and any(pv.endswith(ent_phone[-8:]) for pv in phone_variants if len(pv) >= 8):
+                            user_found = dialog.entity
+                            break
+            except Exception:
+                pass
 
-        peer = user_found
+        if not user_found:
+            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该号码未注册TG)")
+
+        try:
+            peer = await client.get_input_entity(user_found)
+        except Exception:
+            peer = user_found
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
@@ -487,7 +501,11 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     except Exception:
         pass
 
-    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
+    try:
+        sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
+    except PeerIdInvalidError:
+        # 如果 InputPeer 抛出 PeerIdInvalid，尝试直接用 user_found 补救重发一次
+        sent = await asyncio.wait_for(client.send_message(user_found or peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
 
     # 保留联系人卡片关系，不立即删除，保障后续第二阶段彩金能 100% 连续送达！
@@ -854,7 +872,10 @@ async def run_worker(
                 worker_results.append(res)
             except UserPrivacyRestrictedError:
                 fail_count += 1
-                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target} 开启了隐私保护。")
+                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target}: 目标开启了隐私保护(仅联系人可接收私聊)。")
+            except PeerIdInvalidError:
+                fail_count += 1
+                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target}: 目标手机号未开通 Telegram 或开启了防打扰隐私(已跳过)。")
             except PeerFloodError:
                 fail_count += 1
                 worker_logs.append(f"🛑 [Worker #{worker_id} 频控绝对熔断退出] 协议号 +{clean_digits} 触发官方临时频控 (PeerFlood)，已立即退出本次任务以保护账号！")

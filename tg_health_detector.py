@@ -57,13 +57,46 @@ DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627"
 import shutil
 import sqlite3
 
-BRAZIL_PROXY_POOL = [
-    "200.160.36.222:12323:14aade52b86e6:70dd653fc2",
-    "200.239.237.124:12323:14aade52b86e6:70dd653fc2",
-    "200.160.43.132:12323:14aade52b86e6:70dd653fc2",
-    "200.160.38.29:12323:14aade52b86e6:70dd653fc2",
-    "200.239.213.26:12323:14aade52b86e6:70dd653fc2"
-]
+BRAZIL_PROXY_POOL = []
+
+def load_brazil_proxy_pool() -> List[str]:
+    """动态加载代理池，优先读取 proxies.txt 和 account_proxies.json"""
+    global BRAZIL_PROXY_POOL
+    pool = []
+    # 1. 从 proxies.txt 加载
+    for p_file in ["proxies.txt", os.path.join("sessions", "proxies.txt")]:
+        if os.path.exists(p_file):
+            try:
+                with open(p_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and ":" in line:
+                            pool.append(line)
+            except Exception:
+                pass
+    # 2. 从 account_proxies.json 加载
+    for j_file in ["account_proxies.json", os.path.join("sessions", "account_proxies.json")]:
+        if os.path.exists(j_file):
+            try:
+                with open(j_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    for val in data.values():
+                        if val and isinstance(val, str) and ":" in val and val not in pool:
+                            pool.append(val)
+            except Exception:
+                pass
+    if not pool:
+        pool = [
+            "200.160.38.179:12323:14abdb1a0db2e:cb8f30f1a9",
+            "200.160.35.215:12323:14abdb1a0db2e:cb8f30f1a9",
+            "200.160.32.90:12323:14abdb1a0db2e:cb8f30f1a9",
+            "200.160.34.220:12323:14abdb1a0db2e:cb8f30f1a9",
+            "200.160.36.36:12323:14abdb1a0db2e:cb8f30f1a9"
+        ]
+    BRAZIL_PROXY_POOL = pool
+    return pool
+
+load_brazil_proxy_pool()
 
 def is_valid_telethon_session(session_path: str) -> bool:
     """检查文件是否为有效的 Telethon SQLite 数据库文件"""
@@ -229,38 +262,40 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
             acc["api_id"],
             acc["api_hash"],
             proxy=proxy_tuple,
-            timeout=25
+            timeout=20
         )
         try:
-            await client.connect()
+            await asyncio.wait_for(client.connect(), timeout=12.0)
             connected_ok = True
         except Exception as connect_err:
-            err_str = str(connect_err)
-            if ("72" in err_str or "SOCKS version" in err_str) and proxy_tuple and socks and hasattr(socks, 'HTTP'):
+            # 协议切换重试：若是 HTTP 则试 SOCKS5，若是 SOCKS5 则试 HTTP
+            if proxy_tuple and socks:
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                http_tuple = (socks.HTTP, proxy_tuple[1], proxy_tuple[2], *proxy_tuple[3:])
+                curr_type = proxy_tuple[0]
+                alt_type = socks.SOCKS5 if (hasattr(socks, 'HTTP') and curr_type == socks.HTTP) else getattr(socks, 'HTTP', socks.SOCKS5)
+                alt_tuple = (alt_type, proxy_tuple[1], proxy_tuple[2], *proxy_tuple[3:])
                 client = TelegramClient(
                     session_file,
                     acc["api_id"],
                     acc["api_hash"],
-                    proxy=http_tuple,
-                    timeout=25
+                    proxy=alt_tuple,
+                    timeout=20
                 )
                 try:
-                    await client.connect()
+                    await asyncio.wait_for(client.connect(), timeout=12.0)
                     connected_ok = True
                 except Exception:
                     connected_ok = False
 
-            if not connected_ok and proxy_tuple and len(BRAZIL_PROXY_POOL) > 0:
+            # 若原代理超时，且备用池可用，则智能借道备用住宅节点探测
+            if not connected_ok and len(BRAZIL_PROXY_POOL) > 0:
                 try:
                     await client.disconnect()
                 except Exception:
                     pass
-                # 切换巴西备用节点，【绝对禁止 VPS 机房 IP 直连 proxy=None】
                 clean_p = re.sub(r'[^0-9]', '', phone)
                 idx = (int(clean_p[-4:]) if (clean_p and clean_p[-4:].isdigit()) else 0) % len(BRAZIL_PROXY_POOL)
                 backup_p_str = BRAZIL_PROXY_POOL[idx]
@@ -270,18 +305,18 @@ async def check_single_account(acc: Dict[str, Any]) -> Dict[str, Any]:
                     acc["api_id"],
                     acc["api_hash"],
                     proxy=backup_tuple,
-                    timeout=25
+                    timeout=20
                 )
                 try:
-                    await client.connect()
+                    await asyncio.wait_for(client.connect(), timeout=14.0)
                     connected_ok = True
                 except Exception:
                     connected_ok = False
         
         if not connected_ok:
-            result["auth_status"] = "⚠️ 代理超时（已安全阻断直连防封）"
-            result["spambot_status"] = "⚠️ 代理未通，未直接连网"
-            result["restriction_detail"] = "住宅与备用代理均超时。已按安全红线阻断 VPS 原生 IP 直连裸测，避免导致封号。"
+            result["auth_status"] = "⚠️ 代理瞬时超时 (节点波动)"
+            result["spambot_status"] = "⚠️ 代理未通，未直接联网"
+            result["restriction_detail"] = "该代理节点瞬时延迟高或握手超时。已按安全红线阻断 VPS 原生 IP 直连裸测，保护账号安全。"
             result["can_send_today"] = False
             result["health_score"] = 50
             return result
@@ -433,6 +468,7 @@ async def main():
     print("-" * 75)
     
     clean_count, limited_count, dead_count = 0, 0, 0
+    dead_phones = []
     for i, acc in enumerate(accounts):
         print(f"🔍 正在穿透检测 [{i+1}/{len(accounts)}] +{acc['phone']} ...", end="\r")
         res = await check_single_account(acc)
@@ -443,14 +479,39 @@ async def main():
             limited_count += 1
         else:
             dead_count += 1
+            dead_phones.append(acc['phone'])
         print(f"+{res['phone']:<14} | {res['auth_status']:<20} | {res['spambot_status']:<23} | {advice}")
         if res["restriction_detail"] != "无":
             print(f"   └── 详情: {res['restriction_detail']}")
         await asyncio.sleep(0.8)
         
     print("-" * 75)
-    print(f"📊 真实检测汇总完成: 🟢健康: {clean_count} | 🟡受限: {limited_count} | 🔴失效: {dead_count}")
+    print(f"📊 真实检测汇总完成: 🟢健康: {clean_count} | 🟡受限: {limited_count} | 🔴失效/封禁: {dead_count}")
     print("=" * 70)
+
+    # 自动清理已封禁/失效账号 (--purge-banned 或 --delete-dead)
+    if "--purge-banned" in sys.argv or "--delete-dead" in sys.argv:
+        if not dead_phones:
+            print("🎉 恭喜！当前账号池中 0 个封禁/失效账号，无需清理！")
+        else:
+            print(f"\n🧹 正在自动物理清理并隔离这 {len(dead_phones)} 个封禁/失效死号...")
+            backup_dir = os.path.join("sessions", "banned_backup")
+            os.makedirs(backup_dir, exist_ok=True)
+            purged = 0
+            for dp in dead_phones:
+                for pattern in [f"{dp}.session*", f"{dp}.json"]:
+                    for f in glob.glob(os.path.join("sessions", pattern)):
+                        try:
+                            dst = os.path.join(backup_dir, os.path.basename(f))
+                            shutil.move(f, dst)
+                            purged += 1
+                        except Exception as e:
+                            try:
+                                os.remove(f)
+                                purged += 1
+                            except Exception:
+                                pass
+            print(f"✅ 成功清理 {len(dead_phones)} 个封禁死号（已将关联凭证隔离至 {backup_dir}，当前活跃账号数: {len(accounts) - len(dead_phones)}）！\n")
 
 if __name__ == "__main__":
     asyncio.run(main())
