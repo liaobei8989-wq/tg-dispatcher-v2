@@ -815,7 +815,7 @@ export async function executeTelegramReplyScanner(
           } catch (e) {}
 
           const promoText = parseSpintax(secondTemplate);
-          await withTimeout(client.sendMessage(d.inputEntity, { message: promoText, parseMode: 'html' }), 6000, '发送补发消息超时');
+          await withTimeout(client.sendMessage(d.inputEntity, { message: promoText, parseMode: 'html', linkPreview: false }), 6000, '发送补发消息超时');
           newlySent++;
           totalCompleted++;
           
@@ -837,7 +837,7 @@ export async function executeTelegramReplyScanner(
             await sleep(blessingDelay * 1000);
 
             blessingText = parseSpintax(thirdTemplate);
-            await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText }), 6000, '发送祝福语超时');
+            await withTimeout(client.sendMessage(d.inputEntity, { message: blessingText, linkPreview: false }), 6000, '发送祝福语超时');
           }
 
           const logEntry = {

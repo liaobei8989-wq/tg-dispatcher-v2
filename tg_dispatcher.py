@@ -30,7 +30,7 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, SearchRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, SearchRequest, GetContactsRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -452,25 +452,28 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     for u in result.users:
                         imported_ids_to_del.append(u.id)
                 else:
-                    raise Exception(f"目标手机号 +{digits} 经 TG 官方云端核实未注册 (空号或对方未开通 TG)")
+                    raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该通道导入受限)")
             except Exception as ce:
                 err_s = str(ce)
-                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s or "未注册" in err_s or "未开通" in err_s:
+                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s or "未能在本小号通讯录中匹配" in err_s:
                     raise ce
                 pass
 
-        # 3. 如果仍未找到，尝试获取实体句柄
+        # 3. 如果仍未找到，尝试从已导入联系人列表中反查
         if not user_found:
-            for pv in phone_variants:
-                try:
-                    user_found = await asyncio.wait_for(client.get_input_entity(f"+{pv}"), timeout=2.5)
-                    if user_found:
-                        break
-                except Exception:
-                    pass
+            try:
+                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
+                if all_contacts and getattr(all_contacts, 'users', None):
+                    for u in all_contacts.users:
+                        u_phone = getattr(u, 'phone', '') or ''
+                        if u_phone and any(pv in u_phone or u_phone in pv for pv in phone_variants):
+                            user_found = u
+                            break
+            except Exception:
+                pass
 
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 经 TG 官方云端核实未注册 (空号或对方未开通 TG)")
+            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该通道导入受限)")
 
         peer = user_found
 

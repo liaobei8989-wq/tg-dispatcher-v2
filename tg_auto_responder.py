@@ -727,8 +727,15 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
                 rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
             print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
 
-        # 拟人延时 2.0 ~ 3.5 秒后发送第 2 阶段彩金链接
-        await asyncio.sleep(random.uniform(2.0, 3.5))
+        # 拟人延时与正在输入模拟 (防封核心：绝不在对方说话后 2 秒内秒回，增加真人阅读与打字感)
+        pre_delay = random.uniform(6.0, 12.0)
+        await asyncio.sleep(pre_delay)
+        try:
+            typing_peer = peer or (await event.get_input_chat() if (event and hasattr(event, 'get_input_chat')) else None) or target_peer
+            await client(SetTypingRequest(peer=typing_peer, action=SendMessageTypingAction()))
+            await asyncio.sleep(random.uniform(2.5, 5.0))
+        except Exception:
+            pass
         
         rand_url = get_random_url()
         second_msg = parse_spintax(rand_template)
@@ -738,16 +745,17 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
         # 目标 Peer 寻址：优先使用完整 InputPeer (含 access_hash) 或 event 原生对象，确保 100% 成功送达
         target_peer = peer or chat_id
         try:
+            # 🛡️ 强制 link_preview=False: 彻底禁止 Telegram 服务器爬取敏感博彩/推广 URL，防止触发官方反垃圾风控封号
             if event is not None and hasattr(event, 'respond'):
                 try:
-                    await event.respond(second_msg, parse_mode='html')
+                    await event.respond(second_msg, parse_mode='html', link_preview=False)
                 except Exception:
-                    await event.respond(second_msg)
+                    await event.respond(second_msg, link_preview=False)
             else:
                 try:
-                    await client.send_message(target_peer, second_msg, parse_mode='html')
+                    await client.send_message(target_peer, second_msg, parse_mode='html', link_preview=False)
                 except Exception:
-                    await client.send_message(target_peer, second_msg)
+                    await client.send_message(target_peer, second_msg, link_preview=False)
 
             print(f"🚀 [自动补发第2条成功] 已向客户 {sender_id} 推送 100 抗封子域名彩金: {rand_url}")
             
@@ -805,10 +813,11 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             third_msg = parse_spintax(random.choice(THIRD_BLESSING_TEMPLATES))
             
         try:
+            # 🛡️ 强制 link_preview=False: 彻底禁止抓取 Telegram 官方频道/群组预览卡片，防止官方爬虫识别引流违规
             if event is not None and hasattr(event, 'respond'):
-                await event.respond(third_msg)
+                await event.respond(third_msg, link_preview=False)
             else:
-                await client.send_message(target_peer, third_msg)
+                await client.send_message(target_peer, third_msg, link_preview=False)
             print(f"🍀 [自动补发第3条成功] 已向客户 {sender_id} 推送祝福语: \"{third_msg}\"")
         except Exception as e3:
             print(f"❌ [第3条发送失败]: {e3} (目标: {sender_id})")

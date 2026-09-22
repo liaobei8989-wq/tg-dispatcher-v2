@@ -456,11 +456,8 @@ def main():
                                         peer = result.users[0]
                                         print(f"✅ [通讯录写入成功]: 已匹配 Telegram User ID {peer.id} ({peer.first_name})")
                                     else:
-                                        # Telegram 明确返回该号码未注册
-                                        target_is_invalid = True
-                                        INVALID_TARGETS_CACHE.add(target)
-                                        print(f"🚫 [目标废号快速熔断 Fail-Fast]: 目标号码 {target} 尚未在 Telegram 注册，已立即熔断跳过，严禁后续其他账号重复请求！")
-                                        return False, f"目标号码 {target} 尚未在 Telegram 注册"
+                                        print(f"⚠️ [通讯录未匹配]: 目标号码 {target} 未能成功匹配 (可能目标开启了'仅联系人可搜'隐私保护，或当前协议号导入配额已满)")
+                                        return False, f"目标号码 {target} 通讯录导入未匹配 (请检查目标隐私设置或更换其他小号重试)"
                                 except Exception as c_err:
                                     c_err_str = str(c_err)
                                     if "Cannot find any entity" in c_err_str or "UsernameInvalid" in c_err_str or "PhoneNotRegistered" in c_err_str:
