@@ -576,7 +576,10 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 pass
 
         if not user_found:
+            is_all_unoccupied = any("PhoneNotOccupied" in note for note in diag_notes)
             diag_summary = " | ".join(diag_notes[:4]) if diag_notes else "未能定位目标"
+            if is_all_unoccupied:
+                raise Exception(f"目标手机号 +{digits} 尚未在 Telegram 官方注册 (空号/未开通: PhoneNotOccupiedError)")
             raise Exception(f"目标手机号 +{digits} 通讯录导入未匹配 (诊断: {diag_summary})")
 
         try:

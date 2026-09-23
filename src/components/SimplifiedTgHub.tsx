@@ -3913,7 +3913,12 @@ if __name__ == "__main__":
               const warnLines = rawLines.filter((l: string) => l.includes('⚠️'));
               const selectedLog = errorLines.length > 0 ? errorLines.join(' | ') : (warnLines.join(' | ') || resData.error || (resData.output ? resData.output.trim().split('\n').pop() : '发件过程网络异常'));
               
-              const isUnregistered = resData.output?.includes('USERNAME_NOT_OCCUPIED') || resData.output?.includes('PhoneNotRegistered');
+              const isUnregistered = (
+                resData.output?.includes('USERNAME_NOT_OCCUPIED') ||
+                resData.output?.includes('PhoneNotRegistered') ||
+                resData.output?.includes('PhoneNotOccupied') ||
+                resData.output?.includes('尚未在 Telegram 官方注册')
+              );
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));
               const isSessionConflict = (
@@ -3934,7 +3939,7 @@ if __name__ == "__main__":
                     : (isAuthKeyErr
                         ? `🔑 发件号 +${acc.phone.replace(/^\+/, '')} Session 登录态失效或未登录 (已自动隔离，目标接力中)`
                         : (isUnregistered 
-                            ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册或用户名不存在`
+                            ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册 (未开通Telegram/空号)`
                             : (isDbCorrupt
                                 ? '❌ 凭证文件损坏 (非有效SQLite数据库/仅128B空数据)，需重新上传号商原始.session凭证'
                                 : (isProxyErr
@@ -3944,7 +3949,7 @@ if __name__ == "__main__":
               setSimpleLogs(prev => [...prev, `[云端 ⚠️ 状态] [通道 #${workerIdx + 1}: +${acc.phone.replace(/^\+/, '')}] (目标: ${targetItem}): ${errDetail}`]);
 
               // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
-              const isNotRegistered = !/通讯录|未匹配|未能定位|无法定位|配额受限|隐私隐藏/i.test(errDetail) && /USERNAME_NOT_OCCUPIED|PhoneNotRegistered|空号|尚未在 Telegram 官方注册/i.test(errDetail);
+              const isNotRegistered = isUnregistered || /USERNAME_NOT_OCCUPIED|PhoneNotOccupied|PhoneNotRegistered|空号|尚未在 Telegram 官方注册/i.test(errDetail);
               const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配|未能定位|导入受限|无法定位|配额受限|隐私隐藏/i.test(errDetail);
               const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
 
