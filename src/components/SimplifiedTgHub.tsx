@@ -3915,9 +3915,7 @@ if __name__ == "__main__":
               
               const isUnregistered = (
                 resData.output?.includes('USERNAME_NOT_OCCUPIED') ||
-                resData.output?.includes('PhoneNotRegistered') ||
-                resData.output?.includes('PhoneNotOccupied') ||
-                resData.output?.includes('尚未在 Telegram 官方注册')
+                resData.output?.includes('PhoneNotRegistered')
               );
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));

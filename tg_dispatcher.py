@@ -433,131 +433,78 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         user_found = None
         diag_notes = []
 
-        # 0. 🌟 尝试 Telegram 官方原生 ResolvePhoneRequest 穿透 (无需通讯录配额)
+        # 1. 优先使用与 tg_telethon_direct_sender 一致的官方标准通讯录直推模式
+        clean_p = f"+{digits}" if not clean_target.startswith('+') else clean_target
+        
+        # 尝试标准导入 (client_id=0, first_name='Cliente')
         try:
-            from telethon.tl.functions.contacts import ResolvePhoneRequest
-            for cp in candidate_phones:
-                for p_str in [cp, cp.replace('+', '')]:
+            contact = InputPhoneContact(
+                client_id=0,
+                phone=clean_p,
+                first_name="Cliente",
+                last_name=""
+            )
+            result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=15.0)
+            if result:
+                u_list = getattr(result, 'users', []) or []
+                i_list = getattr(result, 'imported', []) or []
+                if len(u_list) > 0:
+                    user_found = u_list[0]
+                    imported_ids_to_del.append(user_found.id)
+                    logs.append(f"✨ [通讯录导入成功]: {clean_p} ➔ User ID {user_found.id} ({getattr(user_found, 'first_name', '')})")
+                elif len(i_list) > 0:
                     try:
-                        resolved = await asyncio.wait_for(client(ResolvePhoneRequest(phone=p_str)), timeout=8.0)
-                        if resolved and getattr(resolved, 'users', None) and len(resolved.users) > 0:
-                            user_found = resolved.users[0]
-                            logs.append(f"✨ [官方原生手机号穿透成功]: {p_str} ➔ User ID {user_found.id} ({getattr(user_found, 'first_name', '')})")
-                            break
-                    except Exception as r_err:
-                        r_err_name = type(r_err).__name__
-                        if "PhoneNumberUnoccupied" in r_err_name:
-                            diag_notes.append(f"{p_str}:官方未注册")
-                        elif "ContactReqInvalid" in r_err_name:
-                            diag_notes.append(f"{p_str}:格式无效")
-                        else:
-                            diag_notes.append(f"{p_str}:{r_err_name}")
-                if user_found:
-                    break
-        except Exception as mod_err:
-            diag_notes.append(f"ResolvePhone不可用({type(mod_err).__name__})")
-
-        # 1. 🌟 尝试 Telethon 原生 client.resolve_phone 穿透
-        if not user_found and hasattr(client, 'resolve_phone'):
-            for cp in candidate_phones:
-                try:
-                    res_peer = await asyncio.wait_for(client.resolve_phone(cp), timeout=8.0)
-                    if res_peer:
-                        user_found = await client.get_entity(res_peer)
-                        logs.append(f"✨ [Telethon 原生 resolve_phone 成功]: {cp} ➔ User ID {getattr(user_found, 'id', '')}")
-                        break
-                except Exception as rp_err:
-                    diag_notes.append(f"resolve_phone({cp}):{type(rp_err).__name__}")
-
-        # 2. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
-        if not user_found:
-            for cp in candidate_phones:
-                try:
-                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=3.0)
-                    if user_found:
-                        logs.append(f"✨ [本地实体缓存命中]: {cp} ➔ User ID {user_found.id}")
-                        break
-                except Exception:
-                    pass
-
-        # 3. 依次向 Telegram 通讯录写入 (生成唯一名防去重，单笔严谨导入)
-        if not user_found:
-            for cp in candidate_phones:
-                try:
-                    rand_suffix = random.randint(1000, 9999)
-                    contact = InputPhoneContact(
-                        client_id=rand_suffix,
-                        phone=cp,
-                        first_name=f"C_{rand_suffix}",
-                        last_name=""
-                    )
-                    result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=12.0)
-                    if result:
-                        u_list = getattr(result, 'users', []) or []
-                        i_list = getattr(result, 'imported', []) or []
-                        r_list = getattr(result, 'retry_contacts', []) or []
-                        
-                        if len(u_list) > 0:
-                            user_found = u_list[0]
+                        user_found = await asyncio.wait_for(client.get_entity(i_list[0].user_id), timeout=8.0)
+                        if user_found:
                             imported_ids_to_del.append(user_found.id)
-                            logs.append(f"✨ [通讯录导入成功]: {cp} ➔ User ID {user_found.id} ({getattr(user_found, 'first_name', '')})")
-                            break
-                        elif len(i_list) > 0:
-                            try:
-                                user_found = await asyncio.wait_for(client.get_entity(i_list[0].user_id), timeout=6.0)
-                                if user_found:
-                                    imported_ids_to_del.append(user_found.id)
-                                    logs.append(f"✨ [通讯录ID反查成功]: {cp} ➔ User ID {user_found.id}")
-                                    break
-                            except Exception:
-                                pass
-                        elif len(r_list) > 0:
-                            diag_notes.append(f"{cp}:TG返回retry(目标隐私/配额限制)")
-                            logs.append(f"⚠️ [通讯录频控]: Telegram 返回 retry_contacts，当前协议号导入配额受限或目标隐藏了号码")
-                        else:
-                            diag_notes.append(f"{cp}:导入返回空")
-                except Exception as ce:
-                    err_s = str(ce)
-                    diag_notes.append(f"{cp}:{type(ce).__name__}")
-                    logs.append(f"⚠️ [通讯录导入尝试 {cp} 异常]: {err_s}")
-                    if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
-                        raise ce
-                if user_found:
-                    break
+                            logs.append(f"✨ [通讯录ID反查成功]: {clean_p} ➔ User ID {user_found.id}")
+                    except Exception:
+                        pass
+        except Exception as imp_err:
+            err_str = str(imp_err)
+            diag_notes.append(f"导入异常:{type(imp_err).__name__}")
+            if "FLOOD_WAIT" in err_str or "PeerFlood" in err_str:
+                raise imp_err
 
-        # 4. 如果导入返回空列表 (由于此前已存在通讯录中)，直接再次尝试由 Telethon 载入
+        # 2. 若直推返回空 (可能目标此前已在通讯录或本地缓存中)，尝试本地实体与搜寻反查
         if not user_found:
             for cp in candidate_phones:
                 try:
                     user_found = await asyncio.wait_for(client.get_entity(cp), timeout=3.0)
                     if user_found:
-                        logs.append(f"✨ [二次载入匹配成功]: {cp} ➔ User ID {user_found.id}")
+                        logs.append(f"✨ [本地实体匹配命中]: {cp} ➔ User ID {user_found.id}")
                         break
                 except Exception:
                     pass
 
-        # 5. 扫描通讯录全量联系人，匹配尾号 8 位
+        # 3. 若仍未找到，尝试 Telegram 全局/通讯录搜寻 (SearchRequest)
         if not user_found:
             try:
-                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=6.0)
-                if all_contacts and getattr(all_contacts, 'users', None):
-                    c_count = len(all_contacts.users)
-                    diag_notes.append(f"已核验通讯录{c_count}人")
-                    for u in all_contacts.users:
-                        u_phone = re.sub(r'[^0-9]', '', getattr(u, 'phone', '') or '')
-                        if u_phone:
-                            for cp in candidate_phones:
-                                cp_digits = re.sub(r'[^0-9]', '', cp)
-                                if u_phone == cp_digits or (len(u_phone) >= 8 and len(cp_digits) >= 8 and u_phone[-8:] == cp_digits[-8:]):
-                                    user_found = u
-                                    logs.append(f"✨ [通讯录反查匹配成功]: {cp} ➔ User ID {user_found.id}")
-                                    break
-                        if user_found:
-                            break
-            except Exception as gc_err:
-                diag_notes.append(f"查通讯录失败:{type(gc_err).__name__}")
+                from telethon.tl.functions.contacts import SearchRequest
+                s_res = await asyncio.wait_for(client(SearchRequest(q=clean_p, limit=5)), timeout=6.0)
+                if s_res and getattr(s_res, 'users', None) and len(s_res.users) > 0:
+                    user_found = s_res.users[0]
+                    logs.append(f"✨ [通讯录模糊检索命中]: {clean_p} ➔ User ID {user_found.id}")
+            except Exception:
+                pass
 
-        # 6. 扫描已有会话列表 (Dialogs)，匹配历史发过消息的用户
+        # 4. 若主号码未能匹配，且存在巴西变体号码 (如缺少第9位)，尝试补充写入一次变体
+        if not user_found:
+            for alt_cp in candidate_phones:
+                if alt_cp == clean_p or alt_cp == clean_p.replace('+', ''):
+                    continue
+                try:
+                    c_alt = InputPhoneContact(client_id=0, phone=alt_cp, first_name="Cliente", last_name="")
+                    r_alt = await asyncio.wait_for(client(ImportContactsRequest([c_alt])), timeout=10.0)
+                    if r_alt and getattr(r_alt, 'users', None) and len(r_alt.users) > 0:
+                        user_found = r_alt.users[0]
+                        imported_ids_to_del.append(user_found.id)
+                        logs.append(f"✨ [变体号码导入成功]: {alt_cp} ➔ User ID {user_found.id}")
+                        break
+                except Exception:
+                    pass
+
+        # 5. 最后兜底：从全量会话中反查
         if not user_found:
             try:
                 async for dialog in client.iter_dialogs(limit=50):
@@ -568,7 +515,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                                 cp_digits = re.sub(r'[^0-9]', '', cp)
                                 if ent_phone == cp_digits or (len(ent_phone) >= 8 and len(cp_digits) >= 8 and ent_phone[-8:] == cp_digits[-8:]):
                                     user_found = dialog.entity
-                                    logs.append(f"✨ [会话历史反查匹配成功]: {cp} ➔ User ID {user_found.id}")
+                                    logs.append(f"✨ [会话历史反查成功]: {cp} ➔ User ID {user_found.id}")
                                     break
                     if user_found:
                         break
@@ -576,11 +523,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 pass
 
         if not user_found:
-            is_all_unoccupied = any("PhoneNotOccupied" in note for note in diag_notes)
-            diag_summary = " | ".join(diag_notes[:4]) if diag_notes else "未能定位目标"
-            if is_all_unoccupied:
-                raise Exception(f"目标手机号 +{digits} 尚未在 Telegram 官方注册 (空号/未开通: PhoneNotOccupiedError)")
-            raise Exception(f"目标手机号 +{digits} 通讯录导入未匹配 (诊断: {diag_summary})")
+            raise Exception(f"目标手机号 +{digits} 通讯录导入未匹配 (请检查目标隐私设置或稍后由其他小号接力)")
 
         try:
             peer = await client.get_input_entity(user_found)
