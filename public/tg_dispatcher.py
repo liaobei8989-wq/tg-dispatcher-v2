@@ -433,18 +433,25 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         user_found = None
         diag_notes = []
 
-        # 1. 优先使用与 tg_telethon_direct_sender 一致的官方标准通讯录直推模式
+        # 1. 一次性打包候选手机号变体进行导入 (带+、不带+、随机client_id，防止Telegram客户端去重)
         clean_p = f"+{digits}" if not clean_target.startswith('+') else clean_target
+        contacts_to_import = []
+        seen_candidates = set()
+        for cp in candidate_phones:
+            for p_str in [cp, cp.replace('+', ''), f"+{cp.replace('+', '')}"]:
+                if p_str and p_str not in seen_candidates:
+                    seen_candidates.add(p_str)
+                    contacts_to_import.append(
+                        InputPhoneContact(
+                            client_id=random.randint(1000000, 9999999),
+                            phone=p_str,
+                            first_name="Cliente",
+                            last_name=""
+                        )
+                    )
         
-        # 尝试标准导入 (client_id=0, first_name='Cliente')
         try:
-            contact = InputPhoneContact(
-                client_id=0,
-                phone=clean_p,
-                first_name="Cliente",
-                last_name=""
-            )
-            result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=15.0)
+            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import[:6])), timeout=15.0)
             if result:
                 u_list = getattr(result, 'users', []) or []
                 i_list = getattr(result, 'imported', []) or []
@@ -522,13 +529,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
 
-        if not user_found:
-            raise Exception(f"目标手机号 +{digits} 通讯录导入未匹配 (请检查目标隐私设置或稍后由其他小号接力)")
-
-        try:
-            peer = await client.get_input_entity(user_found)
-        except Exception:
-            peer = user_found
+        if user_found:
+            try:
+                peer = await client.get_input_entity(user_found)
+            except Exception:
+                peer = user_found
+        else:
+            # 即使 ImportContacts 未返回新用户 (例如号码此前已在小号联系人中)，直接使用规范化手机号字符串作为 peer 发送
+            peer = clean_p
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
@@ -540,11 +548,34 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     except Exception:
         pass
 
+    sent = None
+    last_send_err = None
+
     try:
-        sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
-    except PeerIdInvalidError:
-        # 如果 InputPeer 抛出 PeerIdInvalid，尝试直接用 user_found 补救重发一次
-        sent = await asyncio.wait_for(client.send_message(user_found or peer, message), timeout=10.0)
+        sent = await asyncio.wait_for(client.send_message(peer, message), timeout=12.0)
+    except Exception as s_err:
+        last_send_err = s_err
+
+    # 若初次发送失败，尝试使用备选号码变体与 user_found 容灾发送
+    if not sent:
+        fallback_candidates = []
+        if user_found and user_found != peer:
+            fallback_candidates.append(user_found)
+        for cp in candidate_phones:
+            if cp not in fallback_candidates and cp != peer:
+                fallback_candidates.append(cp)
+
+        for fb in fallback_candidates:
+            try:
+                sent = await asyncio.wait_for(client.send_message(fb, message), timeout=8.0)
+                peer = fb
+                break
+            except Exception as fb_err:
+                last_send_err = fb_err
+
+    if not sent:
+        raise last_send_err or Exception(f"未能将消息送达目标 {target}")
+
     sent_id = getattr(sent, 'id', 1)
 
     # 保留联系人卡片关系，不立即删除，保障后续第二阶段彩金能 100% 连续送达！
