@@ -398,25 +398,33 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         digits = re.sub(r'[^0-9]', '', clean_target)
         phone_variants = []
 
-        # 🇧🇷 巴西手机号智能候选列表构建 (严格国际格式 +55 DD 9XXXXXXXX 与 +55 DD XXXXXXXX)
+        # 🇧🇷 巴西手机号智能候选列表构建 (涵盖带+、不带+、含9位、不含9位等全部变体)
         candidate_phones = []
         if digits.startswith('55'):
             raw_no_cc = digits[2:]
             if len(raw_no_cc) == 11 and raw_no_cc[2] == '9':
                 candidate_phones.append(f"+55{raw_no_cc}")
+                candidate_phones.append(f"55{raw_no_cc}")
                 candidate_phones.append(f"+55{raw_no_cc[:2]}{raw_no_cc[3:]}")
+                candidate_phones.append(f"55{raw_no_cc[:2]}{raw_no_cc[3:]}")
             elif len(raw_no_cc) == 10:
                 candidate_phones.append(f"+55{raw_no_cc}")
+                candidate_phones.append(f"55{raw_no_cc}")
                 candidate_phones.append(f"+55{raw_no_cc[:2]}9{raw_no_cc[2:]}")
+                candidate_phones.append(f"55{raw_no_cc[:2]}9{raw_no_cc[2:]}")
             else:
                 candidate_phones.append(f"+55{raw_no_cc}")
+                candidate_phones.append(f"55{raw_no_cc}")
         elif digits.startswith('86') or (len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19'))):
             if not digits.startswith('86'):
                 candidate_phones.append(f"+86{digits}")
+                candidate_phones.append(f"86{digits}")
             else:
                 candidate_phones.append(f"+{digits}")
+                candidate_phones.append(digits)
         else:
             candidate_phones.append(f"+{digits}")
+            candidate_phones.append(digits)
 
         if f"+{digits}" not in candidate_phones:
             candidate_phones.insert(0, f"+{digits}")
@@ -424,54 +432,97 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         imported_ids_to_del = []
         user_found = None
 
-        # 1. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
-        for cp in candidate_phones:
-            try:
-                user_found = await asyncio.wait_for(client.get_entity(cp), timeout=2.0)
+        # 0. 🌟 尝试 Telegram 官方原生 ResolvePhoneRequest 穿透 (无需通讯录配额)
+        try:
+            from telethon.tl.functions.contacts import ResolvePhoneRequest
+            for cp in candidate_phones:
+                for p_str in [cp, cp.replace('+', '')]:
+                    try:
+                        resolved = await asyncio.wait_for(client(ResolvePhoneRequest(phone=p_str)), timeout=12.0)
+                        if resolved and getattr(resolved, 'users', None) and len(resolved.users) > 0:
+                            user_found = resolved.users[0]
+                            logs.append(f"✨ [官方原生手机号穿透成功]: {p_str} ➔ User ID {user_found.id} ({getattr(user_found, 'first_name', '')})")
+                            break
+                    except Exception:
+                        pass
                 if user_found:
                     break
-            except Exception:
-                pass
+        except Exception:
+            pass
 
-        # 2. 依次向 Telegram 通讯录单笔写入 (严禁批量并发写入冲突号码，保证 MTProto 100% 成功解析)
-        if not user_found:
+        # 1. 🌟 尝试 Telethon 原生 client.resolve_phone 穿透
+        if not user_found and hasattr(client, 'resolve_phone'):
             for cp in candidate_phones:
                 try:
-                    contact = InputPhoneContact(client_id=0, phone=cp, first_name="Cliente", last_name="")
-                    result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=6.0)
-                    if result:
-                        if getattr(result, 'users', None) and len(result.users) > 0:
-                            user_found = result.users[0]
-                            imported_ids_to_del.append(user_found.id)
-                            break
-                        elif getattr(result, 'imported', None) and len(result.imported) > 0:
-                            try:
-                                user_found = await asyncio.wait_for(client.get_entity(result.imported[0].user_id), timeout=3.0)
-                                if user_found:
-                                    imported_ids_to_del.append(user_found.id)
-                                    break
-                            except Exception:
-                                pass
-                except Exception as ce:
-                    err_s = str(ce)
-                    if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
-                        raise ce
+                    res_peer = await asyncio.wait_for(client.resolve_phone(cp), timeout=12.0)
+                    if res_peer:
+                        user_found = await client.get_entity(res_peer)
+                        logs.append(f"✨ [Telethon 原生 resolve_phone 成功]: {cp} ➔ User ID {getattr(user_found, 'id', '')}")
+                        break
+                except Exception:
                     pass
 
-        # 3. 如果导入返回空列表 (由于此前已存在通讯录中)，直接再次尝试由 Telethon 载入
+        # 2. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
         if not user_found:
             for cp in candidate_phones:
                 try:
-                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=2.0)
+                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=3.0)
                     if user_found:
                         break
                 except Exception:
                     pass
 
-        # 4. 扫描通讯录全量联系人，匹配尾号 8 位
+        # 3. 依次向 Telegram 通讯录单笔写入 (超时提升至 15 秒，适配代理高延时)
+        if not user_found:
+            for cp in candidate_phones:
+                try:
+                    contact = InputPhoneContact(
+                        client_id=random.randint(100000, 9999999),
+                        phone=cp,
+                        first_name="Cliente",
+                        last_name=""
+                    )
+                    result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=15.0)
+                    if result:
+                        if getattr(result, 'users', None) and len(result.users) > 0:
+                            user_found = result.users[0]
+                            imported_ids_to_del.append(user_found.id)
+                            logs.append(f"✨ [通讯录导入成功]: {cp} ➔ User ID {user_found.id}")
+                            break
+                        elif getattr(result, 'imported', None) and len(result.imported) > 0:
+                            try:
+                                user_found = await asyncio.wait_for(client.get_entity(result.imported[0].user_id), timeout=8.0)
+                                if user_found:
+                                    imported_ids_to_del.append(user_found.id)
+                                    logs.append(f"✨ [通讯录ID反查成功]: {cp} ➔ User ID {user_found.id}")
+                                    break
+                            except Exception:
+                                pass
+                        elif getattr(result, 'retry_contacts', None) and len(result.retry_contacts) > 0:
+                            logs.append(f"⚠️ [通讯录频控]: Telegram 返回 retry_contacts，当前协议号导入配额已满")
+                except Exception as ce:
+                    err_s = str(ce)
+                    logs.append(f"⚠️ [通讯录导入尝试 {cp} 异常]: {err_s}")
+                    if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
+                        raise ce
+                    pass
+                if user_found:
+                    break
+
+        # 4. 如果导入返回空列表 (由于此前已存在通讯录中)，直接再次尝试由 Telethon 载入
+        if not user_found:
+            for cp in candidate_phones:
+                try:
+                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=3.0)
+                    if user_found:
+                        break
+                except Exception:
+                    pass
+
+        # 5. 扫描通讯录全量联系人，匹配尾号 8 位
         if not user_found:
             try:
-                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
+                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=6.0)
                 if all_contacts and getattr(all_contacts, 'users', None):
                     for u in all_contacts.users:
                         u_phone = re.sub(r'[^0-9]', '', getattr(u, 'phone', '') or '')
@@ -480,13 +531,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                                 cp_digits = re.sub(r'[^0-9]', '', cp)
                                 if u_phone == cp_digits or (len(u_phone) >= 8 and len(cp_digits) >= 8 and u_phone[-8:] == cp_digits[-8:]):
                                     user_found = u
+                                    logs.append(f"✨ [通讯录反查匹配成功]: {cp} ➔ User ID {user_found.id}")
                                     break
                         if user_found:
                             break
             except Exception:
                 pass
 
-        # 5. 扫描已有会话列表 (Dialogs)，匹配历史发过消息的用户
+        # 6. 扫描已有会话列表 (Dialogs)，匹配历史发过消息的用户
         if not user_found:
             try:
                 async for dialog in client.iter_dialogs(limit=50):
@@ -497,6 +549,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                                 cp_digits = re.sub(r'[^0-9]', '', cp)
                                 if ent_phone == cp_digits or (len(ent_phone) >= 8 and len(cp_digits) >= 8 and ent_phone[-8:] == cp_digits[-8:]):
                                     user_found = dialog.entity
+                                    logs.append(f"✨ [会话历史反查匹配成功]: {cp} ➔ User ID {user_found.id}")
                                     break
                     if user_found:
                         break
