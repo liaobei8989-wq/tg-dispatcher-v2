@@ -398,128 +398,113 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         digits = re.sub(r'[^0-9]', '', clean_target)
         phone_variants = []
 
-        # 🇧🇷 巴西手机号智能提取与双向 9 位变体穿透
-        pure_no_cc = digits[2:] if digits.startswith('55') else digits
-        if len(pure_no_cc) in [10, 11]:
-            # 11 位 (含第9位)
-            if len(pure_no_cc) == 11 and pure_no_cc[2] == '9':
-                v13 = '55' + pure_no_cc
-                v12 = '55' + pure_no_cc[:2] + pure_no_cc[3:] # 去掉 9
-                phone_variants.extend([v13, v12])
-            elif len(pure_no_cc) == 10:
-                v12 = '55' + pure_no_cc
-                v13 = '55' + pure_no_cc[:2] + '9' + pure_no_cc[2:] # 补上 9
-                phone_variants.extend([v13, v12])
+        # 🇧🇷 巴西手机号智能候选列表构建 (严格国际格式 +55 DD 9XXXXXXXX 与 +55 DD XXXXXXXX)
+        candidate_phones = []
+        if digits.startswith('55'):
+            raw_no_cc = digits[2:]
+            if len(raw_no_cc) == 11 and raw_no_cc[2] == '9':
+                candidate_phones.append(f"+55{raw_no_cc}")
+                candidate_phones.append(f"+55{raw_no_cc[:2]}{raw_no_cc[3:]}")
+            elif len(raw_no_cc) == 10:
+                candidate_phones.append(f"+55{raw_no_cc}")
+                candidate_phones.append(f"+55{raw_no_cc[:2]}9{raw_no_cc[2:]}")
             else:
-                phone_variants.append('55' + pure_no_cc)
+                candidate_phones.append(f"+55{raw_no_cc}")
         elif digits.startswith('86') or (len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19'))):
             if not digits.startswith('86'):
-                phone_variants.append('86' + digits)
+                candidate_phones.append(f"+86{digits}")
             else:
-                phone_variants.append(digits)
+                candidate_phones.append(f"+{digits}")
         else:
-            phone_variants.append(digits)
+            candidate_phones.append(f"+{digits}")
 
-        if digits not in phone_variants:
-            phone_variants.append(digits)
+        if f"+{digits}" not in candidate_phones:
+            candidate_phones.insert(0, f"+{digits}")
 
         imported_ids_to_del = []
         user_found = None
-        tag_name = f"TG_{digits[-6:]}" if len(digits) >= 6 else "TG_User"
-        
+
         # 1. 优先尝试从本地缓存或已有会话解析 (零消耗 Telegram 通讯录导入配额)
-        for pv in phone_variants:
+        for cp in candidate_phones:
             try:
-                user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=2.0)
+                user_found = await asyncio.wait_for(client.get_entity(cp), timeout=2.0)
                 if user_found:
                     break
             except Exception:
                 pass
 
-        # 2. 打包导入通讯录 (同时涵盖 +55xxx 与 55xxx 所有国际/本地格式，并打上唯一标记名)
+        # 2. 依次向 Telegram 通讯录单笔写入 (严禁批量并发写入冲突号码，保证 MTProto 100% 成功解析)
         if not user_found:
-            try:
-                all_phone_strs = []
-                for pv in phone_variants:
-                    all_phone_strs.extend([f"+{pv}", pv])
-                all_phone_strs = list(dict.fromkeys(all_phone_strs))
-
-                contacts = [
-                    InputPhoneContact(
-                        client_id=random.randint(1000000, 9999999),
-                        phone=p_str,
-                        first_name=tag_name,
-                        last_name=""
-                    )
-                    for p_str in all_phone_strs
-                ]
-                result = await asyncio.wait_for(client(ImportContactsRequest(contacts)), timeout=8.0)
-                if result:
-                    # A. 优先直接获取返回的 User 对象
-                    if getattr(result, 'users', None) and len(result.users) > 0:
-                        user_found = result.users[0]
-                    # B. 如果 users 为空，但 imported 列表有导入记录的 user_id
-                    elif getattr(result, 'imported', None) and len(result.imported) > 0:
-                        try:
-                            user_found = await asyncio.wait_for(client.get_entity(result.imported[0].user_id), timeout=3.0)
-                        except Exception:
-                            pass
-
-                    if user_found:
-                        imported_ids_to_del.append(user_found.id)
-            except Exception as ce:
-                err_s = str(ce)
-                if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
-                    raise ce
-                pass
-
-        # 3. 如果仍未找到，尝试从已导入联系人列表中反查 (已导入过的联系人，或开启了手机号防查隐私但通讯录已关联)
-        if not user_found:
-            try:
-                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
-                if all_contacts and getattr(all_contacts, 'users', None):
-                    for u in all_contacts.users:
-                        # 3.1 尝试通过手机号匹配
-                        u_phone = re.sub(r'[^0-9]', '', getattr(u, 'phone', '') or '')
-                        if u_phone and (any(pv in u_phone or u_phone in pv for pv in phone_variants) or (len(u_phone) >= 8 and any(pv.endswith(u_phone[-8:]) for pv in phone_variants))):
-                            user_found = u
-                            break
-                        # 3.2 尝试通过打上的标记名反查 (彻底穿透手机号隐藏隐私)
-                        u_fn = getattr(u, 'first_name', '') or ''
-                        if tag_name in u_fn or (len(digits) >= 6 and digits[-6:] in u_fn):
-                            user_found = u
-                            break
-            except Exception:
-                pass
-
-        # 4. 如果仍未找到，尝试从已有会话对话列表 (Dialogs) 中快速匹配 (历史发过消息的用户)
-        if not user_found:
-            try:
-                async for dialog in client.iter_dialogs(limit=40):
-                    if dialog.is_user and dialog.entity:
-                        ent_phone = re.sub(r'[^0-9]', '', getattr(dialog.entity, 'phone', '') or '')
-                        if ent_phone and any(pv.endswith(ent_phone[-8:]) for pv in phone_variants if len(pv) >= 8):
-                            user_found = dialog.entity
-                            break
-                        ent_fn = getattr(dialog.entity, 'first_name', '') or ''
-                        if tag_name in ent_fn or (len(digits) >= 6 and digits[-6:] in ent_fn):
-                            user_found = dialog.entity
-                            break
-            except Exception:
-                pass
-
-        # 5. 终极备用：尝试直接使用国际格式号码由 Telethon 底层解析
-        if not user_found:
-            for pv in phone_variants:
+            for cp in candidate_phones:
                 try:
-                    user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=2.0)
+                    contact = InputPhoneContact(client_id=0, phone=cp, first_name="Cliente", last_name="")
+                    result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=6.0)
+                    if result:
+                        if getattr(result, 'users', None) and len(result.users) > 0:
+                            user_found = result.users[0]
+                            imported_ids_to_del.append(user_found.id)
+                            break
+                        elif getattr(result, 'imported', None) and len(result.imported) > 0:
+                            try:
+                                user_found = await asyncio.wait_for(client.get_entity(result.imported[0].user_id), timeout=3.0)
+                                if user_found:
+                                    imported_ids_to_del.append(user_found.id)
+                                    break
+                            except Exception:
+                                pass
+                except Exception as ce:
+                    err_s = str(ce)
+                    if "FLOOD_WAIT" in err_s or "PeerFlood" in err_s:
+                        raise ce
+                    pass
+
+        # 3. 如果导入返回空列表 (由于此前已存在通讯录中)，直接再次尝试由 Telethon 载入
+        if not user_found:
+            for cp in candidate_phones:
+                try:
+                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=2.0)
                     if user_found:
                         break
                 except Exception:
                     pass
 
+        # 4. 扫描通讯录全量联系人，匹配尾号 8 位
         if not user_found:
-            raise Exception(f"目标手机号 +{digits} 未能在本小号通讯录中匹配 (可能开启了'仅联系人可搜'隐私保护，或该号码未注册TG)")
+            try:
+                all_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
+                if all_contacts and getattr(all_contacts, 'users', None):
+                    for u in all_contacts.users:
+                        u_phone = re.sub(r'[^0-9]', '', getattr(u, 'phone', '') or '')
+                        if u_phone:
+                            for cp in candidate_phones:
+                                cp_digits = re.sub(r'[^0-9]', '', cp)
+                                if u_phone == cp_digits or (len(u_phone) >= 8 and len(cp_digits) >= 8 and u_phone[-8:] == cp_digits[-8:]):
+                                    user_found = u
+                                    break
+                        if user_found:
+                            break
+            except Exception:
+                pass
+
+        # 5. 扫描已有会话列表 (Dialogs)，匹配历史发过消息的用户
+        if not user_found:
+            try:
+                async for dialog in client.iter_dialogs(limit=50):
+                    if dialog.is_user and dialog.entity:
+                        ent_phone = re.sub(r'[^0-9]', '', getattr(dialog.entity, 'phone', '') or '')
+                        if ent_phone:
+                            for cp in candidate_phones:
+                                cp_digits = re.sub(r'[^0-9]', '', cp)
+                                if ent_phone == cp_digits or (len(ent_phone) >= 8 and len(cp_digits) >= 8 and ent_phone[-8:] == cp_digits[-8:]):
+                                    user_found = dialog.entity
+                                    break
+                    if user_found:
+                        break
+            except Exception:
+                pass
+
+        if not user_found:
+            raise Exception(f"目标手机号 +{digits} 通讯录导入未匹配 (目标开启了手机号隐私隐藏保护，或通道导入配额受限)")
 
         try:
             peer = await client.get_input_entity(user_found)
