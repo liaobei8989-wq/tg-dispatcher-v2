@@ -342,54 +342,50 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 alt_13 = digits[:4] + '9' + digits[4:]
                 if alt_13 not in phone_variants:
                     phone_variants.append(alt_13)
+        elif len(digits) == 10 and not digits.startswith('1'):
+            # 🇺🇸 美国/加拿大 (+1) 智能探测：若为 10 位本地号码，自动补充 +1 国际区号变体
+            us_variant = '1' + digits
+            if us_variant not in phone_variants:
+                phone_variants.append(us_variant)
 
-        contacts_to_import = [
-            InputPhoneContact(
-                client_id=random.randint(100000, 999999),
-                phone=f"+{v}",
-                first_name="Cliente",
-                last_name=""
-            )
-            for v in phone_variants
-        ]
         imported_ids_to_del = []
         user_found = None
-        try:
-            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=10.0)
-            if result and getattr(result, 'users', None) and len(result.users) > 0:
-                user_found = result.users[0]
-                for u in result.users:
-                    imported_ids_to_del.append(u.id)
-            else:
-                # 检查是否此前已被该账号导入过或者已经在通讯录/会话缓存中
-                for pv in phone_variants:
-                    try:
-                        user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=4.0)
-                        if user_found:
-                            break
-                    except Exception:
-                        pass
-                
-                # 再次尝试纯数字查询 (不带 + 号)
-                if not user_found:
-                    for pv in phone_variants:
-                        try:
-                            user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=4.0)
-                            if user_found:
-                                break
-                        except Exception:
-                            pass
-                
-                if not user_found:
-                    retry_contacts = getattr(result, 'retry_contacts', [])
-                    if retry_contacts and len(retry_contacts) > 0:
-                        raise Exception(f"当前协议号单日通讯录导入频控上限 (Telegram RetryContacts)，已自动跳过保护账号")
-                    else:
-                        raise Exception(f"目标手机号 +{digits} 未匹配到用户 (可能未公开号码隐私权限或号段未带国际区号)")
-        except Exception as ce:
-            if "未匹配" in str(ce) or "未注册" in str(ce) or "频控上限" in str(ce):
-                raise ce
-            raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
+
+        # 逐个探测有效变体：使用官方标准 client_id=0，逐个精确导入，彻底消除批量导入冲突
+        for pv in phone_variants:
+            p_str = f"+{pv}" if not str(pv).startswith('+') else str(pv)
+            try:
+                contact = InputPhoneContact(client_id=0, phone=p_str, first_name="Cliente", last_name="")
+                result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=8.0)
+                if result and getattr(result, 'users', None) and len(result.users) > 0:
+                    user_found = result.users[0]
+                    for u in result.users:
+                        imported_ids_to_del.append(u.id)
+                    break
+            except Exception:
+                pass
+
+            # 若未返回新用户，尝试从会话/实体缓存直接检索
+            if not user_found:
+                try:
+                    user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=4.0)
+                    if user_found:
+                        break
+                except Exception:
+                    pass
+
+        # 兜底尝试：以纯数字整型查询本地会话缓存
+        if not user_found:
+            for pv in phone_variants:
+                try:
+                    user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=3.0)
+                    if user_found:
+                        break
+                except Exception:
+                    pass
+
+        if not user_found:
+            raise Exception(f"目标手机号 +{digits} 未注册 Telegram 或开启了防打扰隐私(仅联系人可见)")
 
         peer = user_found
 
@@ -407,11 +403,11 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
 
-    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致会话 peer 句柄失效
+    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致第二阶段彩金会话句柄失效
     if imported_ids_to_del:
         async def delayed_delete():
             try:
-                await asyncio.sleep(3.0)
+                await asyncio.sleep(120.0)
                 await client(DeleteContactsRequest(id=imported_ids_to_del))
             except Exception:
                 pass
