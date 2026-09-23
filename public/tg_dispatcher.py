@@ -30,12 +30,11 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest, SearchRequest, GetContactsRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
-        SendMessageTypingAction,
-        InputPeerUser
+        SendMessageTypingAction
     )
     from telethon.errors import (
         UserPrivacyRestrictedError,
@@ -45,8 +44,7 @@ try:
         SessionPasswordNeededError,
         UserDeactivatedError,
         UserDeactivatedBanError,
-        PhoneNumberBannedError,
-        PeerIdInvalidError
+        PhoneNumberBannedError
     )
 except ImportError:
     print(json.dumps({
@@ -320,270 +318,100 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
         return orig_session_path
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
-    clean_target = re.sub(r'[​-‏﻿ \s]', '', str(target)).strip()
-    peer = None
-    imported_ids_to_del = []
-
-    if logs is None:
-        logs = []
-
+    clean_target = target.strip()
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
+    peer = None
 
-    # 1. @用户名 格式解析 (兼容带@与不带@纯英文ID)
-    if clean_target.startswith('@') or (re.match(r'^[a-zA-Z][a-zA-Z0-9_]{3,31}$', clean_target) and not clean_target.isdigit()):
-        raw_uname = clean_target.lstrip('@')
-        # 尝试 1: 直接精准解析
+    if clean_target.startswith('@'):
         try:
-            peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=6.0)
-        except Exception:
-            try:
-                peer = await asyncio.wait_for(client.get_entity(f"@{raw_uname}"), timeout=6.0)
-            except Exception:
-                pass
-
-        # 尝试 2: 获取输入凭证 (InputEntity)
-        if not peer:
-            try:
-                peer = await asyncio.wait_for(client.get_input_entity(raw_uname), timeout=5.0)
-            except Exception:
-                pass
-
-        # 尝试 3: 电脑端同款全局搜索穿透
-        if not peer:
-            try:
-                search_res = await asyncio.wait_for(client(SearchRequest(q=raw_uname, limit=10)), timeout=6.0)
-                if search_res and getattr(search_res, 'users', None):
-                    for u in search_res.users:
-                        u_uname = (getattr(u, 'username', '') or '').lower()
-                        if u_uname == raw_uname.lower():
-                            peer = u
-                            break
-                    if not peer and len(search_res.users) > 0:
-                        peer = search_res.users[0]
-            except Exception:
-                pass
-
-        if not peer:
-            raise Exception(f"未能在本小号通讯录中匹配到目标 @{raw_uname}，已触发智能通道接力重试")
-    # 2. 纯数字 ID (例如 123456789 或 -100xxxxxx 群组频道)
-    elif clean_target.isdigit() and len(clean_target) <= 10:
-        target_uid = int(clean_target)
-        try:
-            peer = await asyncio.wait_for(client.get_entity(target_uid), timeout=5.0)
-        except Exception:
-            try:
-                peer = await asyncio.wait_for(client.get_input_entity(target_uid), timeout=4.0)
-            except Exception:
-                # 尝试作为国际号码导入通讯录建立关联
-                digits = clean_target
-                phone_variants = [digits, "86" + digits if len(digits) == 11 else "55" + digits]
-                imported_ids_to_del = []
-                user_found = None
-                for pv in phone_variants:
-                    try:
-                        c = InputPhoneContact(client_id=random.randint(1000000, 9999999), phone=f"+{pv}", first_name="Cliente", last_name="")
-                        result = await asyncio.wait_for(client(ImportContactsRequest([c])), timeout=6.0)
-                        if result and getattr(result, 'users', None) and len(result.users) > 0:
-                            user_found = result.users[0]
-                            imported_ids_to_del.append(user_found.id)
-                            break
-                    except Exception:
-                        pass
-                if user_found:
-                    peer = user_found
-                else:
-                    raise Exception(f"纯数字 ID {target_uid} 未能在该小号会话中定位 (TG协议底层安全限制：向纯数字ID首次发起私聊必须拥有对方手机号或@用户名)")
+            peer = await asyncio.wait_for(client.get_entity(clean_target), timeout=8.0)
+        except Exception as e:
+            raise Exception(f"无法找到 Telegram 用户名 {clean_target}: {str(e)}")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
-        phone_variants = []
-
-        # 🇧🇷 巴西手机号智能候选列表构建 (涵盖带+、不带+、含9位、不含9位等全部变体)
-        candidate_phones = []
+        phone_variants = [digits]
+        # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
+        # 很多巴西人早期注册 TG 时未加 9，或号商筛选时带/不带 9，双向探测可大幅提升识别命中率
         if digits.startswith('55'):
-            raw_no_cc = digits[2:]
-            if len(raw_no_cc) == 11 and raw_no_cc[2] == '9':
-                candidate_phones.append(f"+55{raw_no_cc}")
-                candidate_phones.append(f"55{raw_no_cc}")
-                candidate_phones.append(f"+55{raw_no_cc[:2]}{raw_no_cc[3:]}")
-                candidate_phones.append(f"55{raw_no_cc[:2]}{raw_no_cc[3:]}")
-            elif len(raw_no_cc) == 10:
-                candidate_phones.append(f"+55{raw_no_cc}")
-                candidate_phones.append(f"55{raw_no_cc}")
-                candidate_phones.append(f"+55{raw_no_cc[:2]}9{raw_no_cc[2:]}")
-                candidate_phones.append(f"55{raw_no_cc[:2]}9{raw_no_cc[2:]}")
-            else:
-                candidate_phones.append(f"+55{raw_no_cc}")
-                candidate_phones.append(f"55{raw_no_cc}")
-        elif digits.startswith('86') or (len(digits) == 11 and digits.startswith(('13', '14', '15', '16', '17', '18', '19'))):
-            if not digits.startswith('86'):
-                candidate_phones.append(f"+86{digits}")
-                candidate_phones.append(f"86{digits}")
-            else:
-                candidate_phones.append(f"+{digits}")
-                candidate_phones.append(digits)
-        else:
-            candidate_phones.append(f"+{digits}")
-            candidate_phones.append(digits)
+            if len(digits) == 13 and digits[4] == '9':
+                alt_12 = digits[:4] + digits[5:]
+                if alt_12 not in phone_variants:
+                    phone_variants.append(alt_12)
+            elif len(digits) == 12:
+                alt_13 = digits[:4] + '9' + digits[4:]
+                if alt_13 not in phone_variants:
+                    phone_variants.append(alt_13)
 
-        if f"+{digits}" not in candidate_phones:
-            candidate_phones.insert(0, f"+{digits}")
-
+        contacts_to_import = [
+            InputPhoneContact(
+                client_id=random.randint(100000, 999999),
+                phone=f"+{v}",
+                first_name="Cliente",
+                last_name=""
+            )
+            for v in phone_variants
+        ]
         imported_ids_to_del = []
         user_found = None
-        diag_notes = []
-
-        # 1. 一次性打包候选手机号变体进行导入 (带+、不带+、随机client_id，防止Telegram客户端去重)
-        clean_p = f"+{digits}" if not clean_target.startswith('+') else clean_target
-        contacts_to_import = []
-        seen_candidates = set()
-        for cp in candidate_phones:
-            for p_str in [cp, cp.replace('+', ''), f"+{cp.replace('+', '')}"]:
-                if p_str and p_str not in seen_candidates:
-                    seen_candidates.add(p_str)
-                    contacts_to_import.append(
-                        InputPhoneContact(
-                            client_id=random.randint(1000000, 9999999),
-                            phone=p_str,
-                            first_name="Cliente",
-                            last_name=""
-                        )
-                    )
-        
         try:
-            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import[:6])), timeout=15.0)
-            if result:
-                u_list = getattr(result, 'users', []) or []
-                i_list = getattr(result, 'imported', []) or []
-                if len(u_list) > 0:
-                    user_found = u_list[0]
-                    imported_ids_to_del.append(user_found.id)
-                    logs.append(f"✨ [通讯录导入成功]: {clean_p} ➔ User ID {user_found.id} ({getattr(user_found, 'first_name', '')})")
-                elif len(i_list) > 0:
+            result = await asyncio.wait_for(client(ImportContactsRequest(contacts_to_import)), timeout=10.0)
+            if result and getattr(result, 'users', None) and len(result.users) > 0:
+                user_found = result.users[0]
+                for u in result.users:
+                    imported_ids_to_del.append(u.id)
+            else:
+                # 检查是否此前已被该账号导入过或者已经在通讯录/会话缓存中
+                for pv in phone_variants:
                     try:
-                        user_found = await asyncio.wait_for(client.get_entity(i_list[0].user_id), timeout=8.0)
+                        user_found = await asyncio.wait_for(client.get_entity(f"+{pv}"), timeout=4.0)
                         if user_found:
-                            imported_ids_to_del.append(user_found.id)
-                            logs.append(f"✨ [通讯录ID反查成功]: {clean_p} ➔ User ID {user_found.id}")
+                            break
                     except Exception:
                         pass
-        except Exception as imp_err:
-            err_str = str(imp_err)
-            diag_notes.append(f"导入异常:{type(imp_err).__name__}")
-            if "FLOOD_WAIT" in err_str or "PeerFlood" in err_str:
-                raise imp_err
+                
+                # 再次尝试纯数字查询 (不带 + 号)
+                if not user_found:
+                    for pv in phone_variants:
+                        try:
+                            user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=4.0)
+                            if user_found:
+                                break
+                        except Exception:
+                            pass
+                
+                if not user_found:
+                    retry_contacts = getattr(result, 'retry_contacts', [])
+                    if retry_contacts and len(retry_contacts) > 0:
+                        raise Exception(f"当前协议号单日通讯录导入频控上限 (Telegram RetryContacts)，已自动跳过保护账号")
+                    else:
+                        raise Exception(f"目标手机号 +{digits} 未匹配到用户 (可能未公开号码隐私权限或号段未带国际区号)")
+        except Exception as ce:
+            if "未匹配" in str(ce) or "未注册" in str(ce) or "频控上限" in str(ce):
+                raise ce
+            raise Exception(f"通讯录导入/查询目标 +{digits} 失败: {str(ce)}")
 
-        # 2. 若直推返回空 (可能目标此前已在通讯录或本地缓存中)，尝试本地实体与搜寻反查
-        if not user_found:
-            for cp in candidate_phones:
-                try:
-                    user_found = await asyncio.wait_for(client.get_entity(cp), timeout=3.0)
-                    if user_found:
-                        logs.append(f"✨ [本地实体匹配命中]: {cp} ➔ User ID {user_found.id}")
-                        break
-                except Exception:
-                    pass
-
-        # 3. 若仍未找到，尝试 Telegram 全局/通讯录搜寻 (SearchRequest)
-        if not user_found:
-            try:
-                from telethon.tl.functions.contacts import SearchRequest
-                s_res = await asyncio.wait_for(client(SearchRequest(q=clean_p, limit=5)), timeout=6.0)
-                if s_res and getattr(s_res, 'users', None) and len(s_res.users) > 0:
-                    user_found = s_res.users[0]
-                    logs.append(f"✨ [通讯录模糊检索命中]: {clean_p} ➔ User ID {user_found.id}")
-            except Exception:
-                pass
-
-        # 4. 若主号码未能匹配，且存在巴西变体号码 (如缺少第9位)，尝试补充写入一次变体
-        if not user_found:
-            for alt_cp in candidate_phones:
-                if alt_cp == clean_p or alt_cp == clean_p.replace('+', ''):
-                    continue
-                try:
-                    c_alt = InputPhoneContact(client_id=0, phone=alt_cp, first_name="Cliente", last_name="")
-                    r_alt = await asyncio.wait_for(client(ImportContactsRequest([c_alt])), timeout=10.0)
-                    if r_alt and getattr(r_alt, 'users', None) and len(r_alt.users) > 0:
-                        user_found = r_alt.users[0]
-                        imported_ids_to_del.append(user_found.id)
-                        logs.append(f"✨ [变体号码导入成功]: {alt_cp} ➔ User ID {user_found.id}")
-                        break
-                except Exception:
-                    pass
-
-        # 5. 最后兜底：从全量会话中反查
-        if not user_found:
-            try:
-                async for dialog in client.iter_dialogs(limit=50):
-                    if dialog.is_user and dialog.entity:
-                        ent_phone = re.sub(r'[^0-9]', '', getattr(dialog.entity, 'phone', '') or '')
-                        if ent_phone:
-                            for cp in candidate_phones:
-                                cp_digits = re.sub(r'[^0-9]', '', cp)
-                                if ent_phone == cp_digits or (len(ent_phone) >= 8 and len(cp_digits) >= 8 and ent_phone[-8:] == cp_digits[-8:]):
-                                    user_found = dialog.entity
-                                    logs.append(f"✨ [会话历史反查成功]: {cp} ➔ User ID {user_found.id}")
-                                    break
-                    if user_found:
-                        break
-            except Exception:
-                pass
-
-        if user_found:
-            try:
-                peer = await client.get_input_entity(user_found)
-            except Exception:
-                peer = user_found
-        else:
-            # 即使 ImportContacts 未返回新用户 (例如号码此前已在小号联系人中)，直接使用规范化手机号字符串作为 peer 发送
-            peer = clean_p
+        peer = user_found
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
 
     # Stage 1: Send Greeting with realistic human typing action
     try:
+        # Simulate employee looking at dialog and typing message (1.0 ~ 1.8s)
         await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-        await asyncio.sleep(random.uniform(0.8, 1.5))
+        await asyncio.sleep(random.uniform(1.0, 1.8))
     except Exception:
         pass
 
-    sent = None
-    last_send_err = None
-
-    try:
-        sent = await asyncio.wait_for(client.send_message(peer, message), timeout=12.0)
-    except Exception as s_err:
-        last_send_err = s_err
-
-    # 若初次发送失败，尝试使用备选号码变体与 user_found 容灾发送
-    if not sent:
-        fallback_candidates = []
-        if user_found and user_found != peer:
-            fallback_candidates.append(user_found)
-        for cp in candidate_phones:
-            if cp not in fallback_candidates and cp != peer:
-                fallback_candidates.append(cp)
-
-        for fb in fallback_candidates:
-            try:
-                sent = await asyncio.wait_for(client.send_message(fb, message), timeout=8.0)
-                peer = fb
-                break
-            except Exception as fb_err:
-                last_send_err = fb_err
-
-    if not sent:
-        raise last_send_err or Exception(f"未能将消息送达目标 {target}")
-
+    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
     sent_id = getattr(sent, 'id', 1)
 
-    # 保留联系人卡片关系，不立即删除，保障后续第二阶段彩金能 100% 连续送达！
+    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致会话 peer 句柄失效
     if imported_ids_to_del:
         async def delayed_delete():
             try:
-                # 延后 30 分钟或者保留，保障追发第二、第三阶段消息时有完整的联系人句柄
-                await asyncio.sleep(1800.0)
+                await asyncio.sleep(3.0)
                 await client(DeleteContactsRequest(id=imported_ids_to_del))
             except Exception:
                 pass
@@ -639,15 +467,15 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 except Exception:
                     pass
 
-                # 补发第二条彩金文案 (强制 link_preview=False 彻底关闭网页预览卡片，防止TG爬虫与风控)
+                # 补发第二条彩金文案
                 if second_msg:
                     await asyncio.sleep(1.0)
-                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html', link_preview=False), timeout=10.0)
+                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
                     second_sent_id = getattr(sent2, 'id', 2)
                     if logs is not None:
                         logs.append(f"🚀 [第2阶段彩金文案已补发]: ID: {second_sent_id}")
                 
-                # 补发第三条中奖祝福语 (默认已关闭，按需启用)
+                # 补发第三条中奖祝福语 (伴随打字与延时)
                 if enable_third and third_msg:
                     human_delay = random.uniform(third_delay_min, third_delay_max)
                     try:
@@ -655,7 +483,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     except Exception:
                         pass
                     await asyncio.sleep(human_delay)
-                    sent3 = await asyncio.wait_for(client.send_message(peer, third_msg, link_preview=False), timeout=10.0)
+                    sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
                     third_sent_id = getattr(sent3, 'id', 3)
                     if logs is not None:
                         logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
@@ -665,7 +493,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
         # 直接连发模式
         if second_msg:
             await asyncio.sleep(1.2)
-            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html', link_preview=False), timeout=10.0)
+            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
             second_sent_id = getattr(sent2, 'id', 2)
             if logs is not None:
                 logs.append(f"🚀 [第2阶段彩金文案已送达]: ID: {second_sent_id}")
@@ -677,7 +505,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
             await asyncio.sleep(human_delay)
-            sent3 = await asyncio.wait_for(client.send_message(peer, third_msg, link_preview=False), timeout=10.0)
+            sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
             third_sent_id = getattr(sent3, 'id', 3)
             if logs is not None:
                 logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
@@ -942,10 +770,7 @@ async def run_worker(
                 worker_results.append(res)
             except UserPrivacyRestrictedError:
                 fail_count += 1
-                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target}: 目标开启了隐私保护(仅联系人可接收私聊)。")
-            except PeerIdInvalidError:
-                fail_count += 1
-                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target}: 目标手机号未开通 Telegram 或开启了防打扰隐私(已跳过)。")
+                worker_logs.append(f"⚠️ [Worker #{worker_id}] 目标 {target} 开启了隐私保护。")
             except PeerFloodError:
                 fail_count += 1
                 worker_logs.append(f"🛑 [Worker #{worker_id} 频控绝对熔断退出] 协议号 +{clean_digits} 触发官方临时频控 (PeerFlood)，已立即退出本次任务以保护账号！")
@@ -979,39 +804,11 @@ async def run_worker(
                     await asyncio.sleep(real_delay)
 
     except Exception as ge:
-        err_str = str(ge).strip()
-        if isinstance(ge, (asyncio.TimeoutError, TimeoutError)) or not err_str:
-            err_str = "Telegram云端连接超时(握手未通过或凭证密钥失效)"
-        
-        is_session_ip_conflict = "two different ip" in err_str.lower() or "authkeyduplicated" in err_str.lower()
-        is_auth_invalid = "auth_key_unregistered" in err_str.lower() or "session_revoked" in err_str.lower() or is_session_ip_conflict
-        
-        if is_session_ip_conflict:
-            worker_logs.append(f"⚠️ [Worker #{worker_id} 双IP并发冲突自动隔离]: 协议号 +{clean_digits} 在云端检测到被异地IP/其他进程并发抢登，系统已自动将其从活跃发信池隔离，目标将自动转移接力！")
-            try:
-                # 自动隔离该冲突 session，避免后续群发再次排入该号
-                if os.path.exists(session_file):
-                    conflict_mark = session_file + ".conflict"
-                    shutil.move(session_file, conflict_mark)
-                    worker_logs.append(f"🛡️ [安全自愈]: 冲突凭证已重命名隔离为 {os.path.basename(conflict_mark)}，号池已自动剔除！")
-            except Exception:
-                pass
-        elif is_auth_invalid:
-            worker_logs.append(f"⚠️ [Worker #{worker_id} 登录态失效隔离]: 协议号 +{clean_digits} 凭证已失效，已自动隔离！")
-            try:
-                if os.path.exists(session_file):
-                    shutil.move(session_file, session_file + ".revoked")
-            except Exception:
-                pass
-        elif "file is not a database" in err_str or "database" in err_str.lower():
-            worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效数据库，请重新上传号商原始完整 .session 凭证！")
+        err_str = str(ge)
+        if "file is not a database" in err_str or "database" in err_str.lower():
+            worker_logs.append(f"❌ [Worker #{worker_id} 凭证损坏]: 账号对应的 .session 并非有效的 SQLite 数据库 (大小仅 128 字节或已损坏)，请重新上传号商原始完整 .session 凭证文件！")
         else:
             worker_logs.append(f"❌ [Worker #{worker_id} 运行异常]: {err_str}")
-            
-        # 计算未完成发送的目标名单，供调度器自动无缝接力
-        unhandled = [t for t in target_subset if t not in [r.get("target") for r in worker_results]]
-        if unhandled:
-            worker_logs.append(f"🔄 [任务交接]: Worker #{worker_id} 尚有 {len(unhandled)} 笔未发目标，已提交调度中心接力发信！")
     finally:
         if os.path.exists(lock_file):
             try:
@@ -1032,16 +829,12 @@ async def run_worker(
             except Exception:
                 pass
 
-    sent_targets = [r.get("target") for r in worker_results]
-    remaining_unhandled = [t for t in target_subset if t not in sent_targets]
-
     return {
         "workerId": worker_id,
         "accountPhone": clean_digits,
         "successCount": success_count,
         "failCount": fail_count,
         "results": worker_results,
-        "unhandledTargets": remaining_unhandled,
         "logs": worker_logs
     }
 
@@ -1152,7 +945,7 @@ async def main():
     message_template = payload.get("message", "Oi, tudo bem?")
     second_template = payload.get("second_message", "")
     third_template = payload.get("third_message", "")
-    enable_third_message = payload.get("enable_third_message", False)
+    enable_third_message = payload.get("enable_third_message", True)
     wait_for_reply = payload.get("wait_for_reply", True)
     sender_phone = payload.get("sender_phone", "")
     target_group_tag = payload.get("group_tag") or payload.get("targetGroupTag") or "ALL"
@@ -1168,14 +961,6 @@ async def main():
             "error": "未在服务器 sessions/ 目录下找到任何有效的 Telegram .session 凭证文件！"
         }, ensure_ascii=False))
         return
-
-    # 🛡️ 协同保护锁：通知后台常驻守护进程 (tg-responder) 释放 SQLite session 独占句柄
-    active_lock_file = os.path.join(os.getcwd(), "sessions", ".dispatcher_active.lock")
-    try:
-        with open(active_lock_file, "w") as lf:
-            lf.write(str(time.time()))
-    except Exception:
-        pass
 
     # If user specified a specific single sender phone, use only that session
     assigned_sessions = []
@@ -1254,7 +1039,6 @@ async def main():
     total_success = 0
     total_fail = 0
     all_results = []
-    unhandled_batch = []
 
     for w_out in worker_outputs:
         if isinstance(w_out, Exception):
@@ -1264,52 +1048,8 @@ async def main():
         total_fail += w_out.get("failCount", 0)
         all_results.extend(w_out.get("results", []))
         all_logs.extend(w_out.get("logs", []))
-        unhandled_batch.extend(w_out.get("unhandledTargets", []))
-
-    # 🛡️ 智能自动容灾接力：如果有 Worker 发生多IP冲突或掉线导致目标未发，自动寻找健康备用账号接力
-    if unhandled_batch and len(assigned_sessions) > num_workers:
-        backup_sessions = assigned_sessions[num_workers:]
-        relay_count = min(len(backup_sessions), len(unhandled_batch))
-        all_logs.append(f"🔄 【启动容灾无缝接力】检测到 {len(unhandled_batch)} 笔目标因通道冲突未发出，已立即调起 {relay_count} 个健康备用协议号无缝接力！")
-        
-        relay_chunks = [[] for _ in range(relay_count)]
-        for idx_u, u_target in enumerate(unhandled_batch):
-            relay_chunks[idx_u % relay_count].append(u_target)
-            
-        relay_tasks = []
-        for r_wid in range(relay_count):
-            relay_tasks.append(run_worker(
-                worker_id=num_workers + r_wid + 1,
-                session_file=backup_sessions[r_wid],
-                target_subset=relay_chunks[r_wid],
-                message_template=message_template,
-                second_template=second_template,
-                third_template=third_template,
-                enable_third_message=enable_third_message,
-                wait_for_reply=wait_for_reply,
-                custom_proxy=custom_proxy,
-                delay_min=delay_min,
-                delay_max=delay_max,
-                total_workers=relay_count
-            ))
-            
-        relay_outputs = await asyncio.gather(*relay_tasks, return_exceptions=True)
-        for r_out in relay_outputs:
-            if isinstance(r_out, Exception):
-                continue
-            total_success += r_out.get("successCount", 0)
-            total_fail = max(0, total_fail - r_out.get("successCount", 0))
-            all_results.extend(r_out.get("results", []))
-            all_logs.extend(r_out.get("logs", []))
 
     all_logs.append(f"🏁 【群发任务全网执行完毕】 成功: {total_success} 条 | 失败: {total_fail} 条 | 耗时: 极速并发完成")
-
-    # 释放协同运行锁
-    try:
-        if os.path.exists(active_lock_file):
-            os.unlink(active_lock_file)
-    except Exception:
-        pass
 
     print(json.dumps({
         "success": total_success > 0,
