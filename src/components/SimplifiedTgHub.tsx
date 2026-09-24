@@ -3730,52 +3730,69 @@ if __name__ == "__main__":
       // 🛡️ 全局绝对去重锁：单批次内每个目标只允许分配给一个账号，绝不同时或先后重复发信！
       const dispatchedTargetsSet = new Set<string>();
 
+      // 🎯 真正的多账号矩阵轮询均摊分配 (Round-Robin Partitioning)
+      // 避免单号极速抢跑抢光所有任务导致单号暴走频控，确保 49 个号每号平均分摊！
+      const workerTaskQueues: Array<Array<{ taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }>> = accountTracker.map(() => []);
+
+      let assignedCount = 0;
+      for (let i = currentIndex; i < rawLines.length; i++) {
+        const rawTarget = rawLines[i].trim();
+        if (!rawTarget) continue;
+
+        let targetParam = rawTarget.replace(/\s*\(.*?\)/, '').trim();
+        if (targetParam.startsWith('http://t.me/') || targetParam.startsWith('https://t.me/') || targetParam.startsWith('t.me/')) {
+          targetParam = '@' + targetParam.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+        }
+        const cleanKey = targetParam.replace(/[^a-zA-Z0-9_@]/g, '');
+
+        if (dispatchedTargetsSet.has(cleanKey)) {
+          continue;
+        }
+        dispatchedTargetsSet.add(cleanKey);
+
+        const targetWorkerIndex = assignedCount % accountTracker.length;
+        workerTaskQueues[targetWorkerIndex].push({
+          taskIndex: i,
+          targetItem: rawTarget,
+          cleanPhone: targetParam,
+          retries: 0
+        });
+        assignedCount++;
+      }
+
       // 线程安全原子任务取模器 (支持频控失败目标放回 retryTasks，由其他健康通道接手)
       const retryTasks: { taskIndex: number; targetItem: string; cleanPhone: string; retries?: number }[] = [];
-      const getNextTask = () => {
+      const getNextTaskForWorker = (workerIdx: number) => {
         if (isAbortedRef.current) return null;
         if (retryTasks.length > 0) {
           const retried = retryTasks.shift()!;
           return retried;
         }
-        while (nextTaskQueueIndex < rawLines.length) {
-          const taskIdx = nextTaskQueueIndex++;
-          const rawTarget = rawLines[taskIdx].trim();
-          if (!rawTarget) continue;
-
-          // 智能保留 @username、链接或标准国际手机号
-          let targetParam = rawTarget.replace(/\s*\(.*?\)/, '').trim();
-          if (targetParam.startsWith('http://t.me/') || targetParam.startsWith('https://t.me/') || targetParam.startsWith('t.me/')) {
-            targetParam = '@' + targetParam.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
+        const myQueue = workerTaskQueues[workerIdx];
+        if (myQueue && myQueue.length > 0) {
+          return myQueue.shift()!;
+        }
+        // 如果本号已发完，协助分担其余号还未开始的剩余任务 (如果需要)
+        for (let otherIdx = 0; otherIdx < workerTaskQueues.length; otherIdx++) {
+          if (workerTaskQueues[otherIdx].length > 1) {
+            return workerTaskQueues[otherIdx].pop()!;
           }
-          const cleanKey = targetParam.replace(/[^a-zA-Z0-9_@]/g, '');
-
-          // 若此前已派发过该号码，坚决跳过，绝对防止“两个号发给同一个号”
-          if (dispatchedTargetsSet.has(cleanKey)) {
-            continue;
-          }
-          dispatchedTargetsSet.add(cleanKey);
-
-          return {
-            taskIndex: taskIdx,
-            targetItem: rawTarget,
-            cleanPhone: targetParam,
-            retries: 0
-          };
         }
         return null;
       };
 
       // 启动所有账号并发 Worker (模拟任意 N 位员工早鸟、正点、稍后陆续到岗，绝不同秒并发)
       const workerPromises = accountTracker.map(async (acc, workerIdx) => {
-        const staggerSec = (acc.arrivalDelayMs / 1000).toFixed(1);
-        if (acc.arrivalDelayMs > 1500) {
+        const isMicroBatch = rawLines.length <= 5;
+        const actualArrivalDelay = isMicroBatch ? (workerIdx % 5) * 350 : acc.arrivalDelayMs;
+        const staggerSec = (actualArrivalDelay / 1000).toFixed(1);
+        if (actualArrivalDelay > 1500) {
           setSimpleLogs(prev => [
             ...prev,
             `⏳ [员工 #${workerIdx + 1}/${accountTracker.length}: ${acc.phone.slice(-4)}] 性格:【${acc.personalityType}】| 拟人自然到岗延时 ${staggerSec}s (自适应错峰上班)...`
           ]);
         }
-        await interruptibleSleep(acc.arrivalDelayMs);
+        await interruptibleSleep(actualArrivalDelay);
 
         while (!isAbortedRef.current) {
           // 账号独立休眠防风控 (发满 15 条微休 3~5 分钟)
@@ -3787,7 +3804,7 @@ if __name__ == "__main__":
 
           if (isAbortedRef.current) break;
 
-          const task = getNextTask();
+          const task = getNextTaskForWorker(workerIdx);
           if (!task || isAbortedRef.current) break; // 队列已空或收到停止信号
 
           const { taskIndex, targetItem, cleanPhone } = task;
@@ -3915,7 +3932,12 @@ if __name__ == "__main__":
               
               const isUnregistered = (
                 resData.output?.includes('USERNAME_NOT_OCCUPIED') ||
-                resData.output?.includes('PhoneNotRegistered')
+                resData.output?.includes('PhoneNotRegistered') ||
+                resData.output?.includes('不存在') ||
+                resData.output?.includes('未注册') ||
+                resData.output?.includes('No user has') ||
+                resData.output?.includes('未占用') ||
+                resData.output?.includes('Cannot find any entity')
               );
               const isDbCorrupt = (resData.output?.includes('file is not a database') || resData.error?.includes('file is not a database'));
               const isProxyErr = (resData.output?.includes('代理节点暂不可达') || resData.output?.includes('绝对防封阻断') || resData.output?.includes('timed out') || resData.output?.includes('Proxy'));

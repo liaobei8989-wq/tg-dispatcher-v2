@@ -1855,15 +1855,33 @@ async function startServer() {
           maxBuffer: 10 * 1024 * 1024
         });
 
-        const parsedPy = JSON.parse(pythonOutput.trim());
+        // 🛡️ 稳健 JSON 提取器：即使 stdout 前缀夹杂 SQLite 还原、警告日志或库输出，也能精准锁定真实 JSON 结果对象
+        const extractJson = (raw: string) => {
+          if (!raw) return null;
+          const trimmed = raw.trim();
+          try {
+            return JSON.parse(trimmed);
+          } catch (_) {
+            const firstBrace = trimmed.indexOf('{');
+            const lastBrace = trimmed.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              try {
+                return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+              } catch (_) {}
+            }
+          }
+          return null;
+        };
+
+        const parsedPy = extractJson(pythonOutput);
         if (parsedPy && typeof parsedPy === 'object') {
           return res.json({
-            success: parsedPy.success,
+            success: Boolean(parsedPy.success),
             code: parsedPy.success ? 0 : 1,
             targets: targetList,
             output: parsedPy.output || (parsedPy.logs ? parsedPy.logs.join('\n') : ''),
-            sentCount: parsedPy.sentCount || (parsedPy.success ? targetList.length : 0),
-            failCount: parsedPy.failCount || 0,
+            sentCount: parsedPy.sentCount !== undefined ? parsedPy.sentCount : (parsedPy.success ? targetList.length : 0),
+            failCount: parsedPy.failCount !== undefined ? parsedPy.failCount : (parsedPy.success ? 0 : targetList.length),
             results: parsedPy.results || [],
             engine: 'python_telethon_native',
             timestamp: new Date().toISOString()
@@ -1873,10 +1891,14 @@ async function startServer() {
         console.warn("[Python Telethon Fallback] Python 引擎调用执行异常或切入备用引擎:", pyErr.message);
         if (pyErr.stdout) {
           try {
-            const parsedPy = JSON.parse(pyErr.stdout.trim());
+            const trimmed = String(pyErr.stdout).trim();
+            const firstBrace = trimmed.indexOf('{');
+            const lastBrace = trimmed.lastIndexOf('}');
+            const jsonStr = (firstBrace !== -1 && lastBrace > firstBrace) ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed;
+            const parsedPy = JSON.parse(jsonStr);
             if (parsedPy && typeof parsedPy === 'object') {
               return res.json({
-                success: parsedPy.success,
+                success: Boolean(parsedPy.success),
                 code: parsedPy.success ? 0 : 1,
                 targets: targetList,
                 output: parsedPy.output || (parsedPy.logs ? parsedPy.logs.join('\n') : '') || parsedPy.error || '',

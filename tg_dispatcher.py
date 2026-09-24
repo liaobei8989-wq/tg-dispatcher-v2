@@ -275,69 +275,71 @@ def backup_and_heal_session(session_path: str) -> bool:
     # 2. 若当前文件损坏/异常，但存在健康 .bak 镜像，立即自动无损还原救治
     if os.path.exists(bak_path) and is_valid_telethon_session(bak_path):
         try:
-            print(f"🛡️ [SQLite 自动自愈系统] 检测到主文件损坏/异常 ({os.path.basename(real_path)})，正在从健康备份 ({os.path.basename(bak_path)}) 秒级无损还原！")
+            sys.stderr.write(f"🛡️ [SQLite 自动自愈系统] 检测到主文件损坏/异常 ({os.path.basename(real_path)})，正在从健康备份秒级无损还原！\n")
             shutil.copy2(bak_path, real_path)
             return True
         except Exception as heal_err:
-            print(f"❌ [自愈还原失败]: {heal_err}")
+            sys.stderr.write(f"❌ [自愈还原失败]: {heal_err}\n")
             
     return is_valid_telethon_session(real_path)
 
 def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str:
     """
-    【读写分离与锁保护】运行前先行触发 .session.bak 镜像备份与自愈，
-    再生成独立的沙箱隔离副本，彻底隔离多进程 SQLite 锁竞争。
+    【读写分离与锁保护】开启 SQLite WAL 预写日志与 30s 锁等待，
+    确保 Telethon 会话直接挂载且保留已解析的 Peer 实体缓存，消除锁竞争。
     """
-    backup_and_heal_session(orig_session_path)
-    tmp_dir = os.path.join(os.getcwd(), "sessions", "tmp_workers")
-    os.makedirs(tmp_dir, exist_ok=True)
-    basename = os.path.basename(orig_session_path).replace('.session', '')
-    safe_name = f"{basename}_worker_{worker_id}_{random.randint(1000, 9999)}.session"
-    safe_path = os.path.join(tmp_dir, safe_name)
+    real_path = orig_session_path if orig_session_path.endswith('.session') else f"{orig_session_path}.session"
+    backup_and_heal_session(real_path)
     try:
-        shutil.copy2(orig_session_path, safe_path)
-        # Also copy WAL and SHM if they exist
-        for ext in ['-wal', '-shm']:
-            src_ext = orig_session_path + ext
-            dst_ext = safe_path + ext
-            if os.path.exists(src_ext):
-                try:
-                    shutil.copy2(src_ext, dst_ext)
-                except Exception:
-                    pass
-
-        # Verify copy integrity
-        c = sqlite3.connect(safe_path, timeout=10.0)
+        c = sqlite3.connect(real_path, timeout=10.0)
         c.execute("PRAGMA journal_mode=WAL;")
         c.execute("PRAGMA busy_timeout=30000;")
-        c.execute("SELECT 1 FROM sqlite_master LIMIT 1;")
         c.close()
-        return safe_path
     except Exception:
-        # If safe copy fails or isn't a valid DB, use original directly
-        return orig_session_path
+        pass
+    return real_path
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
-    clean_target = target.strip()
+    clean_target = str(target).strip()
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
     peer = None
-    imported_ids_to_del = []
 
-    if clean_target.startswith('@') or (re.search(r'[a-zA-Z]', clean_target) and not clean_target.startswith('+')):
-        raw_uname = clean_target.lstrip('@')
+    # 判断目标类型：@开头或含英文字母视为 Telegram 用户名 ID，其余为手机号
+    is_username = clean_target.startswith('@') or (re.search(r'[a-zA-Z]', clean_target) and not clean_target.startswith('+'))
+
+    if is_username:
+        raw_uname = clean_target.lstrip('@').strip()
         try:
-            peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=8.0)
-        except Exception:
+            peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=15.0)
+        except FloodWaitError as fwe:
+            raise fwe
+        except PeerFloodError as pfe:
+            raise pfe
+        except Exception as e1:
+            err_msg1 = str(e1)
+            if 'FLOOD' in err_msg1.upper():
+                raise e1
             try:
-                peer = await asyncio.wait_for(client.get_entity(f"@{raw_uname}"), timeout=6.0)
-            except Exception as e:
-                raise Exception(f"无法找到 Telegram 用户名 @{raw_uname}: {str(e)}")
+                peer = await asyncio.wait_for(client.get_entity(f"@{raw_uname}"), timeout=12.0)
+            except FloodWaitError as fwe:
+                raise fwe
+            except PeerFloodError as pfe:
+                raise pfe
+            except Exception as e2:
+                err_msg2 = str(e2)
+                if 'FLOOD' in err_msg2.upper():
+                    raise e2
+                if 'No user has' in err_msg2 or 'USERNAME_NOT_OCCUPIED' in err_msg2 or 'Cannot find any entity' in err_msg2:
+                    raise Exception(f"目标用户名 @{raw_uname} 在 Telegram 官方不存在 (空号/未占用)")
+                raise Exception(f"无法找到 Telegram 用户名 @{raw_uname}: {err_msg2}")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
+        if len(digits) < 7:
+            raise Exception(f"目标手机号码不合法: {clean_target}")
+
         phone_variants = [digits]
         # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
-        # 很多巴西人早期注册 TG 时未加 9，或号商筛选时带/不带 9，双向探测可大幅提升识别命中率
         if digits.startswith('55'):
             if len(digits) == 13 and digits[4] == '9':
                 alt_12 = digits[:4] + digits[5:]
@@ -348,42 +350,48 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 if alt_13 not in phone_variants:
                     phone_variants.append(alt_13)
         elif len(digits) == 10 and not digits.startswith('1'):
-            # 🇺🇸 美国/加拿大 (+1) 智能探测：若为 10 位本地号码，自动补充 +1 国际区号变体
             us_variant = '1' + digits
             if us_variant not in phone_variants:
                 phone_variants.append(us_variant)
 
         user_found = None
 
-        # 逐个探测有效变体：使用独立随机 client_id 逐个精确导入，彻底消除批量导入冲突
+        # 1. 优先尝试本地会话缓存检索
         for pv in phone_variants:
-            p_str = f"+{pv}" if not str(pv).startswith('+') else str(pv)
+            p_str = f"+{pv}"
             try:
-                c_id = random.randint(1000000, 9999999)
-                contact = InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name="")
-                result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=8.0)
-                if result and getattr(result, 'users', None) and len(result.users) > 0:
-                    user_found = result.users[0]
-                    for u in result.users:
-                        imported_ids_to_del.append(u.id)
+                user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=3.0)
+                if user_found:
                     break
             except Exception:
                 pass
 
-            # 若未返回新用户，尝试从会话/实体缓存直接检索
-            if not user_found:
-                try:
-                    user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=4.0)
-                    if user_found:
-                        break
-                except Exception:
-                    pass
+        # 2. 若本地无缓存，通过 ImportContactsRequest 打包一次性导入双向变体探测
+        if not user_found:
+            contacts_list = []
+            for pv in phone_variants:
+                p_str = f"+{pv}"
+                c_id = random.randint(1000000, 9999999)
+                contacts_list.append(InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name=""))
 
-        # 兜底尝试：以纯数字整型查询本地会话缓存
+            try:
+                res_import = await asyncio.wait_for(client(ImportContactsRequest(contacts_list)), timeout=15.0)
+                if res_import and getattr(res_import, 'users', None) and len(res_import.users) > 0:
+                    user_found = res_import.users[0]
+            except FloodWaitError as fwe:
+                raise fwe
+            except PeerFloodError as pfe:
+                raise pfe
+            except Exception as imp_err:
+                imp_msg = str(imp_err)
+                if 'FLOOD' in imp_msg.upper():
+                    raise imp_err
+
+        # 3. 兜底整型 ID 会话检索
         if not user_found:
             for pv in phone_variants:
                 try:
-                    user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=3.0)
+                    user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=2.0)
                     if user_found:
                         break
                 except Exception:
@@ -399,27 +407,13 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
     # Stage 1: Send Greeting with realistic human typing action
     try:
-        # Simulate employee looking at dialog and typing message (1.0 ~ 1.8s)
         await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-        await asyncio.sleep(random.uniform(1.0, 1.8))
+        await asyncio.sleep(random.uniform(1.0, 1.6))
     except Exception:
         pass
 
-    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=10.0)
+    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=12.0)
     sent_id = getattr(sent, 'id', 1)
-
-    # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致第二阶段彩金会话句柄失效
-    try:
-        if imported_ids_to_del:
-            async def delayed_delete():
-                try:
-                    await asyncio.sleep(120.0)
-                    await client(DeleteContactsRequest(id=imported_ids_to_del))
-                except Exception:
-                    pass
-            asyncio.create_task(delayed_delete())
-    except Exception:
-        pass
 
     if logs is not None:
         logs.append(f"✨ [第1阶段问候已送达]: 目标 {target} (ID: {sent_id}) ➔ \"{message[:25]}...\"")
