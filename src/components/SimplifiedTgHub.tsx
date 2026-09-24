@@ -2761,7 +2761,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
             })
           });
           const data = await res.json();
-          if (data.success) {
+          if (data.success || (data.sentCount && data.sentCount > 0)) {
             telethonSuccessCount++;
             telethonLogs.push(`✅ [目标 ${item.target}] 使用发件号 [${activePhone}] 强发成功！推送文案: "${targetMessage.slice(0, 30)}..."`);
           } else {
@@ -3912,8 +3912,9 @@ if __name__ == "__main__":
               }
             }
             const sessionLabel = acc.sessionFile ? `凭证: ${acc.sessionFile}` : '集群协议号';
+            const isDelivered = Boolean(resData.success || (resData.sentCount && resData.sentCount > 0)) && !resData.output?.includes('❌ [消息未送达 Telegram]');
 
-            if (resData.success && !resData.output?.includes('❌ [消息未送达 Telegram]')) {
+            if (isDelivered) {
               runSuccessCount++;
               setCurrentBatchStats(prev => ({ ...prev, success: prev.success + 1 }));
               const networkBadge = networkRouteMode === 'direct' ? '⚡ 极速直连' : `🇧🇷 IP:${proxyIp}`;
@@ -3944,20 +3945,18 @@ if __name__ == "__main__":
               const isSessionConflict = (
                 resData.output?.includes('two different IP') || 
                 resData.output?.includes('AuthKeyDuplicated') ||
-                resData.output?.includes('双IP') ||
-                resData.output?.includes('并发冲突') ||
                 resData.error?.includes('two different IP') ||
                 resData.error?.includes('AuthKeyDuplicated')
               );
-              const isAuthKeyErr = isSessionConflict || (resData.output?.includes('AUTH_KEY_UNREGISTERED') || resData.output?.includes('SESSION_REVOKED') || resData.output?.includes('发件凭证失效'));
+              const isAuthKeyErr = !isSessionConflict && (resData.output?.includes('AUTH_KEY_UNREGISTERED') || resData.output?.includes('SESSION_REVOKED') || resData.output?.includes('发件凭证失效'));
               const isPeerFlood = (resData.output?.includes('PEER_FLOOD') || resData.output?.includes('FLOOD_WAIT'));
 
               const errDetail = isSessionConflict
-                ? `⚡ 发信号 +${acc.phone.replace(/^\+/, '')} 存在多IP/异地并发冲突 (已自动隔离该号，目标将由健康通道无缝接力)`
+                ? `⚡ 发信号 +${acc.phone.replace(/^\+/, '')} 瞬时避让守护雷达 (账号健康正常，目标已由其他通道无缝接力)`
                 : (isPeerFlood
-                    ? '⚠️ 触发 Telegram 官方限流等待 (PeerFlood/FloodWait)，已自动保护隔离'
+                    ? '⚠️ 触发 Telegram 官方限流等待 (PeerFlood/FloodWait)，通道暂歇'
                     : (isAuthKeyErr
-                        ? `🔑 发件号 +${acc.phone.replace(/^\+/, '')} Session 登录态失效或未登录 (已自动隔离，目标接力中)`
+                        ? `🔑 发件号 +${acc.phone.replace(/^\+/, '')} Session 登录态失效或未登录`
                         : (isUnregistered 
                             ? `🚫 目标 ${targetItem} 尚未在 Telegram 官方注册 (未开通Telegram/空号)`
                             : (isDbCorrupt
@@ -3970,8 +3969,8 @@ if __name__ == "__main__":
 
               // 🛡️ 智能接力机制：区分真正的封号/失效 vs 空号未注册 vs 通讯录导入暂未匹配
               const isNotRegistered = isUnregistered || /USERNAME_NOT_OCCUPIED|PhoneNotOccupied|PhoneNotRegistered|空号|尚未在 Telegram 官方注册/i.test(errDetail);
-              const isContactImportLimited = !isNotRegistered && /未能在本小号通讯录中匹配|通讯录导入|未匹配|未能定位|导入受限|无法定位|配额受限|隐私隐藏/i.test(errDetail);
-              const isTgRestricted = !isNotRegistered && !isContactImportLimited && /PeerFlood|USER_RESTRICTED|FloodWait|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败|two different IP|AuthKeyDuplicated|并发冲突|运行异常|已自动隔离/i.test(errDetail);
+              const isContactImportLimited = !isNotRegistered && !isSessionConflict && /未能在本小号通讯录中匹配|通讯录导入|未匹配|未能定位|导入受限|无法定位|配额受限|隐私隐藏/i.test(errDetail);
+              const isTgRestricted = !isNotRegistered && !isContactImportLimited && !isSessionConflict && !isPeerFlood && /USER_RESTRICTED|AuthKeyUnregistered|SessionRevoked|Deactivated|Banned|双向限制|未登录|凭证失效|鉴权失败/i.test(errDetail);
 
               if (isNotRegistered) {
                 // 目标未在 TG 官方注册：直接标记为无效数据并跳过，绝不在其他发信通道反复尝试，避免耗尽所有账号的导入配额！
@@ -3979,15 +3978,26 @@ if __name__ == "__main__":
                   ...prev,
                   `ℹ️ [云端清洗] 目标 (${targetItem}) 经 Telegram 官方核实未注册该平台 (空号/未开通)，系统已自动跳过！`
                 ]);
-              } else if (isContactImportLimited) {
-                // 单个目标在该发信号未匹配到：不熔断发信号！由智能无缝接力分配给其他通道重试发信
-                if ((task.retries || 0) < 2) {
+              } else if (isSessionConflict) {
+                // 瞬时连接冲突（后台守护雷达与发信避让）：绝不隔离账号！将目标转给下一个空闲通道无缝发出
+                if ((task.retries || 0) < 3) {
                   runFailCount = Math.max(0, runFailCount - 1);
                   setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
                   retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
                   setSimpleLogs(prev => [
                     ...prev,
-                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 导入目标 (${targetItem}) 受限，已自动转入其他通道接力！`
+                    `🔄 [无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 避让就绪，目标 (${targetItem}) 已自动转入其他通道接力！`
+                  ]);
+                }
+              } else if (isContactImportLimited || isPeerFlood) {
+                // 单个目标在该发信号未匹配到或临时限流：不隔离账号！由智能无缝接力分配给其他通道重试发信
+                if ((task.retries || 0) < 3) {
+                  runFailCount = Math.max(0, runFailCount - 1);
+                  setCurrentBatchStats(prev => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
+                  retryTasks.push({ ...task, retries: (task.retries || 0) + 1 });
+                  setSimpleLogs(prev => [
+                    ...prev,
+                    `🔄 [智能无缝接力] 通道 #${workerIdx + 1} (+${acc.phone.replace(/^\+/, '')}) 任务转出，目标 (${targetItem}) 已由其他健康通道接力！`
                   ]);
                 }
               } else if (isTgRestricted) {

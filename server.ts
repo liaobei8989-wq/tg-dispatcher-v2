@@ -1817,14 +1817,23 @@ async function startServer() {
       ? targets
       : ["+5571996984203"];
     
-    // Auto format pure digit international phone numbers, while preserving @username and t.me links
+    // Auto format pure digit international phone numbers, while preserving @username, numeric IDs and t.me links
     const targetList = rawTargets.map((t: any) => {
       let str = String(t).trim();
       if (str.startsWith('http://t.me/') || str.startsWith('https://t.me/') || str.startsWith('t.me/')) {
         str = '@' + str.split('t.me/').pop()?.replace(/\/$/, '')?.split('?')[0];
       }
-      if (/^\d{10,15}$/.test(str)) {
+      // If user specified id: 123456 or ID:123456, leave intact so Python parses as ID
+      if (/^(id|user|uid)[:=]/i.test(str)) {
+        return str;
+      }
+      // If it's a Brazilian phone number starting with 55 (12 or 13 digits) without +, add +
+      if (/^55\d{10,11}$/.test(str)) {
         return `+${str}`;
+      }
+      // If it starts with + already, keep it
+      if (str.startsWith('+')) {
+        return str;
       }
       return str;
     });
@@ -1875,13 +1884,15 @@ async function startServer() {
 
         const parsedPy = extractJson(pythonOutput);
         if (parsedPy && typeof parsedPy === 'object') {
+          const sentCount = parsedPy.sentCount !== undefined ? parsedPy.sentCount : (parsedPy.success ? targetList.length : 0);
+          const isSuccess = Boolean(parsedPy.success || sentCount > 0);
           return res.json({
-            success: Boolean(parsedPy.success),
-            code: parsedPy.success ? 0 : 1,
+            success: isSuccess,
+            code: isSuccess ? 0 : 1,
             targets: targetList,
             output: parsedPy.output || (parsedPy.logs ? parsedPy.logs.join('\n') : ''),
-            sentCount: parsedPy.sentCount !== undefined ? parsedPy.sentCount : (parsedPy.success ? targetList.length : 0),
-            failCount: parsedPy.failCount !== undefined ? parsedPy.failCount : (parsedPy.success ? 0 : targetList.length),
+            sentCount: sentCount,
+            failCount: parsedPy.failCount !== undefined ? parsedPy.failCount : (isSuccess ? 0 : targetList.length),
             results: parsedPy.results || [],
             engine: 'python_telethon_native',
             timestamp: new Date().toISOString()
@@ -1897,13 +1908,15 @@ async function startServer() {
             const jsonStr = (firstBrace !== -1 && lastBrace > firstBrace) ? trimmed.slice(firstBrace, lastBrace + 1) : trimmed;
             const parsedPy = JSON.parse(jsonStr);
             if (parsedPy && typeof parsedPy === 'object') {
+              const sentCount = parsedPy.sentCount || 0;
+              const isSuccess = Boolean(parsedPy.success || sentCount > 0);
               return res.json({
-                success: Boolean(parsedPy.success),
-                code: parsedPy.success ? 0 : 1,
+                success: isSuccess,
+                code: isSuccess ? 0 : 1,
                 targets: targetList,
                 output: parsedPy.output || (parsedPy.logs ? parsedPy.logs.join('\n') : '') || parsedPy.error || '',
-                sentCount: parsedPy.sentCount || 0,
-                failCount: parsedPy.failCount || targetList.length,
+                sentCount: sentCount,
+                failCount: parsedPy.failCount || (isSuccess ? 0 : targetList.length),
                 results: parsedPy.results || [],
                 engine: 'python_telethon_native',
                 timestamp: new Date().toISOString()

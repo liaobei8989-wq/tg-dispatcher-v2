@@ -1202,6 +1202,20 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
             sweep_task = asyncio.create_task(background_periodic_sweep())
             hb_task = asyncio.create_task(background_keep_alive())
 
+            # 🛡️ 群发互斥让出守护：若感知到调度器对此账号发起群发任务，秒级主动让出连接，彻底消除 AuthKeyDuplicated 异地冲突
+            async def watch_dispatcher_activity():
+                try:
+                    while client and client.is_connected():
+                        if is_session_locked_by_dispatcher(clean_digits):
+                            print(f"⏸️ [感知到群发任务启动] 账号 +{clean_digits} 调度器正挂载发信，守护进程主动断开让出连接...")
+                            await client.disconnect()
+                            break
+                        await asyncio.sleep(1.5)
+                except Exception:
+                    pass
+
+            lock_task = asyncio.create_task(watch_dispatcher_activity())
+
             try:
                 # 保持长连接常驻
                 await client.run_until_disconnected()
@@ -1209,6 +1223,7 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
             finally:
                 sweep_task.cancel()
                 hb_task.cancel()
+                lock_task.cancel()
 
         except Exception as err:
             retry_count += 1

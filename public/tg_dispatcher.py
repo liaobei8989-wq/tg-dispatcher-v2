@@ -30,7 +30,7 @@ from datetime import datetime
 
 try:
     from telethon import TelegramClient
-    from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
+    from telethon.tl.functions.contacts import ImportContactsRequest, GetContactsRequest, DeleteContactsRequest
     from telethon.tl.functions.messages import SetTypingRequest
     from telethon.tl.types import (
         InputPhoneContact,
@@ -356,7 +356,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
         user_found = None
 
-        # 1. 优先尝试本地会话缓存检索
+        # 1. 优先尝试本地会话实体缓存检索
         for pv in phone_variants:
             p_str = f"+{pv}"
             try:
@@ -366,32 +366,58 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             except Exception:
                 pass
 
-        # 2. 若本地无缓存，通过 ImportContactsRequest 打包一次性导入双向变体探测
+        # 2. 依次发起通讯录导入 (ImportContactsRequest) 探测有效变体
         if not user_found:
-            contacts_list = []
             for pv in phone_variants:
                 p_str = f"+{pv}"
                 c_id = random.randint(1000000, 9999999)
-                contacts_list.append(InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name=""))
+                contact = InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name="")
+                try:
+                    res_import = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=10.0)
+                    if res_import:
+                        if getattr(res_import, 'users', None) and len(res_import.users) > 0:
+                            user_found = res_import.users[0]
+                            break
+                        elif getattr(res_import, 'imported', None) and len(res_import.imported) > 0:
+                            try:
+                                user_found = await asyncio.wait_for(client.get_entity(res_import.imported[0].user_id), timeout=5.0)
+                                if user_found:
+                                    break
+                            except Exception:
+                                pass
+                except FloodWaitError as fwe:
+                    raise fwe
+                except PeerFloodError as pfe:
+                    raise pfe
+                except Exception as imp_err:
+                    imp_msg = str(imp_err)
+                    if 'FLOOD' in imp_msg.upper():
+                        raise imp_err
 
+        # 3. 若号码此前已导入过该小号通讯录 (Telegram API 在已存在联系人时 users 为空)，从全量联系人精准匹配
+        if not user_found:
             try:
-                res_import = await asyncio.wait_for(client(ImportContactsRequest(contacts_list)), timeout=15.0)
-                if res_import and getattr(res_import, 'users', None) and len(res_import.users) > 0:
-                    user_found = res_import.users[0]
-            except FloodWaitError as fwe:
-                raise fwe
-            except PeerFloodError as pfe:
-                raise pfe
-            except Exception as imp_err:
-                imp_msg = str(imp_err)
-                if 'FLOOD' in imp_msg.upper():
-                    raise imp_err
+                all_c = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=8.0)
+                if all_c and getattr(all_c, 'users', None):
+                    for u in all_c.users:
+                        u_ph = getattr(u, 'phone', '') or ''
+                        if u_ph:
+                            clean_u = re.sub(r'[^0-9]', '', u_ph)
+                            for pv in phone_variants:
+                                if clean_u == pv or clean_u.endswith(pv) or pv.endswith(clean_u):
+                                    user_found = u
+                                    break
+                        if user_found:
+                            break
+            except Exception:
+                pass
 
-        # 3. 兜底整型 ID 会话检索
+        # 4. 再次尝试通过国际格式检索 (通讯录已在内存中对齐)
         if not user_found:
             for pv in phone_variants:
+                p_str = f"+{pv}"
                 try:
-                    user_found = await asyncio.wait_for(client.get_entity(int(pv)), timeout=2.0)
+                    user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=3.0)
                     if user_found:
                         break
                 except Exception:
