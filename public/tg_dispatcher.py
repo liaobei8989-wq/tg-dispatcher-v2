@@ -355,11 +355,12 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
 
         user_found = None
 
-        # 逐个探测有效变体：使用官方标准 client_id=0，逐个精确导入，彻底消除批量导入冲突
+        # 逐个探测有效变体：使用独立随机 client_id 逐个精确导入，彻底消除批量导入冲突
         for pv in phone_variants:
             p_str = f"+{pv}" if not str(pv).startswith('+') else str(pv)
             try:
-                contact = InputPhoneContact(client_id=0, phone=p_str, first_name="Cliente", last_name="")
+                c_id = random.randint(1000000, 9999999)
+                contact = InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name="")
                 result = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=8.0)
                 if result and getattr(result, 'users', None) and len(result.users) > 0:
                     user_found = result.users[0]
@@ -408,14 +409,17 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     sent_id = getattr(sent, 'id', 1)
 
     # 消息送达后稍作停留再清理通讯录临时卡片，防止过快删除导致第二阶段彩金会话句柄失效
-    if imported_ids_to_del:
-        async def delayed_delete():
-            try:
-                await asyncio.sleep(120.0)
-                await client(DeleteContactsRequest(id=imported_ids_to_del))
-            except Exception:
-                pass
-        asyncio.create_task(delayed_delete())
+    try:
+        if imported_ids_to_del:
+            async def delayed_delete():
+                try:
+                    await asyncio.sleep(120.0)
+                    await client(DeleteContactsRequest(id=imported_ids_to_del))
+                except Exception:
+                    pass
+            asyncio.create_task(delayed_delete())
+    except Exception:
+        pass
 
     if logs is not None:
         logs.append(f"✨ [第1阶段问候已送达]: 目标 {target} (ID: {sent_id}) ➔ \"{message[:25]}...\"")
