@@ -322,12 +322,17 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
     peer = None
+    imported_ids_to_del = []
 
-    if clean_target.startswith('@'):
+    if clean_target.startswith('@') or (re.search(r'[a-zA-Z]', clean_target) and not clean_target.startswith('+')):
+        raw_uname = clean_target.lstrip('@')
         try:
-            peer = await asyncio.wait_for(client.get_entity(clean_target), timeout=8.0)
-        except Exception as e:
-            raise Exception(f"无法找到 Telegram 用户名 {clean_target}: {str(e)}")
+            peer = await asyncio.wait_for(client.get_entity(raw_uname), timeout=8.0)
+        except Exception:
+            try:
+                peer = await asyncio.wait_for(client.get_entity(f"@{raw_uname}"), timeout=6.0)
+            except Exception as e:
+                raise Exception(f"无法找到 Telegram 用户名 @{raw_uname}: {str(e)}")
     else:
         digits = re.sub(r'[^0-9]', '', clean_target)
         phone_variants = [digits]
@@ -348,7 +353,6 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             if us_variant not in phone_variants:
                 phone_variants.append(us_variant)
 
-        imported_ids_to_del = []
         user_found = None
 
         # 逐个探测有效变体：使用官方标准 client_id=0，逐个精确导入，彻底消除批量导入冲突
