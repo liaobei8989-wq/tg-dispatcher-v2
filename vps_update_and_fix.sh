@@ -24,7 +24,8 @@ done
 # 2. 从 GitHub (main) 拉取最新源码 (仅更新代码文件，严禁覆盖真实 session)
 echo "📥 正在从 GitHub (main) 拉取最新源码..."
 git fetch origin main
-git checkout origin/main -- server.ts tg_dispatcher.py tg_auto_responder.py tdata_converter.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
+git checkout origin/main -- server.ts tg_dispatcher.py public/tg_dispatcher.py update_all.py tg_auto_responder.py tdata_converter.py src/ package.json dist/ index.html vite.config.ts proxies.txt public/proxies.txt account_proxies.json vps_update_and_fix.sh 2>/dev/null || git reset --hard origin/main
+cp -f tg_dispatcher.py public/tg_dispatcher.py 2>/dev/null || true
 
 # 安装/更新 tdata 转换引擎与 Telethon 自动追发核心依赖 (opentele / telethon / pysocks / aiofiles)
 echo "📦 正在校验并安装 tdata 与 24h 自动追发雷达依赖 (opentele / telethon / pysocks)..."
