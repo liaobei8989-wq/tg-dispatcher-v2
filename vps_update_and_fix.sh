@@ -125,14 +125,10 @@ npm run build
 echo "🔄 正在重启 PM2 服务..."
 pm2 restart all || true
 
-# 5. 守护启动 24h Telegram 客户回复自动追发守护进程
+# 5. 守护启动 24h Telegram 客户回复自动追发守护进程 (彻底更新代码并加载最新监听引擎)
 echo "🤖 正在启动/重载 24h 客户私聊回复自动追发雷达 (tg_auto_responder.py)..."
-if pm2 describe tg-responder > /dev/null 2>&1; then
-    pm2 restart tg-responder || true
-else
-    pm2 start tg_auto_responder.py --name "tg-responder" --interpreter python3 || true
-fi
-
+pm2 delete tg-responder 2>/dev/null || true
+pm2 start tg_auto_responder.py --name "tg-responder" --interpreter python3 --cwd "$(pwd)" || python3 tg_auto_responder.py &
 pm2 save || true
 
 echo "=================================================="

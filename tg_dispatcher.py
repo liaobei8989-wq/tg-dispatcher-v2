@@ -399,12 +399,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             # 步骤 2: 发起通讯录导入 (ImportContactsRequest) 探测有效变体
             if not user_found:
                 for pv in phone_variants:
-                    c_id = random.randint(1000000, 9999999)
-                    contact_tag = f"TG_{pv[-8:]}"
-                    for p_try in [f"+{pv}", pv]:
-                        contact = InputPhoneContact(client_id=c_id, phone=p_try, first_name=contact_tag, last_name="")
+                    c_id = random.randint(10000000, 99999999)
+                    contact_tag = f"C_{pv[-6:]}"
+                    # 优先纯数字 E.164 格式，次选带 + 格式，每次赋予独立 client_id 防止 TG 服务端幂等忽略
+                    for p_try in [pv, f"+{pv}"]:
+                        c_sub_id = random.randint(10000000, 99999999)
+                        contact = InputPhoneContact(client_id=c_sub_id, phone=p_try, first_name=contact_tag, last_name="")
                         try:
-                            res_import = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=8.0)
+                            res_import = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=6.0)
                             if res_import:
                                 if getattr(res_import, 'users', None) and len(res_import.users) > 0:
                                     user_found = res_import.users[0]
@@ -430,7 +432,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
             # 步骤 3: 若此前已导入过该小号通讯录，从全量联系人精准匹配 (兼容手机号被隐私隐藏场景)
             if not user_found:
                 try:
-                    all_c = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=8.0)
+                    all_c = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=6.0)
                     if all_c and getattr(all_c, 'users', None):
                         for u in all_c.users:
                             u_ph = getattr(u, 'phone', '') or ''
@@ -441,7 +443,7 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                                     if clean_u == pv or clean_u.endswith(pv) or pv.endswith(clean_u):
                                         user_found = u
                                         break
-                                if f"TG_{pv[-8:]}" in u_fn or pv[-8:] in u_fn:
+                                if f"C_{pv[-6:]}" in u_fn or pv[-6:] in u_fn:
                                     user_found = u
                                     break
                             if user_found:
@@ -463,9 +465,14 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                         break
 
             if not user_found:
-                raise Exception(f"目标手机号/ID {clean_target} 未注册 Telegram 或开启了防打扰隐私(仅联系人可见)")
+                raise Exception(f"目标手机号/ID {clean_target} 未在 Telegram 注册或开启了仅联系人防打扰")
 
             peer = user_found
+            # 释放 Telegram 官方通讯录上限空间 (杜绝 CONTACT_REQ_LIMIT 限制)
+            try:
+                await client(DeleteContactsRequest(id=[user_found.id]))
+            except Exception:
+                pass
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
@@ -668,6 +675,9 @@ async def run_worker(
     except Exception:
         pass
 
+    # 预留 0.35 秒让后台监听守护进程感知锁文件并优雅断开旧连接，彻底消除两地异地 AuthKeyDuplicated 冲突
+    await asyncio.sleep(0.35)
+
     # ⚡ 并发错峰平滑进场 (0.2s ~ 0.5s 错峰)，避免瞬间几十个 Worker 并发打满代理端口造成拥塞
     initial_stagger = min(6.0, (worker_id - 1) * 0.25)
     if initial_stagger > 0:
@@ -789,6 +799,16 @@ async def run_worker(
         me = await client.get_me()
         me_name = f"{getattr(me, 'first_name', '') or ''}".strip()
         worker_logs.append(f"✅ [Worker #{worker_id} 在线] 协议号: +{getattr(me, 'phone', clean_digits)} ({me_name})")
+
+        # 自动释放账号通讯录上限空间：清理残留联系人，防止 CONTACT_REQ_LIMIT 导致新手机号导入失败
+        try:
+            cur_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
+            if cur_contacts and getattr(cur_contacts, 'users', None) and len(cur_contacts.users) > 50:
+                user_ids_to_del = [u.id for u in cur_contacts.users[:100]]
+                await client(DeleteContactsRequest(id=user_ids_to_del))
+                worker_logs.append(f"🧹 [通讯录配额自愈] 协议号 +{clean_digits} 清理了 {len(user_ids_to_del)} 个旧联系人，释放导入配额")
+        except Exception:
+            pass
 
         # 👤 Worker 专属员工性格档案 (模拟真人行为习惯：有的早到上班、有的稍迟进场、打字手速不同、喝水频率不同)
         try:

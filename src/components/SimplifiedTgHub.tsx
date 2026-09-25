@@ -3725,7 +3725,7 @@ if __name__ == "__main__":
       let lastErrorDetail = '';
       let nextTaskQueueIndex = currentIndex;
       let activeHttpSendingCount = 0;
-      const MAX_ACTIVE_HTTP_SENDERS = 3; // 🛡️ 限制最多 3 个通道同时向云端握手发信，大幅降低代理并发压力，彻底杜绝握手超时与并发踩踏
+      const MAX_ACTIVE_HTTP_SENDERS = tgSendSpeedMode === 'turbo' ? 16 : (tgSendSpeedMode === 'balanced' ? 8 : 4); // 🚀 动态并发管道：极速挡允许 16 通道真并发，大幅提高出信速度
 
       // 🛡️ 全局绝对去重锁：单批次内每个目标只允许分配给一个账号，绝不同时或先后重复发信！
       const dispatchedTargetsSet = new Set<string>();
@@ -3784,7 +3784,7 @@ if __name__ == "__main__":
       // 启动所有账号并发 Worker (模拟任意 N 位员工早鸟、正点、稍后陆续到岗，绝不同秒并发)
       const workerPromises = accountTracker.map(async (acc, workerIdx) => {
         const isMicroBatch = rawLines.length <= 5;
-        const actualArrivalDelay = isMicroBatch ? (workerIdx % 5) * 350 : acc.arrivalDelayMs;
+        const actualArrivalDelay = (isMicroBatch || tgSendSpeedMode === 'turbo') ? (workerIdx % 6) * 120 : acc.arrivalDelayMs;
         const staggerSec = (actualArrivalDelay / 1000).toFixed(1);
         if (actualArrivalDelay > 1500) {
           setSimpleLogs(prev => [
@@ -3829,10 +3829,10 @@ if __name__ == "__main__":
 
           // 拟人真实打字中 (Typing) 动作：根据发信挡位自适应轻量拟人
           const typingDurationMs = tgSendSpeedMode === 'turbo'
-            ? (Math.floor(Math.random() * 500) + 600)
+            ? (Math.floor(Math.random() * 200) + 250)
             : (tgSendSpeedMode === 'balanced'
-                ? (Math.floor(Math.random() * 800) + 1200)
-                : (Math.floor(Math.random() * 1000) + 1800));
+                ? (Math.floor(Math.random() * 500) + 700)
+                : (Math.floor(Math.random() * 800) + 1200));
           const typingDurationSec = (typingDurationMs / 1000).toFixed(1);
 
           setSimpleLogs(prev => [
@@ -4070,11 +4070,11 @@ if __name__ == "__main__":
             minBaseSec = 20.0;
             maxBaseSec = 35.0;
           } else if (tgSendSpeedMode === 'balanced') {
-            minBaseSec = 8.0;
-            maxBaseSec = 16.0;
+            minBaseSec = 6.0;
+            maxBaseSec = 12.0;
           } else if (tgSendSpeedMode === 'turbo') {
-            minBaseSec = 2.0;
-            maxBaseSec = 6.0;
+            minBaseSec = 1.0;
+            maxBaseSec = 2.5;
           } else if (tgSendSpeedMode === 'custom') {
             minBaseSec = Math.max(0.5, customSpeedMin);
             maxBaseSec = Math.max(minBaseSec + 0.5, customSpeedMax);
@@ -7887,12 +7887,33 @@ if __name__ == "__main__":
                         <Clock className="w-3.5 h-3.5 text-amber-400" /> ⏰ 定时预约 (印尼➔巴西)
                       </button>
 
-                      <button
-                        onClick={handleStartMassSend}
-                        className="px-4 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-400 hover:from-amber-400 hover:to-teal-300 text-slate-950 shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-slate-950" /> 一键群发 (开始跑)
-                      </button>
+                      {isCampaignRunning ? (
+                        <button
+                          type="button"
+                          onClick={handleStopCampaign}
+                          className="px-4 py-1.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/60 flex items-center gap-1.5 cursor-pointer animate-pulse active:scale-95 transition-all"
+                          title="立即停止当前群发任务"
+                        >
+                          <Square className="w-3.5 h-3.5 fill-white" /> 🛑 紧急停止群发
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleStopCampaign}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-300 border border-slate-700/80 hover:border-rose-600/50 flex items-center gap-1 transition-all cursor-pointer"
+                            title="终止所有后台残留进程并复位队列"
+                          >
+                            <Square className="w-3 h-3 text-rose-400" /> 🛑 停止/复位
+                          </button>
+                          <button
+                            onClick={handleStartMassSend}
+                            className="px-4 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-400 hover:from-amber-400 hover:to-teal-300 text-slate-950 shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-slate-950" /> 一键群发 (开始跑)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -9104,12 +9125,22 @@ if __name__ == "__main__":
                   >
                     取消
                   </button>
-                  <button
-                    onClick={handleStartMassSend}
-                    className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-400 hover:from-amber-400 hover:to-teal-300 text-slate-950 shadow-xl shadow-amber-500/20 flex items-center gap-2 transition-all hover:scale-[1.02]"
-                  >
-                    <Play className="w-4 h-4 fill-slate-950" /> 🚀 启动云端后台一键群发 (自动挂载 1号1独立IP池)
-                  </button>
+                  {isCampaignRunning ? (
+                    <button
+                      type="button"
+                      onClick={handleStopCampaign}
+                      className="px-6 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-500 text-white shadow-xl shadow-rose-950/60 flex items-center gap-2 animate-pulse cursor-pointer active:scale-95"
+                    >
+                      <Square className="w-4 h-4 fill-white" /> 🛑 立即紧急停止群发 (强制熔断)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleStartMassSend}
+                      className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-400 hover:from-amber-400 hover:to-teal-300 text-slate-950 shadow-xl shadow-amber-500/20 flex items-center gap-2 transition-all hover:scale-[1.02]"
+                    >
+                      <Play className="w-4 h-4 fill-slate-950" /> 🚀 启动云端后台一键群发 (自动挂载 1号1独立IP池)
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -9119,13 +9150,13 @@ if __name__ == "__main__":
 
       {/* REAL-TIME LOG DISPLAY BOX (日志在下面一个显示框) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/80 pb-3 gap-2">
           <div className="flex items-center space-x-2">
             <span className={`w-2.5 h-2.5 rounded-full ${isCampaignRunning ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`}></span>
             <h3 className="text-sm font-black text-white flex items-center gap-2">
               实时运行日志显示框
             </h3>
-            <span className="text-xs text-slate-500 font-mono">
+            <span className="text-xs text-slate-400 font-mono">
               ({isCampaignRunning ? '任务正在高速跑...' : '系统准备就绪'})
             </span>
             {isCampaignRunning && currentBatchStats.total > 0 && (
@@ -9135,7 +9166,27 @@ if __name__ == "__main__":
             )}
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {isCampaignRunning ? (
+              <button
+                type="button"
+                onClick={handleStopCampaign}
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-rose-950/60 cursor-pointer active:scale-95 transition-all animate-pulse"
+                title="立即紧急停止跑件 (终止并发与云端所有发信进程)"
+              >
+                <Square className="w-3.5 h-3.5 fill-white" /> 🛑 紧急停止跑件
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStopCampaign}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700/80 hover:border-rose-700/50 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                title="终止所有底层群发子进程并复位系统状态"
+              >
+                <Square className="w-3 h-3 text-rose-400" /> 🛑 停止/复位
+              </button>
+            )}
+
             <a
               href="/api/download-vps-update"
               download="dist_update.tar.gz"
@@ -9152,17 +9203,6 @@ if __name__ == "__main__":
             >
               <FileText className="w-3.5 h-3.5" /> 导出终端 Python 脚本 (.py)
             </button>
-
-            {isCampaignRunning && (
-              <button
-                type="button"
-                onClick={handleStopCampaign}
-                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 text-xs font-black flex items-center gap-1.5 shadow-md shadow-rose-950/60 cursor-pointer active:scale-95 transition-all"
-                title="立即紧急停止跑件 (终止并发与云端所有发信进程)"
-              >
-                <Square className="w-3.5 h-3.5 fill-white" /> 🛑 紧急停止跑件
-              </button>
-            )}
 
             <button
               onClick={() => setSimpleLogs(['已清空系统日志 display'])}

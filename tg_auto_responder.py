@@ -742,13 +742,13 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
                 rand_template = random.choice(SECOND_MESSAGE_TEMPLATES)
             print(f"🧠 [意图识别引擎]: 判定意图为【{matched_intent}】，已匹配精准真人解答话术")
 
-        # 拟人延时与正在输入模拟 (防封核心：绝不在对方说话后 2 秒内秒回，增加真人阅读与打字感)
-        pre_delay = random.uniform(6.0, 12.0)
+        # 拟人延时与正在输入模拟 (防封核心：1.8~3.5s 自然阅读感，拒绝长时间傻等)
+        pre_delay = random.uniform(1.8, 3.5)
         await asyncio.sleep(pre_delay)
         try:
             typing_peer = peer or (await event.get_input_chat() if (event and hasattr(event, 'get_input_chat')) else None) or target_peer
             await client(SetTypingRequest(peer=typing_peer, action=SendMessageTypingAction()))
-            await asyncio.sleep(random.uniform(2.5, 5.0))
+            await asyncio.sleep(random.uniform(1.2, 2.2))
         except Exception:
             pass
         
@@ -758,7 +758,21 @@ async def process_and_reply_customer(client, session_basename, chat_id, incoming
             second_msg = second_msg.replace("{URL}", rand_url)
         
         # 目标 Peer 寻址：优先使用完整 InputPeer (含 access_hash) 或 event 原生对象，确保 100% 成功送达
-        target_peer = peer or chat_id
+        target_peer = peer
+        if not target_peer and event is not None:
+            try:
+                target_peer = await event.get_input_chat()
+            except Exception:
+                pass
+        if not target_peer:
+            try:
+                target_peer = await client.get_input_entity(chat_id)
+            except Exception:
+                try:
+                    target_peer = await client.get_entity(chat_id)
+                except Exception:
+                    target_peer = chat_id
+
         try:
             # 🛡️ 强制 link_preview=False: 彻底禁止 Telegram 服务器爬取敏感博彩/推广 URL，防止触发官方反垃圾风控封号
             if event is not None and hasattr(event, 'respond'):
@@ -983,6 +997,33 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         pass
                     client = None
 
+            # 3. 终极自愈保障：若专属和备用代理不可达，自动无缝切入直连，确保 24h 自动追发雷达 100% 持续在线！
+            if not connected_ok:
+                try:
+                    client = TelegramClient(
+                        session_prefix,
+                        api_id,
+                        api_hash,
+                        proxy=None,
+                        device_model=device_model,
+                        system_version=system_version,
+                        app_version=app_version,
+                        connection_retries=2,
+                        retry_delay=1,
+                        auto_reconnect=True,
+                        timeout=10
+                    )
+                    await asyncio.wait_for(client.connect(), timeout=10.0)
+                    connected_ok = True
+                    print(f"⚡ [直连降级保障] 账号 +{clean_digits} 代理池暂未连通，已切换直连专线确保追发雷达持续在线！")
+                except Exception:
+                    try:
+                        if client:
+                            await client.disconnect()
+                    except Exception:
+                        pass
+                    client = None
+
             if not connected_ok:
                 print(f"🛑 账号 +{clean_digits} 连接暂未建立，休眠 10 秒后重试...")
                 await asyncio.sleep(10)
@@ -1080,7 +1121,8 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                                         username=c_uname,
                                         phone=c_phone,
                                         first_name=c_fn,
-                                        last_name=c_ln
+                                        last_name=c_ln,
+                                        peer=d.entity
                                     )
             except Exception as sweep_err:
                 print(f"ℹ️ [初始离线扫尾提示]: {sweep_err}")
@@ -1117,7 +1159,9 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                         username=uname,
                         phone=uphone,
                         first_name=fn,
-                        last_name=ln
+                        last_name=ln,
+                        event=event,
+                        peer=sender or getattr(event.message, 'peer_id', None) or event.chat_id
                     )
                 except Exception as e:
                     print(f"⚠️ [事件分发异常]: {e}")
@@ -1174,7 +1218,8 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                                                 username=c_uname,
                                                 phone=c_phone,
                                                 first_name=c_fn,
-                                                last_name=c_ln
+                                                last_name=c_ln,
+                                                peer=d.entity
                                             )
                     except asyncio.CancelledError:
                         break
@@ -1210,7 +1255,7 @@ async def start_account_listener(session_path: str, scan_once: bool = False):
                             print(f"⏸️ [感知到群发任务启动] 账号 +{clean_digits} 调度器正挂载发信，守护进程主动断开让出连接...")
                             await client.disconnect()
                             break
-                        await asyncio.sleep(1.5)
+                        await asyncio.sleep(0.25)
                 except Exception:
                     pass
 

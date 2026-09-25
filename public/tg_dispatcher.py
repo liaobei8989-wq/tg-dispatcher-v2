@@ -301,12 +301,19 @@ def prepare_safe_isolated_session(orig_session_path: str, worker_id: int) -> str
 
 async def send_single_target(client: TelegramClient, target: str, message: str, second_msg: str = "", third_msg: str = "", enable_third: bool = True, wait_reply: bool = False, third_delay_min: float = 3.5, third_delay_max: float = 6.5, logs: list = None):
     clean_target = str(target).strip()
+    # 0. 规范化目标格式
     if clean_target.startswith(('http://t.me/', 'https://t.me/', 't.me/')):
         clean_target = '@' + clean_target.split('t.me/')[-1].strip('/').split('?')[0]
+    elif clean_target.startswith('tg://user?id='):
+        clean_target = clean_target.split('tg://user?id=')[-1].strip()
+    
+    # 支持用户前缀标记：如 "id: 123456", "ID:123456", "user: 123456"
+    clean_target = re.sub(r'^(id|user|uid)\s*[:=]\s*', '', clean_target, flags=re.IGNORECASE).strip()
     peer = None
 
-    # 判断目标类型：@开头或含英文字母视为 Telegram 用户名 ID，其余为手机号
-    is_username = clean_target.startswith('@') or (re.search(r'[a-zA-Z]', clean_target) and not clean_target.startswith('+'))
+    # 判断目标类型：
+    # 1. 明确的用户名：含 @ 或以英文字母开头且包含字母数字下划线
+    is_username = clean_target.startswith('@') or (re.search(r'^[a-zA-Z]', clean_target) and re.search(r'[a-zA-Z0-9_]', clean_target))
 
     if is_username:
         raw_uname = clean_target.lstrip('@').strip()
@@ -334,111 +341,150 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                     raise Exception(f"目标用户名 @{raw_uname} 在 Telegram 官方不存在 (空号/未占用)")
                 raise Exception(f"无法找到 Telegram 用户名 @{raw_uname}: {err_msg2}")
     else:
+        # 可能是纯数字 Telegram 用户 ID 或 手机号
         digits = re.sub(r'[^0-9]', '', clean_target)
-        if len(digits) < 7:
-            raise Exception(f"目标手机号码不合法: {clean_target}")
+        if not digits:
+            raise Exception(f"目标参数无效: {clean_target}")
 
-        phone_variants = [digits]
-        # 🇧🇷 巴西手机号历史升位机制：13位(含9) 与 12位(不含9) 双向自适应探测
-        if digits.startswith('55'):
-            if len(digits) == 13 and digits[4] == '9':
-                alt_12 = digits[:4] + digits[5:]
-                if alt_12 not in phone_variants:
-                    phone_variants.append(alt_12)
-            elif len(digits) == 12:
-                alt_13 = digits[:4] + '9' + digits[4:]
-                if alt_13 not in phone_variants:
-                    phone_variants.append(alt_13)
-        elif len(digits) == 10 and not digits.startswith('1'):
-            us_variant = '1' + digits
-            if us_variant not in phone_variants:
-                phone_variants.append(us_variant)
-
-        user_found = None
-
-        # 1. 优先尝试本地会话实体缓存检索
-        for pv in phone_variants:
-            p_str = f"+{pv}"
+        # 尝试 1: 若未显式带 + 号且长度在 5~11 位，优先尝试作为 Telegram 用户 ID 解析 (支持历史会话缓存直推)
+        if not clean_target.startswith('+') and 5 <= len(digits) <= 11:
             try:
-                user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=3.0)
-                if user_found:
-                    break
+                peer = await asyncio.wait_for(client.get_entity(int(digits)), timeout=2.5)
             except Exception:
-                pass
+                peer = None
 
-        # 2. 依次发起通讯录导入 (ImportContactsRequest) 探测有效变体
-        if not user_found:
+        if not peer:
+            # 作为手机号码进行智能变体生成与通讯录导入
+            if len(digits) < 7:
+                raise Exception(f"目标手机号码不合法: {clean_target}")
+
+            phone_variants = [digits]
+            # 🇧🇷 巴西手机号自适应探测：
+            # 1. 若为10或11位未带巴西国码55的手机号，自动补齐55
+            if not digits.startswith('55'):
+                if len(digits) in (10, 11):
+                    phone_variants.append(f"55{digits}")
+                    if len(digits) == 11 and digits[2] == '9':
+                        phone_variants.append(f"55{digits[:2]}{digits[3:]}")
+            else:
+                # 2. 已带55的巴西升位转换 (13位含9 与 12位不含9)
+                if len(digits) == 13 and digits[4] == '9':
+                    alt_12 = digits[:4] + digits[5:]
+                    if alt_12 not in phone_variants:
+                        phone_variants.append(alt_12)
+                elif len(digits) == 12:
+                    alt_13 = digits[:4] + '9' + digits[4:]
+                    if alt_13 not in phone_variants:
+                        phone_variants.append(alt_13)
+            # 🇺🇸 美国号码容错 (10位补1)
+            if len(digits) == 10 and not digits.startswith(('1', '55')):
+                us_variant = '1' + digits
+                if us_variant not in phone_variants:
+                    phone_variants.append(us_variant)
+
+            user_found = None
+
+            # 步骤 1: 优先尝试本地会话实体缓存检索 (+号与纯数字)
             for pv in phone_variants:
-                p_str = f"+{pv}"
-                c_id = random.randint(1000000, 9999999)
-                contact = InputPhoneContact(client_id=c_id, phone=p_str, first_name="Cliente", last_name="")
-                try:
-                    res_import = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=10.0)
-                    if res_import:
-                        if getattr(res_import, 'users', None) and len(res_import.users) > 0:
-                            user_found = res_import.users[0]
-                            break
-                        elif getattr(res_import, 'imported', None) and len(res_import.imported) > 0:
-                            try:
-                                user_found = await asyncio.wait_for(client.get_entity(res_import.imported[0].user_id), timeout=5.0)
-                                if user_found:
-                                    break
-                            except Exception:
-                                pass
-                except FloodWaitError as fwe:
-                    raise fwe
-                except PeerFloodError as pfe:
-                    raise pfe
-                except Exception as imp_err:
-                    imp_msg = str(imp_err)
-                    if 'FLOOD' in imp_msg.upper():
-                        raise imp_err
-
-        # 3. 若号码此前已导入过该小号通讯录 (Telegram API 在已存在联系人时 users 为空)，从全量联系人精准匹配
-        if not user_found:
-            try:
-                all_c = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=8.0)
-                if all_c and getattr(all_c, 'users', None):
-                    for u in all_c.users:
-                        u_ph = getattr(u, 'phone', '') or ''
-                        if u_ph:
-                            clean_u = re.sub(r'[^0-9]', '', u_ph)
-                            for pv in phone_variants:
-                                if clean_u == pv or clean_u.endswith(pv) or pv.endswith(clean_u):
-                                    user_found = u
-                                    break
+                for p_str in [f"+{pv}", pv]:
+                    try:
+                        user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=2.5)
                         if user_found:
                             break
-            except Exception:
-                pass
+                    except Exception:
+                        pass
+                if user_found:
+                    break
 
-        # 4. 再次尝试通过国际格式检索 (通讯录已在内存中对齐)
-        if not user_found:
-            for pv in phone_variants:
-                p_str = f"+{pv}"
-                try:
-                    user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=3.0)
+            # 步骤 2: 发起通讯录导入 (ImportContactsRequest) 探测有效变体
+            if not user_found:
+                for pv in phone_variants:
+                    c_id = random.randint(10000000, 99999999)
+                    contact_tag = f"C_{pv[-6:]}"
+                    # 优先纯数字 E.164 格式，次选带 + 格式，每次赋予独立 client_id 防止 TG 服务端幂等忽略
+                    for p_try in [pv, f"+{pv}"]:
+                        c_sub_id = random.randint(10000000, 99999999)
+                        contact = InputPhoneContact(client_id=c_sub_id, phone=p_try, first_name=contact_tag, last_name="")
+                        try:
+                            res_import = await asyncio.wait_for(client(ImportContactsRequest([contact])), timeout=6.0)
+                            if res_import:
+                                if getattr(res_import, 'users', None) and len(res_import.users) > 0:
+                                    user_found = res_import.users[0]
+                                    break
+                                elif getattr(res_import, 'imported', None) and len(res_import.imported) > 0:
+                                    try:
+                                        user_found = await asyncio.wait_for(client.get_entity(res_import.imported[0].user_id), timeout=4.0)
+                                        if user_found:
+                                            break
+                                    except Exception:
+                                        pass
+                        except FloodWaitError as fwe:
+                            raise fwe
+                        except PeerFloodError as pfe:
+                            raise pfe
+                        except Exception as imp_err:
+                            imp_msg = str(imp_err)
+                            if 'FLOOD' in imp_msg.upper():
+                                raise imp_err
                     if user_found:
                         break
+
+            # 步骤 3: 若此前已导入过该小号通讯录，从全量联系人精准匹配 (兼容手机号被隐私隐藏场景)
+            if not user_found:
+                try:
+                    all_c = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=6.0)
+                    if all_c and getattr(all_c, 'users', None):
+                        for u in all_c.users:
+                            u_ph = getattr(u, 'phone', '') or ''
+                            u_fn = getattr(u, 'first_name', '') or ''
+                            for pv in phone_variants:
+                                if u_ph:
+                                    clean_u = re.sub(r'[^0-9]', '', u_ph)
+                                    if clean_u == pv or clean_u.endswith(pv) or pv.endswith(clean_u):
+                                        user_found = u
+                                        break
+                                if f"C_{pv[-6:]}" in u_fn or pv[-6:] in u_fn:
+                                    user_found = u
+                                    break
+                            if user_found:
+                                break
                 except Exception:
                     pass
 
-        if not user_found:
-            raise Exception(f"目标手机号 +{digits} 未注册 Telegram 或开启了防打扰隐私(仅联系人可见)")
+            # 步骤 4: 再次尝试通过国际格式检索 (通讯录缓存对齐后)
+            if not user_found:
+                for pv in phone_variants:
+                    for p_str in [f"+{pv}", pv]:
+                        try:
+                            user_found = await asyncio.wait_for(client.get_entity(p_str), timeout=2.5)
+                            if user_found:
+                                break
+                        except Exception:
+                            pass
+                    if user_found:
+                        break
 
-        peer = user_found
+            if not user_found:
+                raise Exception(f"目标手机号/ID {clean_target} 未在 Telegram 注册或开启了仅联系人防打扰")
+
+            peer = user_found
+            # 释放 Telegram 官方通讯录上限空间 (杜绝 CONTACT_REQ_LIMIT 限制)
+            try:
+                await client(DeleteContactsRequest(id=[user_found.id]))
+            except Exception:
+                pass
 
     if not peer:
         raise Exception(f"无法定位目标对象: {target}")
 
-    # Stage 1: Send Greeting with realistic human typing action
+    # Stage 1: 拟人打字中 (Typing) 与主问候消息下发
     try:
         await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-        await asyncio.sleep(random.uniform(1.0, 1.6))
+        await asyncio.sleep(random.uniform(0.8, 1.5))
     except Exception:
         pass
 
-    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=12.0)
+    sent = await asyncio.wait_for(client.send_message(peer, message), timeout=15.0)
     sent_id = getattr(sent, 'id', 1)
 
     if logs is not None:
@@ -447,11 +493,11 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
     second_sent_id = None
     third_sent_id = None
 
+    # 后续两阶段 / 追发文案容错保护：绝不因辅助文案异常破坏主消息已成功投递状态
     if wait_reply:
         try:
             replied = False
             last_reply_text = ""
-            # 快速探测 1.2 秒（后续客户主动回复由后台常驻 tg-auto-responder 守护进程 24/7 毫秒级跟进，无需发信主进程傻等卡顿）
             await asyncio.sleep(1.2)
             async for msg_item in client.iter_messages(peer, limit=2):
                 if not msg_item.out and msg_item.id > sent_id:
@@ -465,7 +511,6 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 if logs is not None:
                     logs.append(f"🎉 [捕获到客户主动回复]: \"{last_reply_text}\" ➔ 秒级激活补发第二阶段彩金文案！")
                 
-                # 记录独立回复客户数（1个客户包含第2第3条，只算作1条有效回复）
                 try:
                     me_obj = await client.get_me()
                     my_phone = re.sub(r'[^0-9]', '', str(getattr(me_obj, 'phone', '')))
@@ -491,48 +536,70 @@ async def send_single_target(client: TelegramClient, target: str, message: str, 
                 except Exception:
                     pass
 
-                # 补发第二条彩金文案
+                # 补发第二条彩金文案 (平滑 HTML / 纯文本降级)
                 if second_msg:
-                    await asyncio.sleep(1.0)
-                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
-                    second_sent_id = getattr(sent2, 'id', 2)
-                    if logs is not None:
-                        logs.append(f"🚀 [第2阶段彩金文案已补发]: ID: {second_sent_id}")
-                
-                # 补发第三条中奖祝福语 (伴随打字与延时)
-                if enable_third and third_msg:
-                    human_delay = random.uniform(third_delay_min, third_delay_max)
                     try:
-                        await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-                    except Exception:
-                        pass
-                    await asyncio.sleep(human_delay)
-                    sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
-                    third_sent_id = getattr(sent3, 'id', 3)
-                    if logs is not None:
-                        logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
+                        await asyncio.sleep(1.0)
+                        try:
+                            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
+                        except Exception:
+                            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg), timeout=10.0)
+                        second_sent_id = getattr(sent2, 'id', 2)
+                        if logs is not None:
+                            logs.append(f"🚀 [第2阶段彩金文案已补发]: ID: {second_sent_id}")
+                    except Exception as err2:
+                        if logs is not None:
+                            logs.append(f"⚠️ [第2阶段彩金补发提示]: {err2}")
+                
+                # 补发第三条中奖祝福语
+                if enable_third and third_msg:
+                    try:
+                        human_delay = random.uniform(third_delay_min, third_delay_max)
+                        try:
+                            await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
+                        except Exception:
+                            pass
+                        await asyncio.sleep(human_delay)
+                        sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
+                        third_sent_id = getattr(sent3, 'id', 3)
+                        if logs is not None:
+                            logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
+                    except Exception as err3:
+                        if logs is not None:
+                            logs.append(f"⚠️ [第3阶段寄语补发提示]: {err3}")
         except Exception:
             pass
     else:
         # 直接连发模式
         if second_msg:
-            await asyncio.sleep(1.2)
-            sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
-            second_sent_id = getattr(sent2, 'id', 2)
-            if logs is not None:
-                logs.append(f"🚀 [第2阶段彩金文案已送达]: ID: {second_sent_id}")
+            try:
+                await asyncio.sleep(1.2)
+                try:
+                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg, parse_mode='html'), timeout=10.0)
+                except Exception:
+                    sent2 = await asyncio.wait_for(client.send_message(peer, second_msg), timeout=10.0)
+                second_sent_id = getattr(sent2, 'id', 2)
+                if logs is not None:
+                    logs.append(f"🚀 [第2阶段彩金文案已送达]: ID: {second_sent_id}")
+            except Exception as err2:
+                if logs is not None:
+                    logs.append(f"⚠️ [第2阶段文案发送提示]: {err2}")
 
         if enable_third and third_msg:
-            human_delay = random.uniform(third_delay_min, third_delay_max)
             try:
-                await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
-            except Exception:
-                pass
-            await asyncio.sleep(human_delay)
-            sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
-            third_sent_id = getattr(sent3, 'id', 3)
-            if logs is not None:
-                logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
+                human_delay = random.uniform(third_delay_min, third_delay_max)
+                try:
+                    await client(SetTypingRequest(peer=peer, action=SendMessageTypingAction()))
+                except Exception:
+                    pass
+                await asyncio.sleep(human_delay)
+                sent3 = await asyncio.wait_for(client.send_message(peer, third_msg), timeout=10.0)
+                third_sent_id = getattr(sent3, 'id', 3)
+                if logs is not None:
+                    logs.append(f"🍀 [第3阶段中奖寄语已送达]: ID: {third_sent_id} ➔ \"{third_msg[:25]}...\"")
+            except Exception as err3:
+                if logs is not None:
+                    logs.append(f"⚠️ [第3阶段寄语发送提示]: {err3}")
 
     return {
         "success": True,
@@ -607,6 +674,9 @@ async def run_worker(
             lf.write(str(time.time()))
     except Exception:
         pass
+
+    # 预留 0.35 秒让后台监听守护进程感知锁文件并优雅断开旧连接，彻底消除两地异地 AuthKeyDuplicated 冲突
+    await asyncio.sleep(0.35)
 
     # ⚡ 并发错峰平滑进场 (0.2s ~ 0.5s 错峰)，避免瞬间几十个 Worker 并发打满代理端口造成拥塞
     initial_stagger = min(6.0, (worker_id - 1) * 0.25)
@@ -730,6 +800,16 @@ async def run_worker(
         me_name = f"{getattr(me, 'first_name', '') or ''}".strip()
         worker_logs.append(f"✅ [Worker #{worker_id} 在线] 协议号: +{getattr(me, 'phone', clean_digits)} ({me_name})")
 
+        # 自动释放账号通讯录上限空间：清理残留联系人，防止 CONTACT_REQ_LIMIT 导致新手机号导入失败
+        try:
+            cur_contacts = await asyncio.wait_for(client(GetContactsRequest(hash=0)), timeout=4.0)
+            if cur_contacts and getattr(cur_contacts, 'users', None) and len(cur_contacts.users) > 50:
+                user_ids_to_del = [u.id for u in cur_contacts.users[:100]]
+                await client(DeleteContactsRequest(id=user_ids_to_del))
+                worker_logs.append(f"🧹 [通讯录配额自愈] 协议号 +{clean_digits} 清理了 {len(user_ids_to_del)} 个旧联系人，释放导入配额")
+        except Exception:
+            pass
+
         # 👤 Worker 专属员工性格档案 (模拟真人行为习惯：有的早到上班、有的稍迟进场、打字手速不同、喝水频率不同)
         try:
             worker_seed = int(clean_digits[-4:]) if clean_digits else worker_id * 137
@@ -843,15 +923,6 @@ async def run_worker(
             await client.disconnect()
         except Exception:
             pass
-        # Clean up temporary isolated session
-        if safe_session_path != session_file and os.path.exists(safe_session_path):
-            try:
-                os.remove(safe_session_path)
-                for ext in ['-journal', '-wal', '-shm']:
-                    if os.path.exists(safe_session_path + ext):
-                        os.remove(safe_session_path + ext)
-            except Exception:
-                pass
 
     return {
         "workerId": worker_id,
@@ -972,6 +1043,7 @@ async def main():
     enable_third_message = payload.get("enable_third_message", True)
     wait_for_reply = payload.get("wait_for_reply", True)
     sender_phone = payload.get("sender_phone", "")
+    session_file = payload.get("session_file", "")
     target_group_tag = payload.get("group_tag") or payload.get("targetGroupTag") or "ALL"
     custom_proxy = payload.get("proxy", "")
     delay_min = float(payload.get("delay_min", 45.0))
@@ -986,13 +1058,26 @@ async def main():
         }, ensure_ascii=False))
         return
 
-    # If user specified a specific single sender phone, use only that session
+    # If user specified a specific single sender phone or session file, use only that session
     assigned_sessions = []
-    if sender_phone:
+    if session_file:
+        raw_s = str(session_file).strip()
+        candidates = [
+            raw_s,
+            f"{raw_s}.session" if not raw_s.endswith('.session') else raw_s,
+            os.path.join(os.getcwd(), "sessions", os.path.basename(raw_s)),
+            os.path.join(os.getcwd(), "sessions", f"{os.path.basename(raw_s)}.session" if not raw_s.endswith('.session') else os.path.basename(raw_s))
+        ]
+        for cp in candidates:
+            if os.path.exists(cp) and os.path.getsize(cp) > 100:
+                assigned_sessions = [cp]
+                break
+
+    if not assigned_sessions and sender_phone:
         found = find_session_file(sender_phone)
         if found:
             assigned_sessions = [found]
-    elif target_group_tag and str(target_group_tag).strip().upper() != 'ALL':
+    elif not assigned_sessions and target_group_tag and str(target_group_tag).strip().upper() != 'ALL':
         # Filter sessions by groupTag configured in companion JSON files
         group_matched_sessions = []
         clean_target_tag = str(target_group_tag).strip()
