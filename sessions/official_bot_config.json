@@ -1,0 +1,117 @@
+{
+  "botToken": "8954241123:AAGmNIQ3HX1S8SUqsbiAh91VUsVu6odtkno",
+  "botInfo": {
+    "id": 8954241123,
+    "is_bot": true,
+    "first_name": "Brazil VIP Suporte",
+    "username": "brazilgo888_vip_bot",
+    "can_join_groups": true,
+    "can_read_all_group_messages": false,
+    "supports_inline_queries": false,
+    "supports_guest_queries": false,
+    "can_connect_to_business": false,
+    "has_main_web_app": false,
+    "has_topics_enabled": false,
+    "allows_users_to_create_topics": false,
+    "can_manage_bots": false,
+    "supports_join_request_queries": false
+  },
+  "mode": "polling",
+  "webhookUrl": "",
+  "welcomeMessage": "🎉 Welcome to the Official VIP Lounge, {first_name}!\n\n🔥 Enjoy our exclusive 100% First Deposit Match + 50 Free Spins upon registration!\n⚡ 24/7 VIP Concierge available for instant crypto deposits, 3-minute payouts, and high-roller perks.\n\nSelect an option below to get started:",
+  "welcomeButtons": [
+    {
+      "text": "🎰 Claim Exclusive 100% Bonus",
+      "url": "https://brazilgo888.com"
+    },
+    {
+      "text": "👥 Join Official VIP Community",
+      "url": "https://t.me/brazilgo_chat"
+    }
+  ],
+  "autoReplies": [
+    {
+      "id": "ar_1",
+      "trigger": "bonus",
+      "matchType": "contains",
+      "replyText": "🎁 *Bônus Disponível!*\n\nCadastre-se pelo link oficial e receba até 500% de bônus no seu primeiro depósito via PIX instantâneo!",
+      "buttons": [
+        {
+          "text": "👉 Ativar Bônus Agora",
+          "url": "https://brazilgo888.com/bonus"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ar_2",
+      "trigger": "pix",
+      "matchType": "contains",
+      "replyText": "⚡ *Depósitos e Saques via PIX*\n\nNossos pagamentos são processados em segundos, 24 horas por dia, sem taxas adicionais!",
+      "buttons": [
+        {
+          "text": "💳 Fazer Depósito",
+          "url": "https://brazilgo888.com/deposit"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "ar_3",
+      "trigger": "suporte",
+      "matchType": "contains",
+      "replyText": "🙋‍♂️ Nosso atendente já foi notificado e responderá sua mensagem em breve por este chat!",
+      "buttons": [],
+      "enabled": true
+    }
+  ],
+  "deepLinks": [
+    {
+      "id": "dl_1",
+      "code": "tiktok_viral",
+      "name": "TikTok 巴西游戏短视频引流",
+      "channel": "tiktok",
+      "visits": 0,
+      "subscribersCount": 0,
+      "conversionRate": "0.0%",
+      "createdAt": "2026-09-20",
+      "notes": "置顶短视频主页Bio链接转化"
+    },
+    {
+      "id": "dl_2",
+      "code": "meta_feed",
+      "name": "Meta / Instagram 故事广告",
+      "channel": "meta",
+      "visits": 0,
+      "subscribersCount": 0,
+      "conversionRate": "0.0%",
+      "createdAt": "2026-09-21",
+      "notes": "巴西圣保罗/里约 21-35岁男性"
+    },
+    {
+      "id": "dl_3",
+      "code": "tg_ads_official",
+      "name": "Telegram 官方赞助广告投放",
+      "channel": "telegram_ads",
+      "visits": 0,
+      "subscribersCount": 0,
+      "conversionRate": "0.0%",
+      "createdAt": "2026-09-22",
+      "notes": "精准投放至巴西游戏大频道"
+    },
+    {
+      "id": "dl_4",
+      "code": "kol_felipe",
+      "name": "YouTube 巴西博主 Felipe 专场",
+      "channel": "kol",
+      "visits": 0,
+      "subscribersCount": 0,
+      "conversionRate": "0.0%",
+      "createdAt": "2026-09-23",
+      "notes": "视频置顶评论引导进 Bot"
+    }
+  ],
+  "isConfigured": true,
+  "currentPresetId": "us_en",
+  "autoMultiLanguage": true
+}

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "bc_1790808442403",
+    "title": "立即广播测试",
+    "text": "🔥 [VIP Alert] Exclusive 200% Bonus is now LIVE! Check your VIP portal for new free spins! 🎰",
+    "targetCampaign": "all",
+    "targetTag": "all",
+    "status": "completed",
+    "total": 5,
+    "sent": 5,
+    "failed": 0,
+    "createdAt": "2026-09-30 22:47:22",
+    "completedAt": "2026-09-30 22:47:26"
+  },
+  {
+    "id": "bc_1790535551300",
+    "title": "实时广播测试 (服务器旧中断)",
+    "text": "🔔 [공지 / Aviso] 100% 정상 발송 테스트입니다! 广播测试发送成功！",
+    "targetCampaign": "all",
+    "targetTag": "all",
+    "status": "failed",
+    "total": 2,
+    "sent": 0,
+    "failed": 0,
+    "createdAt": "2026-09-27 18:59:11",
+    "completedAt": "2026-09-27 18:59:11"
+  },
+  {
+    "id": "bc_1790534205715",
+    "title": "测试全员官方广播",
+    "text": "🎉 [Teste Oficial / 공지] Esta é uma mensagem de transmissão oficial de teste!\n\n이것은 봇 공식 단체 공지 테스트 메시지입니다!",
+    "status": "completed",
+    "total": 2,
+    "sent": 2,
+    "failed": 0,
+    "createdAt": "2026-09-27 18:36:45",
+    "completedAt": "2026-09-27 18:36:46"
+  }
+]

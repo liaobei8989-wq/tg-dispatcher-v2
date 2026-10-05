@@ -8,6 +8,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import JSZip from "jszip";
 import { executeTelegramDirectSend, executeTelegramReplyScanner, executeTelegramProfileUpdate, isDirectSendActive } from "./src/server/telegramMtprotoEngine";
+import { officialBotEngine } from "./src/server/officialBotEngine";
 
 // Global process safety handlers
 process.on('unhandledRejection', (reason, promise) => {
@@ -639,9 +640,9 @@ async function startServer() {
       };
 
       const getAccountMeta = (rawPhone: string, idx: number, userJsonMeta?: any) => {
-        const isTop5 = ['5586994428117', '5586994581839', '5586994709226', '5586994684213'].includes(rawPhone) || idx < 4;
+        const isTop5 = idx < 10;
         const todayStr = new Date().toISOString().split('T')[0];
-        const targetDefaultDay = isTop5 ? 7 : 1;
+        const targetDefaultDay = isTop5 ? 7 : 4;
         const createdAt = userJsonMeta?.createdAt || todayStr;
         const baseDay = userJsonMeta?.baseWarmupDay !== undefined 
           ? userJsonMeta.baseWarmupDay 
@@ -653,8 +654,8 @@ async function startServer() {
           createdAt,
           baseWarmupDay: baseDay,
           warmupDay: dynamicWarmupDay,
-          status: (isMature ? 'active' : 'warming') as 'active' | 'warming',
-          groupTag: userJsonMeta?.groupTag || (isTop5 ? '主力爆破A组' : '新买养号B组'),
+          status: 'active' as 'active' | 'warming',
+          groupTag: userJsonMeta?.groupTag || (idx < 10 ? '主力爆破A组' : '常规轮转B组'),
           dailyLimit: dynamicWarmupDay === 1 ? 15 : dynamicWarmupDay === 2 ? 30 : dynamicWarmupDay === 3 ? 60 : 120
         };
       };
@@ -2039,7 +2040,7 @@ async function startServer() {
         success: true,
         config: {
           enabled: true,
-          second_message: "{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: https://brazilgo888.com/pankou5 🎰💵",
+          second_message: "🤑 Bora forrar campeão! Que venha o grande jackpot! 🎰💵 Não esquece de entrar no nosso grupo VIP de dicas exclusivas: 👉 https://t.me/brazilgo_chat com sinais com 98% de assertividade e suporte direto! Tamo junto! 🐯✨",
           third_message: "",
           enable_third_message: false,
           second_to_third_delay_min: 3.5,
@@ -4214,6 +4215,237 @@ Return ONLY a JSON array with this schema:
     res.json({ success: true, stats: statsData });
   });
 
+  // ==========================================
+  // Telegram 官方 Bot API 及其标准接口与私域 CRM
+  // ==========================================
+  
+  // 1. 获取 Bot 基础配置与运行状态
+  app.get("/api/bot/config", (req, res) => {
+    try {
+      const cfg = officialBotEngine.getConfig();
+      res.json({ success: true, config: cfg });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 2. 验证并保存官方 Bot Token (调用 getMe)
+  app.post("/api/bot/verify-token", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token || typeof token !== "string" || !token.includes(":")) {
+        return res.status(400).json({ success: false, error: "请提供格式正确的 Bot Token (例如: 123456789:ABCdef...)" });
+      }
+      const info = await officialBotEngine.verifyToken(token.trim());
+      // 开启长轮询以实时接收 /start 和消息
+      officialBotEngine.startPolling();
+      res.json({ success: true, botInfo: info, config: officialBotEngine.getConfig() });
+    } catch (e: any) {
+      res.status(400).json({ success: false, error: e.message || "Token 验证失败，请检查网络或确认 Token 正确" });
+    }
+  });
+
+  // 3. 更新 Bot 欢迎语、按钮与配置
+  app.post("/api/bot/config/update", (req, res) => {
+    try {
+      const { welcomeMessage, welcomeButtons, autoReplies } = req.body;
+      const updated = officialBotEngine.updateConfig({
+        ...(welcomeMessage !== undefined ? { welcomeMessage } : {}),
+        ...(welcomeButtons !== undefined ? { welcomeButtons } : {}),
+        ...(autoReplies !== undefined ? { autoReplies } : {})
+      });
+      res.json({ success: true, config: updated });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 4. 获取私域客户列表 (带筛选与搜索)
+  app.get("/api/bot/subscribers", (req, res) => {
+    try {
+      const { campaign, tag, status, search } = req.query;
+      const list = officialBotEngine.getSubscribers({
+        campaign: campaign as string,
+        tag: tag as string,
+        status: status as string,
+        search: search as string
+      });
+      res.json({ success: true, subscribers: list, total: list.length });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 5. 更新单个客户标签与备注
+  app.post("/api/bot/subscribers/update", (req, res) => {
+    try {
+      const { id, updates } = req.body;
+      if (!id) return res.status(400).json({ success: false, error: "缺少用户 ID" });
+      const sub = officialBotEngine.updateSubscriber(id, updates);
+      res.json({ success: true, subscriber: sub });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 一键清空全部私域测试客户
+  app.post("/api/bot/subscribers/clear-all", (req, res) => {
+    try {
+      officialBotEngine.clearAllSubscribers();
+      res.json({ success: true, message: "所有测试客户数据已清空" });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 删除特定私域客户
+  app.delete("/api/bot/subscribers/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = officialBotEngine.deleteSubscriber(id);
+      res.json({ success, message: "客户数据已彻底删除" });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 重置渠道统计数据
+  app.post("/api/bot/reset-stats", (req, res) => {
+    try {
+      officialBotEngine.resetAllStats();
+      res.json({ success: true, deepLinks: officialBotEngine.getConfig().deepLinks });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 获取全球多国市场语言预设
+  app.get("/api/bot/presets", (req, res) => {
+    try {
+      const presets = officialBotEngine.getMarketPresets();
+      const cfg = officialBotEngine.getConfig();
+      res.json({
+        success: true,
+        presets,
+        currentPresetId: cfg.currentPresetId || "br_pt",
+        autoMultiLanguage: !!cfg.autoMultiLanguage
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 应用特定国家市场预设
+  app.post("/api/bot/presets/apply", (req, res) => {
+    try {
+      const { presetId } = req.body;
+      if (!presetId) return res.status(400).json({ success: false, error: "缺少 presetId" });
+      const preset = officialBotEngine.applyMarketPreset(presetId);
+      if (!preset) return res.status(404).json({ success: false, error: "未找到该国家市场预设" });
+      res.json({ success: true, preset, config: officialBotEngine.getConfig() });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 开启/关闭 Telegram 客户端语言自动适配
+  app.post("/api/bot/presets/auto-mode", (req, res) => {
+    try {
+      const { enabled } = req.body;
+      const result = officialBotEngine.setAutoMultiLanguage(!!enabled);
+      res.json({ success: true, autoMultiLanguage: result });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 6. 获取特定客户的聊天记录
+  app.get("/api/bot/chat-history", (req, res) => {
+    try {
+      const { chatId } = req.query;
+      if (!chatId) return res.status(400).json({ success: false, error: "缺少 chatId" });
+      const history = officialBotEngine.getChatHistory(chatId as string);
+      res.json({ success: true, history });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 7. 客服人工 1v1 回复客户
+  app.post("/api/bot/send-direct", async (req, res) => {
+    try {
+      const { chatId, text, buttons } = req.body;
+      if (!chatId || !text) return res.status(400).json({ success: false, error: "缺少 chatId 或回复内容" });
+      const result = await officialBotEngine.sendMessage(chatId, text, buttons);
+      res.json({ success: true, result });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 8. 渠道引流链接（Deep Linking）管理
+  app.post("/api/bot/deep-links/add", (req, res) => {
+    try {
+      const { code, name, channel, notes } = req.body;
+      if (!code || !name) return res.status(400).json({ success: false, error: "参数不完整" });
+      const dl = officialBotEngine.addDeepLink(code, name, channel, notes);
+      res.json({ success: true, deepLink: dl, deepLinks: officialBotEngine.getConfig().deepLinks });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post("/api/bot/deep-links/delete", (req, res) => {
+    try {
+      const { id } = req.body;
+      officialBotEngine.deleteDeepLink(id);
+      res.json({ success: true, deepLinks: officialBotEngine.getConfig().deepLinks });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 9. 广播群发通知 (合规推送给存量私域订阅者)
+  app.post("/api/bot/broadcast/send", async (req, res) => {
+    try {
+      const { title, text, targetCampaign, targetTag, buttons } = req.body;
+      if (!text) return res.status(400).json({ success: false, error: "缺少通知内容" });
+      const task = await officialBotEngine.executeBroadcast(
+        "bc_" + Date.now(),
+        title || "官方活动公告",
+        text,
+        targetCampaign,
+        targetTag,
+        buttons
+      );
+      res.json({ success: true, task });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get("/api/bot/broadcasts", (req, res) => {
+    try {
+      const list = officialBotEngine.getBroadcasts();
+      res.json({ success: true, broadcasts: list });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 10. Webhook 接收端 (供生产环境公网配置 Webhook 使用)
+  app.post("/api/bot/webhook", async (req, res) => {
+    try {
+      const update = req.body;
+      if (update) {
+        await officialBotEngine.handleIncomingUpdate(update);
+      }
+      res.status(200).send("OK");
+    } catch (e) {
+      res.status(200).send("OK");
+    }
+  });
+
   const distPath = path.join(process.cwd(), "dist");
   const isProd = process.env.NODE_ENV === "production" || (process.argv[1] && process.argv[1].includes("dist"));
 
@@ -4319,6 +4551,13 @@ Return ONLY a JSON array with this schema:
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+
+    // 守护启动官方 Bot 长轮询引擎，实时响应 /start 与私信
+    try {
+      officialBotEngine.startPolling();
+    } catch (botErr) {
+      console.warn("⚠️ [Official Bot Polling Boot Error]:", botErr);
+    }
 
     // 守护启动 Telegram 24h 自动追发守护引擎 (Auto-Responder Daemon)
     // 🛡️ 协同保护：若处于 PM2 环境中，由 PM2 进程池中的 tg-responder 独立常驻守护，避免 Node 与 PM2 发生多进程抢占与重复启动

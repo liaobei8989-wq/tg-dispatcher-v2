@@ -51,7 +51,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenRepliedCustomers,
 }) => {
   const navItems = [
-    { id: 'tg_simple', label: '⚡ TG 极速一键中台', icon: Send, pulse: isCampaignRunning, badge: '极简主控' },
+    { id: 'tg_official_bot', label: '🤖 TG 官方Bot私域中台', icon: Sparkles, badge: '官方合规·零封号' },
+    { id: 'tg_simple', label: '⚡ TG 协议控制台', icon: Send, pulse: isCampaignRunning, badge: '实验模式' },
     { id: 'lead_scraper', label: '🎯 获客雷达采集', icon: Search, badge: '精准引流' },
     { id: 'web_inbox', label: '💬 聚合收件箱', icon: MessageSquare, badge: 'AI客服' },
     { id: 'proxy_manager', label: '🌐 1号1IP代理隔离', icon: Server, badge: '防关联' },

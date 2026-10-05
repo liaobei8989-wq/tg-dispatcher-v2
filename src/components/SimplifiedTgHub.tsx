@@ -1286,7 +1286,7 @@ export const SimplifiedTgHub: React.FC<SimplifiedTgHubProps> = ({
 
   const [greetingText, setGreetingText] = useState<string>(OPTIMIZED_100_DAY_SPINTAX_GREETING);
   const [followupLinkText, setFollowupLinkText] = useState<string>(() => {
-    return `{E aí parceiro!|Opa amigo!|Fala campeão!} Passei pra te avisar do evento dos minutos pagantes no Tigrinho 🐯 Liberou saldo de teste cortesia SEM DEPÓSITO no seu cadastro hoje pra rodar e sacar no PIX! Na página oficial você já encontra as 4 plataformas que mais tão pagando hoje + nosso canal VIP de sinais e horários: ${get100SubdomainsSpintax()} 🎰💵`;
+    return `🤑 Bora forrar campeão! Que venha o grande jackpot! 🎰💵 Não esquece de entrar no nosso grupo VIP de dicas exclusivas: 👉 https://t.me/brazilgo_chat com sinais com 98% de assertividade e suporte direto! Tamo junto! 🐯✨`;
   });
   // 阶段三：祝老板中奖/暴富祝福语 (默认停用：客户回复后仅补发1条落地页链接，落地页已整合4盘口+VIP频道)
   const [blessingText, setBlessingText] = useState<string>(() => {

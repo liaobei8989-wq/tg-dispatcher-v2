@@ -60,7 +60,7 @@ export const LeadScraperHub: React.FC<LeadScraperHubProps> = ({
     setIsScraping(true);
     setLogs([
       `🚀 [获客雷达] 初始化采集引擎: 目标源=${sourceUrl}`,
-      `🌐 [南美节点] 使用协议号 ${executorPhone || accounts[0]?.phone || '5586994428117'} 握手 Telegram DC4...`,
+      `🌐 [南美节点] 使用协议号 ${executorPhone || accounts[0]?.phone || '5598984569687'} 握手 Telegram DC4...`,
       `🔍 [活跃度探针] 正在扫描并过滤 3 天内高活跃真实巴西博彩玩家...`
     ]);
 

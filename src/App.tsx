@@ -17,6 +17,7 @@ import { WebInboxHub } from './components/WebInboxHub';
 import { ProxyManagerModal } from './components/ProxyManagerModal';
 import { ProxyHubView } from './components/ProxyHubView';
 import { RepliedCustomersModal } from './components/RepliedCustomersModal';
+import { OfficialBotCrmHub } from './components/OfficialBotCrmHub';
 
 import { AccountSession, AntiBanSettings, CampaignLog, AccountStatus, ScrubbedContact } from './types';
 import { INITIAL_MOCK_ACCOUNTS, calculateWarmupDays, getDedicatedProxyForPhone, BRAZIL_DEDICATED_PROXIES_MAP, BRAZIL_PROXIES_POOL } from './data/mockAccounts';
@@ -24,7 +25,7 @@ import { PRESET_TEMPLATES } from './data/presetTemplates';
 import { saveAccountsToStorage, loadAccountsFromStorage, safeSaveAccountsToLocalStorage } from './utils/accountStorage';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('tg_simple');
+  const [activeTab, setActiveTab] = useState<string>('tg_official_bot');
 
   // Scrubbed contacts pool shared across modules
   const [scrubbedContacts, setScrubbedContacts] = useState<ScrubbedContact[]>([]);
@@ -531,6 +532,10 @@ export default function App() {
       />
 
       <main className="w-full max-w-[1840px] mx-auto px-2 sm:px-4 lg:px-6 py-5">
+        {activeTab === 'tg_official_bot' && (
+          <OfficialBotCrmHub />
+        )}
+
         {activeTab === 'tg_simple' && (
           <SimplifiedTgHub
             accounts={accounts}
